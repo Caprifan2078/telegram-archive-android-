@@ -28,6 +28,8 @@ jobs:
         run: |
           python3 qa/host_tests/test_reply050.py
           python3 qa/host_tests/test_search049_sqlite.py
+          python3 qa/host_tests/test_telegram_id_collision_sqlite.py
+          python3 qa/host_tests/test_media_fixture_independence.py
           gradle testCompactQaUnitTest assembleCompactQa assembleCompactQaAndroidTest --no-daemon --max-workers=2
       - name: Enable KVM
         run: |
