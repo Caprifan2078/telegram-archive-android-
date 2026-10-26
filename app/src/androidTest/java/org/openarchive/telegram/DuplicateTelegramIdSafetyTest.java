@@ -55,4 +55,54 @@ public class DuplicateTelegramIdSafetyTest {
             ctx.deleteDatabase("telegram_"+key+".db");
         }
     }
+    @Test public void duplicateAcrossNumberedHtmlPartsKeepsRepliesUnresolved() throws Exception {
+        Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key="duphtml_"+UUID.randomUUID().toString().replace("-","");
+        java.io.File folder=new java.io.File(ctx.getCacheDir(),"dup-html-"+key);
+        assertTrue(folder.mkdirs());
+        try {
+            write(folder,"messages.html",
+                "<div class='history'>"+
+                "<div class='message default' id='message101'><div class='body'><div class='text'>First source</div></div></div>"+
+                "<div class='message default' id='message202'><div class='body'><div class='reply_to'><a href='messages2.html#go_to_message101'>Reply</a></div><div class='text'>Ambiguous target</div></div></div>"+
+                "</div>");
+            write(folder,"messages2.html",
+                "<div class='history'>"+
+                "<div class='message default' id='message101'><div class='body'><div class='text'>Duplicate source</div></div></div>"+
+                "<div class='message default' id='message404'><div class='body'><div class='text'>Unique source</div></div></div>"+
+                "<div class='message default' id='message505'><div class='body'><div class='reply_to'><a href='#go_to_message404'>Reply</a></div><div class='text'>Unambiguous target</div></div></div>"+
+                "</div>");
+            MessageDb db=new MessageDb(ctx,key);
+            try {
+                assertEquals(5,TelegramImporter.importFiles(ctx.getContentResolver(),
+                    new DocumentFolder(ctx.getContentResolver(),folder),db,ignored->{}));
+                List<MessageDb.Item> page=db.page(0,10,"",false,"",false,false);
+                assertEquals(5,page.size());
+                Map<Long,MessageDb.ReplyInfo> found=db.replyPreviews(page);
+                assertEquals(2,found.size());
+                // Telegram HTML part ordering: reply message is the second row.
+                long ambiguous=page.stream().filter(it->"Ambiguous target".equals(it.body))
+                    .findFirst().get().id;
+                long unique=page.stream().filter(it->"Unique source".equals(it.body))
+                    .findFirst().get().id;
+                long safeReply=page.stream().filter(it->"Unambiguous target".equals(it.body))
+                    .findFirst().get().id;
+                assertEquals(-1,found.get(ambiguous).targetId);
+                assertEquals(101,found.get(ambiguous).telegramId);
+                assertEquals(unique,found.get(safeReply).targetId);
+            } finally {
+                db.close();
+                ctx.deleteDatabase("telegram_"+key+".db");
+            }
+        } finally {
+            ArchiveFileImport.deleteTree(folder);
+        }
+    }
+
+    private static void write(java.io.File dir,String name,String html) throws Exception {
+        try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(dir,name))) {
+            out.write(html.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+    }
+
 }
