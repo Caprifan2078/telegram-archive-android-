@@ -50,9 +50,26 @@ public class RoundPlayerActivityTest {
             while(video.getDuration()<=0&&attempts++<40)SystemClock.sleep(100);
             assertTrue("MP4 not prepared in activity",video.getDuration()>1000);
             final VideoView player=video;
-            InstrumentationRegistry.getInstrumentation().runOnMainSync(()->player.seekTo(900));
-            SystemClock.sleep(170);
-            assertTrue("Seek is not active in full-screen player",player.getCurrentPosition()>=600);
+            final RoundPlayerActivity round=(RoundPlayerActivity)activity;
+            // The synthetic H.264 clip has exactly one keyframe at t=0.
+            // Pause first: elapsed playback time must not be mistaken for seeking.
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(player::pause);
+            java.lang.reflect.Method seek=RoundPlayerActivity.class.getDeclaredMethod("seekVideoTo",int.class);
+            seek.setAccessible(true);
+            java.util.concurrent.atomic.AtomicReference<Throwable> failure=new java.util.concurrent.atomic.AtomicReference<>();
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{
+                try{seek.invoke(round,900);}catch(Exception e){failure.set(e);}
+            });
+            if(failure.get()!=null)throw new AssertionError("Seek call failed",failure.get());
+            int actual=player.getCurrentPosition();
+            long deadline=SystemClock.uptimeMillis()+2500;
+            while(actual<600 && SystemClock.uptimeMillis()<deadline){
+                SystemClock.sleep(80);
+                actual=player.getCurrentPosition();
+            }
+            assertFalse("Seek should not require restarting playback",player.isPlaying());
+            assertTrue("Paused seek snapped to keyframe 0 instead of 900ms; current="+actual,
+                actual>=600&&actual<=1200);
         }finally{
             if(activity!=null){Activity finalActivity=activity;
                 InstrumentationRegistry.getInstrumentation().runOnMainSync(finalActivity::finish);}

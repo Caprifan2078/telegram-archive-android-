@@ -135,7 +135,7 @@ public class RoundPlayerActivity extends Activity {
         timeline=new SeekBar(this);timeline.setContentDescription("Перемотка видео");bottomBar.addView(timeline,new LinearLayout.LayoutParams(-1,dp(40)));
         timeline.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
             @Override public void onStartTrackingTouch(SeekBar b){scrubbing=true;}
-            @Override public void onStopTrackingTouch(SeekBar b){if(prepared)video.seekTo(b.getProgress());scrubbing=false;}
+            @Override public void onStopTrackingTouch(SeekBar b){seekVideoTo(b.getProgress());scrubbing=false;}
             @Override public void onProgressChanged(SeekBar b,int p,boolean byUser){if(byUser)time.setText(clock(p)+" / "+clock(video.getDuration()));}
         });
         LinearLayout bottomControls=new LinearLayout(this);bottomControls.setGravity(Gravity.CENTER_VERTICAL|Gravity.CENTER_HORIZONTAL);
@@ -159,7 +159,7 @@ public class RoundPlayerActivity extends Activity {
         video.setOnPreparedListener(mp->{
             ui.removeCallbacks(prepareTimeout);
             prepared=true;currentPlayer=mp;mp.setLooping(true);
-            if(restoredPosition>0)video.seekTo(restoredPosition);
+            if(restoredPosition>0)seekVideoTo(restoredPosition);
             if(foreground&&playWhenReady){video.start();applySpeed();}else video.pause();
             ui.removeCallbacks(update);if(foreground)ui.post(update);
         });
@@ -186,8 +186,26 @@ public class RoundPlayerActivity extends Activity {
         try{boolean playing=video.isPlaying();android.media.PlaybackParams params=currentPlayer.getPlaybackParams();params.setSpeed(speed);currentPlayer.setPlaybackParams(params);if(!playing)video.pause();return true;}
         catch(Exception ignored){return false;}
     }
+    /** A Telegram MP4 can have only one sync frame, right at its beginning.
+     * Seeking to the previous keyframe then jumps to 00:00 on many devices.
+     * API 26+ can request the nearest decoded frame instead of only sync frames.
+     * Fall back to VideoView for codecs that reject the precise-seek request.
+     */
+    private void seekVideoTo(int wantedMs){
+        if(!prepared)return;
+        int duration=Math.max(0,video.getDuration());
+        int position=Math.max(0,Math.min(duration,wantedMs));
+        if(Build.VERSION.SDK_INT>=26 && currentPlayer!=null){
+            try{
+                currentPlayer.seekTo((long)position,MediaPlayer.SEEK_CLOSEST);
+                return;
+            }catch(RuntimeException unsupported){/* OEM codec: retain basic seeking */}
+        }
+        video.seekTo(position);
+    }
     private void skip(int ms){if(!prepared)return;
-        video.seekTo(Math.max(0,Math.min(Math.max(0,video.getDuration()-300),video.getCurrentPosition()+ms)));
+        seekVideoTo(Math.max(0,Math.min(Math.max(0,video.getDuration()-300),
+            video.getCurrentPosition()+ms)));
     }
     private void enterPip(){
         if(!prepared||Build.VERSION.SDK_INT<26)return;
