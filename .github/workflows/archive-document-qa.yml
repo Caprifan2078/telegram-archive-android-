@@ -9,6 +9,7 @@ on:
       - 'app/src/test/**'
       - 'app/src/androidTest/**'
       - 'app/build.gradle'
+      - 'app/proguard-rules.pro'
   workflow_dispatch:
 permissions:
   contents: read
