@@ -56,7 +56,16 @@ class MessageDb extends SQLiteOpenHelper {
     }
     void stageTelegramId(SQLiteDatabase d,long messageId,long telegramId){
         ContentValues v=new ContentValues();v.put("message_id",messageId);v.put("telegram_id",telegramId);
-        d.insertWithOnConflict("staged_telegram_ids",null,v,SQLiteDatabase.CONFLICT_IGNORE);
+        // Telegram IDs are unique within one export. A duplicate must NOT resolve a
+        // reply to whichever copy happened to be imported first. Keep a negative
+        // staged message_id as an ambiguity marker (never publish it); this
+        // preserves every staged message while avoiding a schema migration.
+        // The UNIQUE telegram_id key also makes 3+ duplicates stay ambiguous.
+        long inserted=d.insertWithOnConflict("staged_telegram_ids",null,v,SQLiteDatabase.CONFLICT_IGNORE);
+        if(inserted==-1L){
+            d.execSQL("UPDATE staged_telegram_ids SET message_id=-ABS(message_id) WHERE telegram_id=?",
+                new Object[]{telegramId});
+        }
     }
     void stageReply(SQLiteDatabase d,long messageId,long targetTelegramId){
         ContentValues v=new ContentValues();v.put("message_id",messageId);v.put("target_telegram_id",targetTelegramId);
@@ -461,7 +470,9 @@ class MessageDb extends SQLiteOpenHelper {
             d.execSQL("DELETE FROM collection_entries WHERE NOT EXISTS (SELECT 1 FROM attachments a WHERE a.id=collection_entries.attachment_id AND a.path=collection_entries.path)");
             // Resolve replies only after all numbered HTML parts were staged.
             d.delete("message_replies",null,null);d.delete("telegram_ids",null,null);
-            d.execSQL("INSERT INTO telegram_ids(message_id,telegram_id) SELECT message_id,telegram_id FROM staged_telegram_ids");
+            // Do not resolve links to ambiguous source IDs. Their reply cards remain
+            // explicitly unresolved rather than pointing at an arbitrary message.
+            d.execSQL("INSERT INTO telegram_ids(message_id,telegram_id) SELECT message_id,telegram_id FROM staged_telegram_ids WHERE message_id>0");
             d.execSQL("INSERT INTO message_replies(message_id,target_telegram_id,target_message_id) "+
                 "SELECT r.message_id,r.target_telegram_id,t.message_id FROM staged_reply_ids r "+
                 "LEFT JOIN telegram_ids t ON t.telegram_id=r.target_telegram_id");
