@@ -317,7 +317,8 @@ final class OfflineSynonymSearch {
             if(typos!=null&&typos.containsKey(token)){
                 ArrayList<String> actual=new ArrayList<>();
                 for(String typo:typos.get(token)){
-                    String w=FuzzyWordPolicy.normalized(typo);
+                    // The candidate is an actual indexed word: preserve ё.
+                    String w=typo==null?"":typo.toLowerCase(Locale.ROOT);
                     if(!FuzzyWordPolicy.near(token,w)||actual.contains(w))continue;
                     if(forms.size()>=MAX_ALTERNATIVES)break;
                     actual.add(w);forms.add(w);
