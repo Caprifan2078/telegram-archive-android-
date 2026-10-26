@@ -34,3 +34,10 @@
 # Commons Compress has an optional Zstandard backend. No zstd-jni is packaged;
 # ZIP methods 20/93 are explicitly rejected by ArchiveReadOnly before decode.
 -dontwarn com.github.luben.zstd.**
+
+# The Android archive regression test generates synthetic archives using
+# writers which are otherwise absent from the production UI call graph.
+# The test package shares dependency classes from this R8-minified target APK.
+-keep class org.apache.commons.compress.archivers.sevenz.SevenZOutputFile { *; }
+-keep class org.apache.commons.compress.archivers.tar.TarArchiveOutputStream { *; }
+-keep class net.lingala.zip4j.** { *; }
