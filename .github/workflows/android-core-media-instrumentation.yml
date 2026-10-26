@@ -1,5 +1,5 @@
 name: Android core-media instrumentation
-# Focus: real decoder seek, absent originals and crash-safe HTML import.
+# Focus: decoder seek, media, synthetic import, reply links, basic navigation, readable UI.
 on:
   push:
     branches:
@@ -48,7 +48,7 @@ jobs:
           emulator-boot-timeout: 420
           script: |
             mkdir -p qa-output
-            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.MediaAssetsRegressionTest,org.openarchive.telegram.MediaPlaybackTest,org.openarchive.telegram.RoundPlayerActivityTest,org.openarchive.telegram.PlaybackLifecycleTest,org.openarchive.telegram.ImportRollbackRegressionTest,org.openarchive.telegram.MissingMediaPlaybackRegressionTest'
+            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.MediaAssetsRegressionTest,org.openarchive.telegram.MediaPlaybackTest,org.openarchive.telegram.RoundPlayerActivityTest,org.openarchive.telegram.PlaybackLifecycleTest,org.openarchive.telegram.ImportRollbackRegressionTest,org.openarchive.telegram.MissingMediaPlaybackRegressionTest,org.openarchive.telegram.ArchiveIntegrationTest,org.openarchive.telegram.TelegramReplyIntegrationTest,org.openarchive.telegram.MediaClassifierTest,org.openarchive.telegram.MediaTabsIsolationTest,org.openarchive.telegram.UiSmokeTest,org.openarchive.telegram.ReadableUiTest'
             adb logcat -d -t 400 > qa-output/emulator-log.txt || true
       - name: Save synthetic instrumentation results
         if: always()
