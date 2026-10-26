@@ -75,13 +75,16 @@ public class RelationshipAnalyticsExplanationUiTest {
                 assertTrue("Missing visible feature explanation: "+description,
                     contains(list,description));
             assertTrue(contains(list,RelationshipFeatureGuide.INTRO));
+            // Keep an external synthetic UI capture after Gradle uninstalls
+            // the tested APK: app-specific external files are removed on uninstall.
             Bitmap image=inst.getUiAutomation().takeScreenshot();
-            if(image!=null) {
-                File directory=new File(ctx.getExternalFilesDir(null),"qa-screens");
-                assertTrue(directory.exists()||directory.mkdirs());
-                try(FileOutputStream out=new FileOutputStream(new File(directory,"relationships-explained.png"))){
-                    assertTrue(image.compress(Bitmap.CompressFormat.PNG,100,out));
-                }finally{image.recycle();}
+            assertNotNull("Android UI screenshot unavailable",image);
+            image.recycle();
+            try(android.os.ParcelFileDescriptor shell=inst.getUiAutomation().executeShellCommand(
+                    "screencap -p /sdcard/Download/ta_synthetic_relationships.png");
+                java.io.FileInputStream output=new java.io.FileInputStream(shell.getFileDescriptor())){
+                byte[] drain=new byte[1024];
+                while(output.read(drain)!=-1){/* wait until shell screenshot completes */}
             }
         }finally{
             CountDownLatch done=new CountDownLatch(1);
