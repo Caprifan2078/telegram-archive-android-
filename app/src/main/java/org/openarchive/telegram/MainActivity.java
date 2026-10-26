@@ -2379,7 +2379,7 @@ public class MainActivity extends Activity {
             TextView label=text(detail+"  ·  "+count,14,FG);label.setTextIsSelectable(true);
             label.setContentDescription(detail+": "+count+" сообщений");block.addView(label,p(-1,-2));
             FrameLayout track=new FrameLayout(this);track.setBackground(shape(CHIP,4));
-            block.addView(track,p(-1,px(8)));
+            block.addView(track,p(-1,8));
             View bar=new View(this);bar.setBackground(shape(ACCENT,4));
             track.addView(bar,new FrameLayout.LayoutParams(-1,-1));bar.setPivotX(0f);
             bar.setScaleX(max==0?0f:count/(float)max);
@@ -2402,7 +2402,7 @@ public class MainActivity extends Activity {
             for(int hour=block*4;hour<block*4+4;hour++)counts[day][block]+=activity.weekdayHours[day][hour];
             max=Math.max(max,counts[day][block]);
         }
-        LinearLayout header=row();parent.addView(header,p(-1,px(29)));
+        LinearLayout header=row();parent.addView(header,p(-1,29));
         TextView corner=text("День",10,SUB);header.addView(corner,new LinearLayout.LayoutParams(0,-1,0.9f));
         for(int block=0;block<6;block++){
             int begin=block*4;
@@ -2410,7 +2410,7 @@ public class MainActivity extends Activity {
             hour.setGravity(Gravity.CENTER);header.addView(hour,new LinearLayout.LayoutParams(0,-1,1f));
         }
         for(int day=0;day<7;day++){
-            LinearLayout line=row();parent.addView(line,p(-1,px(47)));
+            LinearLayout line=row();parent.addView(line,p(-1,47));
             TextView weekday=text(ChatTrends.WEEKDAYS[day],12,SUB);
             weekday.setGravity(Gravity.CENTER_VERTICAL);line.addView(weekday,new LinearLayout.LayoutParams(0,-1,0.9f));
             for(int block=0;block<6;block++){
@@ -2442,7 +2442,7 @@ public class MainActivity extends Activity {
         LinearLayout navigation=row();navigation.setGravity(Gravity.CENTER_VERTICAL);container.addView(navigation,p(-1,-2));
         Button prev=btn("‹ "+(year-1));navigation.addView(prev,new LinearLayout.LayoutParams(0,px(45),1));
         prev.setEnabled(year>earliest);prev.setOnClickListener(v->{analyticsCalendarYear=year-1;refreshAnalyticsView();});
-        TextView current=text(String.valueOf(year),19,FG);current.setGravity(Gravity.CENTER);navigation.addView(current,p(px(75),px(45)));
+        TextView current=text(String.valueOf(year),19,FG);current.setGravity(Gravity.CENTER);navigation.addView(current,p(75,45));
         Button next=btn((year+1)+" ›");navigation.addView(next,new LinearLayout.LayoutParams(0,px(45),1));
         next.setEnabled(year<latest);next.setOnClickListener(v->{analyticsCalendarYear=year+1;refreshAnalyticsView();});
         analyticsText(container,"Каждый день: верхнее число — дата, нижнее — сообщений. «—» означает 0. " +
@@ -2455,13 +2455,13 @@ public class MainActivity extends Activity {
             TextView heading=text(first.getMonth().getDisplayName(java.time.format.TextStyle.FULL_STANDALONE,
                 Locale.forLanguageTag("ru-RU"))+" · "+monthSum+" сообщений",14,FG);
             heading.setTypeface(null,Typeface.BOLD);heading.setPadding(px(5),px(16),0,px(6));container.addView(heading);
-            LinearLayout header=row();container.addView(header,p(-1,px(25)));
+            LinearLayout header=row();container.addView(header,p(-1,25));
             for(String dayName:weekdays){TextView cell=text(dayName,11,SUB);cell.setGravity(Gravity.CENTER);
                 header.addView(cell,new LinearLayout.LayoutParams(0,-1,1f));}
             int offset=first.getDayOfWeek().getValue()-1;
             int rows=(offset+first.lengthOfMonth()+6)/7;
             for(int r=0;r<rows;r++){
-                LinearLayout week=row();container.addView(week,p(-1,px(45)));
+                LinearLayout week=row();container.addView(week,p(-1,45));
                 for(int col=0;col<7;col++){
                     int day=r*7+col-offset+1;
                     boolean valid=day>=1&&day<=first.lengthOfMonth();
@@ -2532,7 +2532,7 @@ public class MainActivity extends Activity {
             TextView month=text(period+"  ·  ● А: "+a+"   ■ Б: "+b,12,FG);
             month.setContentDescription(period+": участник А "+a+", участник Б "+b);
             block.addView(month,p(-1,-2));
-            LinearLayout tracks=row();block.addView(tracks,p(-1,px(19)));
+            LinearLayout tracks=row();block.addView(tracks,p(-1,19));
             long[] values={a,b};int[] colors={0xff7ddaff,0xffffa46b};
             for(int side=0;side<2;side++){
                 FrameLayout track=new FrameLayout(this);

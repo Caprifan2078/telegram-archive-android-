@@ -128,4 +128,36 @@ public class RelationshipAnalyticsExplanationUiTest {
         assertTrue("Hour ranges must be labelled",contains(holder[0],"00–03"));
         assertTrue("Actual count must be clearly described",contains(holder[0],"ЧИСЛО сообщений"));
     }
+
+    @Test public void analyticsUsesDpOnceAndCapturesSyntheticScreen()throws Exception {
+        MainActivity a=activity.getActivity();Instrumentation inst=InstrumentationRegistry.getInstrumentation();
+        final int[] heights=new int[3];
+        inst.runOnMainSync(()->{try{
+            LinearLayout list=(LinearLayout)get(a,"list");list.removeAllViews();
+            ChatTrends.Activity fixture=new ChatTrends.Activity();
+            fixture.weekdayHours[0][0]=123;fixture.weekdayHours[1][4]=7;
+            Method heat=MainActivity.class.getDeclaredMethod("analyticsHeatmap",LinearLayout.class,ChatTrends.Activity.class);
+            heat.setAccessible(true);
+            LinearLayout card=new LinearLayout(a);card.setOrientation(LinearLayout.VERTICAL);list.addView(card);
+            heat.invoke(a,card,fixture);
+            heights[0]=card.getChildAt(1).getLayoutParams().height;
+            heights[1]=card.getChildAt(2).getLayoutParams().height;
+            Method bars=MainActivity.class.getDeclaredMethod("analyticsBarChart",LinearLayout.class,java.util.List.class,java.util.List.class,long[].class,int.class,int.class);
+            bars.setAccessible(true);
+            LinearLayout chart=new LinearLayout(a);chart.setOrientation(LinearLayout.VERTICAL);list.addView(chart);
+            bars.invoke(a,chart,java.util.Arrays.asList("Янв"),java.util.Arrays.asList("Январь"),new long[]{123},42,95);
+            LinearLayout block=(LinearLayout)chart.getChildAt(1);
+            heights[2]=block.getChildAt(1).getLayoutParams().height;
+        }catch(Exception e){throw new AssertionError(e);}});
+        float density=a.getResources().getDisplayMetrics().density;
+        assertEquals(Math.round(29*density),heights[0]);
+        assertEquals(Math.round(47*density),heights[1]);
+        assertEquals(Math.round(8*density),heights[2]);
+        inst.waitForIdleSync();
+        try(android.os.ParcelFileDescriptor shell=inst.getUiAutomation().executeShellCommand(
+                "screencap -p /sdcard/Download/ta_synthetic_analytics.png");
+            java.io.FileInputStream output=new java.io.FileInputStream(shell.getFileDescriptor())){
+            byte[] drain=new byte[1024];while(output.read(drain)!=-1){}
+        }
+    }
 }

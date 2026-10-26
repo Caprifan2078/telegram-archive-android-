@@ -55,6 +55,8 @@ jobs:
             # Synthetic-only screenshots created by our fixture-based UI test.
             adb pull /sdcard/Download/ta_synthetic_relationships.png qa-output/relationships-explained.png
             test -s qa-output/relationships-explained.png
+            adb pull /sdcard/Download/ta_synthetic_analytics.png qa-output/analytics.png
+            test -s qa-output/analytics.png
             adb logcat -d -t 400 > qa-output/emulator-log.txt || true
       - name: Save synthetic instrumentation results
         if: always()
