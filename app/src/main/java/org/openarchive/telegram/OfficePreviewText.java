@@ -37,6 +37,11 @@ final class OfficePreviewText {
     static String extension(String name){
         if(name==null)return "";
         String value=name.toLowerCase(Locale.ROOT);
+        int query=value.indexOf('?'),fragment=value.indexOf('#');
+        int end=value.length();
+        if(query>=0)end=Math.min(end,query);
+        if(fragment>=0)end=Math.min(end,fragment);
+        value=value.substring(0,end);
         int slash=Math.max(value.lastIndexOf('/'),value.lastIndexOf('\\'));
         int dot=value.lastIndexOf('.');
         return dot>slash?value.substring(dot+1):"";

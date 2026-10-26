@@ -9,6 +9,8 @@ public class ArchiveReadOnlyTest {
             assertTrue(extension,ArchiveReadOnly.isArchive(extension));
         assertFalse(ArchiveReadOnly.isArchive("photo.jpg"));
         assertFalse(ArchiveReadOnly.isArchive("template.docx"));
+        assertTrue(ArchiveReadOnly.isArchive("media/file.7z?download=1"));
+        assertTrue(OfficePreviewText.supported("docs/budget.xlsx#document"));
     }
     @Test public void preventsUnsafeEntryPaths(){
         for(String name:Arrays.asList("../secret","photos/../../x","/etc/password","C:\\root.txt","x\0a",".\\x"))

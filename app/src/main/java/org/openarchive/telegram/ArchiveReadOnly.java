@@ -32,6 +32,11 @@ final class ArchiveReadOnly {
     static boolean isArchive(String name){
         if(name==null)return false;
         String n=name.toLowerCase(Locale.ROOT);
+        int query=n.indexOf('?'),fragment=n.indexOf('#');
+        int end=n.length();
+        if(query>=0)end=Math.min(end,query);
+        if(fragment>=0)end=Math.min(end,fragment);
+        n=n.substring(0,end);
         return n.endsWith(".7z")||n.endsWith(".zip")||n.endsWith(".rar")||n.endsWith(".rar5")
             ||n.endsWith(".tar")||n.endsWith(".tar.gz")||n.endsWith(".tgz")
             ||n.endsWith(".tar.xz")||n.endsWith(".txz")||n.endsWith(".tar.bz2")||n.endsWith(".tbz2");
