@@ -111,11 +111,13 @@ public class PinnedFocusNavigationRegressionTest {
                 Method show=MainActivity.class.getDeclaredMethod("showPage");show.setAccessible(true);show.invoke(a);
             }catch(Exception e){throw new AssertionError(e);}});
             barrier(worker);inst.waitForIdleSync();
-            final int[] y={0};
+            final int[] y={0}; final String[] before={""};
             inst.runOnMainSync(()->{try{
                 android.widget.ScrollView view=(android.widget.ScrollView)get(a,"scroll");
                 view.scrollTo(0,view.getChildAt(0).getHeight()/3);y[0]=view.getScrollY();
                 assertTrue("Synthetic results should be scrollable",y[0]>0);
+                before[0]="content="+view.getChildAt(0).getHeight()+" viewport="+view.getHeight()+
+                    " loaded="+get(a,"searchLoaded")+" offset="+get(a,"searchOffset")+" total="+get(a,"total");
                 Method jump=MainActivity.class.getDeclaredMethod("jump",long.class,String.class);
                 jump.setAccessible(true);jump.invoke(a,target,"search");
             }catch(Exception e){throw new AssertionError(e);}});
@@ -127,7 +129,10 @@ public class PinnedFocusNavigationRegressionTest {
             barrier(worker);inst.waitForIdleSync();
             assertEquals("search",get(a,"screen"));assertEquals("uniquequery",get(a,"q"));
             inst.runOnMainSync(()->{try{
-                assertEquals("Result position must be restored",y[0],((android.widget.ScrollView)get(a,"scroll")).getScrollY());
+                android.widget.ScrollView view=(android.widget.ScrollView)get(a,"scroll");
+                String after="content="+view.getChildAt(0).getHeight()+" viewport="+view.getHeight()+
+                    " loaded="+get(a,"searchLoaded")+" offset="+get(a,"searchOffset")+" total="+get(a,"total");
+                assertEquals("Result position must be restored; before "+before[0]+"; after "+after,y[0],view.getScrollY());
             }catch(Exception e){throw new AssertionError(e);}});
         }finally{
             barrier(worker);inst.runOnMainSync(()->{try{
