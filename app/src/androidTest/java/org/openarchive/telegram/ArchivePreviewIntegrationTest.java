@@ -58,6 +58,10 @@ public class ArchivePreviewIntegrationTest {
             assertEquals(1,files.size());assertTrue(files.get(0).encrypted);
             try{ArchiveReadOnly.read(ctx,uri,"secure.zip",null,files.get(0).name);fail();}
             catch(IOException expected){assertTrue(expected.getMessage().contains("пароль"));}
+            try{
+                ArchiveReadOnly.read(ctx,uri,"secure.zip","wrong-password-123".toCharArray(),files.get(0).name);
+                fail("Wrong AES ZIP password must never return content");
+            }catch(Exception expected){}
             assertEquals("encrypted offline",new String(
                 ArchiveReadOnly.read(ctx,uri,"secure.zip",password,files.get(0).name),StandardCharsets.UTF_8));
         }finally{raw.delete();zip.delete();}
@@ -122,6 +126,36 @@ public class ArchivePreviewIntegrationTest {
                 ArchiveReadOnly.read(ctx,uri,"sample."+type,null,items.get(0).name),
                 StandardCharsets.UTF_8));
         }finally{archive.delete();}
+    }
+
+    @Test public void encryptedSevenZRejectsMissingAndWrongPassword()throws Exception{
+        File plain=temp("txt"),archive=temp("7z");
+        char[] password="synthetic-7z-AES-test-123".toCharArray();
+        try{
+            byte[] body="Зашифрованный файл 7z AES256".getBytes(StandardCharsets.UTF_8);
+            try(FileOutputStream out=new FileOutputStream(plain)){out.write(body);}
+            // Supported public Commons Compress API (1.28); writes AES256 content.
+            try(SevenZOutputFile writer=new SevenZOutputFile(archive,password)){
+                SevenZArchiveEntry entry=writer.createArchiveEntry(plain,"private.txt");
+                writer.putArchiveEntry(entry);writer.write(body);
+                writer.closeArchiveEntry();writer.finish();
+            }
+            Uri uri=Uri.fromFile(archive);
+            try{
+                byte[] wrong=ArchiveReadOnly.read(ctx,uri,"encrypted.7z",null,"private.txt");
+                assertFalse("Missing password disclosed plaintext",java.util.Arrays.equals(body,wrong));
+            }catch(Exception expected){}
+            try{
+                byte[] wrong=ArchiveReadOnly.read(ctx,uri,"encrypted.7z",
+                    "wrong-pass-123".toCharArray(),"private.txt");
+                assertFalse("Wrong password disclosed plaintext",java.util.Arrays.equals(body,wrong));
+            }catch(Exception expected){}
+            byte[] decoded=ArchiveReadOnly.read(ctx,uri,"encrypted.7z",password,"private.txt");
+            assertArrayEquals("Correct 7z AES password must decrypt the exact original",body,decoded);
+        }finally{
+            java.util.Arrays.fill(password,'\0');
+            plain.delete();archive.delete();
+        }
     }
 
 }
