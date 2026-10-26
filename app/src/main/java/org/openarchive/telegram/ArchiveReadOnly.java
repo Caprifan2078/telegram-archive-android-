@@ -84,6 +84,10 @@ final class ArchiveReadOnly {
     private static byte[] access(Context ctx,Uri uri,String filename,char[] password,String requested,
                                  int limit,List<Entry> found)throws Exception{
         String name=filename==null?"":filename.toLowerCase(Locale.ROOT);
+        int query=name.indexOf('?'),fragment=name.indexOf('#'),end=name.length();
+        if(query>=0)end=Math.min(end,query);
+        if(fragment>=0)end=Math.min(end,fragment);
+        name=name.substring(0,end);
         if(name.endsWith(".7z"))return seven(ctx,uri,password,requested,limit,found);
         if(name.endsWith(".zip"))return zip(ctx,uri,password,requested,limit,found);
         if(name.endsWith(".rar")||name.endsWith(".rar5"))return rar(ctx,uri,password,requested,limit,found);
