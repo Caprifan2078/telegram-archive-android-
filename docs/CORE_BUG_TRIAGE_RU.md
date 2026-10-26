@@ -96,8 +96,8 @@
 - **Проверка на дату обновления:** быстрый host CI прошёл
   [успешно](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/40395592241);
   Android compile/эмулятор для обеих правок
-  [запущены](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/40395592279),
-  но их результат нельзя объявлять успешным до завершения.
+  [завершены успешно](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/40395592279):
+  **29/29 PASS** на API 30, 0 ошибок и 0 пропусков.
 - Разработка продолжается только в QA-ветке, `main` не изменяется.
   Оригиналы медиа не изменяются, GitHub содержит только синтетические тесты.
 
@@ -121,7 +121,16 @@
   личные сообщения и скриншоты в публичный GitHub.
 - [Офлайн host QA после исправления SeekBar](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/40396573360):
   **PASS**. [Android compile/APK QA](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/40396573293)
-  был ещё в процессе во время записи, итог не предполагается.
+  **PASS**. Артефакт `archive-android-smoke` содержит
+  `app-compactQa.apk`, подписан тестовым debug-ключом;
+  package ID `org.openarchive.telegram.qa.preview51`, версия `0.51`,
+  минимум Android 8.0 (API 26), размер APK **3 282 454 байта**,
+  SHA-256:
+  `4acd2aad9e1823633a5a0dafbeaa23471ad184684fa181d5d5ab6eaed128bce2`.
+  Все **201 JVM-тест PASS**, проверено по XML-отчётам артефакта.
+  Это тестовая сборка с кодовым фиксом seekbar от `b64b586`,
+  не релиз для Google Play. Последний device-прогон 29/29
+  предшествует именно seekbar-фиксу — ручной QA всё ещё необходим.
 - Публичный релиз и перенос в `main` пока **не выполнялись**.
   Ограничения: визуальный осмотр на реальном телефоне, большие
   пользовательские экспорты, аппаратные видеодекодеры, PiP и редкие форматы.
