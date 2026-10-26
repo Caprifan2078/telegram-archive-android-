@@ -55,9 +55,14 @@ class DocumentFolder {
     /** Resolve relative export path on demand; reject directory traversal and external URLs. */
     Uri resolve(String relative) {
         if(relative==null||relative.isEmpty())return null;
-        String s=Uri.decode(relative).replace('\\','/');
+        // Remove raw URL query and fragment delimiters BEFORE percent decoding.
+        // Encoded filename characters %23 and %3F are not delimiters.
+        String raw=relative.replace('\\','/');
+        int query=raw.indexOf('?'),fragment=raw.indexOf('#'),end=raw.length();
+        if(query>=0)end=Math.min(end,query);
+        if(fragment>=0)end=Math.min(end,fragment);
+        String s=Uri.decode(raw.substring(0,end));
         while(s.startsWith("./"))s=s.substring(2);
-        s=s.split("[?#]",2)[0];
         if(s.startsWith("/") || s.contains(":") || s.startsWith("//"))return null;
         if(localRoot!=null){try{java.io.File file=new java.io.File(localRoot,s);String base=localRoot.getCanonicalPath()+java.io.File.separator;if(file.isFile()&&file.getCanonicalPath().startsWith(base))return Uri.fromFile(file);}catch(Exception ignored){}return null;}
         String[] segments=s.split("/");
