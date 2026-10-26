@@ -1,0 +1,43 @@
+name: Offline host regression QA
+on:
+  push:
+    branches:
+      - qa/v052-duplicate-id-safety-20261026
+    paths:
+      - 'app/src/main/java/**'
+      - 'app/src/test/java/**'
+      - 'qa/host_tests/**'
+      - '.github/workflows/offline-host-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: offline-host-qa-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  synthetic-host:
+    # No paid runners when the user switches the repository back to private.
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Validate independent media and SQLite policies
+        run: |
+          python3 qa/host_tests/test_media_fixture_independence.py
+          python3 qa/host_tests/test_telegram_id_collision_sqlite.py
+      - name: Check TGS compression boundaries on JDK
+        run: bash qa/host_tests/test_tgs_payload.sh
+      - name: Test live Java search plans against FTS4 unicode61
+        run: python3 qa/host_tests/test_yo_search_sqlite.py
+      - name: Existing offline SQL regressions
+        run: |
+          python3 qa/host_tests/test_reply050.py
+          python3 qa/host_tests/test_search048_sqlite.py
+          python3 qa/host_tests/test_search049_sqlite.py
