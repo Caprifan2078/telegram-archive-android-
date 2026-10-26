@@ -2391,9 +2391,11 @@ public class MainActivity extends Activity {
             weekday.setGravity(Gravity.CENTER_VERTICAL);line.addView(weekday,new LinearLayout.LayoutParams(0,-1,0.9f));
             for(int block=0;block<6;block++){
                 final int d=day,b=block;final long amount=counts[day][block];
-                TextView square=text(analyticsShortCount(amount),11,amount>max*0.6?Color.BLACK:FG);
+                int heatBackground=analyticsHeatColor(max==0?0:(float)amount/max);
+                TextView square=text(analyticsShortCount(amount),11,
+                    AnalyticsContrastPolicy.readableTextColor(heatBackground,Color.BLACK,FG));
                 square.setGravity(Gravity.CENTER);square.setSingleLine(true);
-                square.setBackground(shape(analyticsHeatColor(max==0?0:(float)amount/max),5));
+                square.setBackground(shape(heatBackground,5));
                 LinearLayout.LayoutParams cell=new LinearLayout.LayoutParams(0,px(42),1f);
                 cell.setMargins(px(1),px(2),px(1),px(2));line.addView(square,cell);
                 square.setContentDescription(ChatTrends.WEEKDAYS[d]+", "+(b*4)+":00–"+(b*4+3)+":59 — "+amount+" сообщений");
@@ -2442,10 +2444,12 @@ public class MainActivity extends Activity {
                     LocalDate date=valid?first.withDayOfMonth(day):null;
                     long amount=date==null?0:activity.days.getOrDefault(date,0L);
                     String label=valid?(day+"\n"+(amount==0?"—":analyticsShortCount(amount))):"";
-                    TextView cell=text(label,10,amount>9?Color.BLACK:FG);
+                    int dayBackground=amount==0?0xff293449:analyticsHeatColor(
+                        Math.min(1f,(float)Math.sqrt(amount/Math.max(1.0,300.0))));
+                    TextView cell=text(label,10,
+                        AnalyticsContrastPolicy.readableTextColor(dayBackground,Color.BLACK,FG));
                     cell.setGravity(Gravity.CENTER);
-                    if(valid)cell.setBackground(shape(amount==0?0xff293449:analyticsHeatColor(
-                        Math.min(1f,(float)Math.sqrt(amount/Math.max(1.0,300.0)))),5));
+                    if(valid)cell.setBackground(shape(dayBackground,5));
                     LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,px(42),1f);
                     cp.setMargins(px(1),px(1),px(1),px(1));week.addView(cell,cp);
                     if(valid){cell.setContentDescription(date+": "+amount+" сообщений");
