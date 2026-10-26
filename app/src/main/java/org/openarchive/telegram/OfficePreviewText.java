@@ -123,14 +123,36 @@ final class OfficePreviewText {
         int pos=t.lastIndexOf(':');return pos<0?t:t.substring(pos+1);
     }
     private static void sax(byte[] data,DefaultHandler handler)throws Exception{
+        // Android's Expat SAX implementation doesn't implement every Apache
+        // Xerces feature that desktop JVMs provide. Never require optional
+        // vendor-specific feature flags to open a normal Office document.
+        // Refuse DTD/entity declarations BEFORE entering any SAX parser.
+        String declarations=new String(data,StandardCharsets.ISO_8859_1)
+            .replace("\u0000","").toUpperCase(Locale.ROOT);
+        if(declarations.contains("<!DOCTYPE")||declarations.contains("<!ENTITY"))
+            throw new IOException("Небезопасная XML-декларация в Office-документе");
         SAXParserFactory factory=SAXParserFactory.newInstance();
         factory.setNamespaceAware(false);
         factory.setValidating(false);
-        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl",true);
-        factory.setFeature("http://xml.org/sax/features/external-general-entities",false);
-        factory.setFeature("http://xml.org/sax/features/external-parameter-entities",false);
-        factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd",false);
-        factory.newSAXParser().parse(new InputSource(new ByteArrayInputStream(data)),handler);
+        try{factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl",true);}
+        catch(javax.xml.parsers.ParserConfigurationException|org.xml.sax.SAXNotRecognizedException|
+              org.xml.sax.SAXNotSupportedException unsupported){}
+        try{factory.setFeature("http://xml.org/sax/features/external-general-entities",false);}
+        catch(javax.xml.parsers.ParserConfigurationException|org.xml.sax.SAXNotRecognizedException|
+              org.xml.sax.SAXNotSupportedException unsupported){}
+        try{factory.setFeature("http://xml.org/sax/features/external-parameter-entities",false);}
+        catch(javax.xml.parsers.ParserConfigurationException|org.xml.sax.SAXNotRecognizedException|
+              org.xml.sax.SAXNotSupportedException unsupported){}
+        try{factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd",false);}
+        catch(javax.xml.parsers.ParserConfigurationException|org.xml.sax.SAXNotRecognizedException|
+              org.xml.sax.SAXNotSupportedException unsupported){}
+        javax.xml.parsers.SAXParser parser=factory.newSAXParser();
+        org.xml.sax.XMLReader reader=parser.getXMLReader();
+        reader.setEntityResolver((publicId,systemId)->{
+            throw new org.xml.sax.SAXException("Внешние XML-сущности запрещены");
+        });
+        reader.setContentHandler(handler);
+        reader.parse(new InputSource(new ByteArrayInputStream(data)));
     }
     private static String parse(byte[] data,List<String> shared,boolean spreadsheet)throws Exception{
         TextCollector collector=new TextCollector(shared,spreadsheet);
