@@ -46,7 +46,9 @@ final class FuzzyWordPolicy {
         int checked=0;
         for(String w:fromIndex){
             if(++checked>MAX_CANDIDATES)break;
-            String word=normalized(w);
+            // Normalize only for distance comparison. Return the real FTS
+            // vocabulary spelling: SQLite unicode61 distinguishes ё from е.
+            String word=w==null?"":w.toLowerCase(Locale.ROOT);
             if(near(query,word) && seen.add(word)) {
                 results.add(word);
                 if(results.size()==MAX_EXPANSIONS)break;
