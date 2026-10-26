@@ -1,4 +1,5 @@
 name: Android expanded features and migrations QA
+# Include R8-shrunk Lottie API contract regression in the device suite.
 on:
   push:
     branches:

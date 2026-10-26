@@ -15,6 +15,17 @@
 -keep class androidx.** { *; }
 -keep class kotlin.** { *; }
 -keep class kotlinx.** { *; }
+# The compact QA APK is minified but Android instrumentation is not.
+# Both production code and the independent TGS regression use Lottie's public
+# parser/drawable API. Preserve precisely these class contracts so synthetic
+# device tests exercise the SAME runtime library as the installed APK.
+# Otherwise R8 rewrites fromJsonStringSync, producing NoSuchMethodError only
+# when that test calls the method (and hiding any genuine decoder failures).
+-keep class com.airbnb.lottie.LottieCompositionFactory { *; }
+-keep class com.airbnb.lottie.LottieComposition { *; }
+-keep class com.airbnb.lottie.LottieResult { *; }
+-keep class com.airbnb.lottie.LottieDrawable { *; }
+
 # The classifier regression tests also call Jsoup's facade directly.
 -keep class org.jsoup.** { *; }
 # Jsoup's compile-only nullness annotations are not needed by Android at runtime.
