@@ -1,4 +1,4 @@
-name: Synthetic signed upgrade test
+name: Synthetic signed upgrade test (retry)
 on:
   push:
     branches: [qa/v052-duplicate-id-safety-20261026]
