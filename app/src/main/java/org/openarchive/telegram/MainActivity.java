@@ -2114,7 +2114,7 @@ public class MainActivity extends Activity {
     private void renderAnalytics(ChatAnalytics.Snapshot r){
         TextView heading=text("Анализ переписки",22,FG);heading.setTypeface(null,Typeface.BOLD);
         heading.setPadding(px(10),px(8),px(8),px(7));list.addView(heading);
-        TextView note=text("Все данные остаются на устройстве. Проценты показывают долю отправленных сообщений, а не того, кому они адресованы.",12,SUB);
+        TextView note=text(AnalyticsDisplayCopy.ANALYSIS_INTRO,12,SUB);
         note.setPadding(px(11),0,px(11),px(12));list.addView(note);
         LinearLayout overview=analyticsCard("Общая картина");
         analyticsLine(overview,"Сообщений",r.totalMessages);
@@ -2316,7 +2316,7 @@ public class MainActivity extends Activity {
             " · "+activity.hours[busiest]+" сообщений",ACCENT,13);
         if(activity.validHour==0)analyticsText(hours,"Нет сообщений с распознанным часом.",SUB,12);
         LinearLayout heat=analyticsCard("Тепловая карта · день недели × час");
-        analyticsText(heat,"Каждая клетка подписана уровнем 0–10: 0 — нет сообщений, 10 — максимум среди 168 ячеек. Нажми для точного количества. Сетка пролистывается по горизонтали и увеличивается.",SUB,11);
+        analyticsText(heat,AnalyticsDisplayCopy.HEATMAP_DESCRIPTION,SUB,12);
         analyticsHeatmap(heat,activity);
         renderAnnualCalendar(activity);
         renderParticipantComparison(report);
@@ -2820,19 +2820,27 @@ public class MainActivity extends Activity {
         int token=++loadToken;
         if(home){screen="chat";showPage();return;}
         prepareRelationshipScreen("♡ Хронология","Личный архив истории: этапы, события, медиа и повторяющиеся выражения. Всё включается вручную и остаётся на телефоне.");
+        analyticsText(list,RelationshipFeatureGuide.INTRO,SUB,13);
         Button stages=btn("◷ Этапы истории и сравнение графиков");list.addView(stages,p(-1,52));
+        analyticsText(list,RelationshipFeatureGuide.STAGES,SUB,12);
         stages.setOnClickListener(v->{screen="chronology";showPage();});
         Button echoes=btn("❞ Эхо фраз — найти повторения");list.addView(echoes,p(-1,52));
+        analyticsText(list,RelationshipFeatureGuide.ECHO,SUB,12);
         echoes.setOnClickListener(v->{screen="echo";showPage();});
         Button fullCompare=btn("⇄ Сравнение диалогов · два чата");list.addView(fullCompare,p(-1,52));
+        analyticsText(list,RelationshipFeatureGuide.COMPARE,SUB,12);
         fullCompare.setOnClickListener(v->chooseDualChat("dual_compare"));
         Button sharedMemories=btn("◷ Воспоминания · общая временная линия");list.addView(sharedMemories,p(-1,52));
+        analyticsText(list,RelationshipFeatureGuide.MEMORIES,SUB,12);
         sharedMemories.setOnClickListener(v->chooseDualChat("dual_memories"));
         Button comparison=btn("▦ Параллельные календари двух чатов");list.addView(comparison,p(-1,52));
+        analyticsText(list,RelationshipFeatureGuide.CALENDARS,SUB,12);
         comparison.setOnClickListener(v->chooseParallelCalendar());
         Button cinema=btn("▤ Кинолента: медиа по годам");list.addView(cinema,p(-1,52));
+        analyticsText(list,RelationshipFeatureGuide.CINEMA,SUB,12);
         cinema.setOnClickListener(v->{screen="cinema";showPage();});
         Button health=btn("◇ Проверить сохранность медиа");list.addView(health,p(-1,52));
+        analyticsText(list,RelationshipFeatureGuide.MEDIA_HEALTH,SUB,12);
         health.setOnClickListener(v->showMediaHealth());
         analyticsText(list,"Как создать событие: вернись в переписку, удерживай нужное сообщение → «♡ Добавить событие истории». Затем открой этот раздел и прикрепи медиа. Удаление события не удаляет переписку или файлы.",SUB,12);
         LinearLayout eventsHolder=column();list.addView(eventsHolder,p(-1,-2));
