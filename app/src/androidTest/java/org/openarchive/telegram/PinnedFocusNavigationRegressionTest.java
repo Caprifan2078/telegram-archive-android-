@@ -82,4 +82,59 @@ public class PinnedFocusNavigationRegressionTest {
             fresh.close();ctx.deleteDatabase("telegram_"+key+".db");
         }
     }
+
+    @Test public void returnFromResultRestoresQueryAndScroll()throws Exception{
+        Instrumentation inst=InstrumentationRegistry.getInstrumentation();
+        MainActivity a=activity.getActivity();Context ctx=inst.getTargetContext();
+        ExecutorService worker=(ExecutorService)get(a,"worker");
+        barrier(worker);inst.waitForIdleSync();
+        String key="searchnav_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb fresh=new MessageDb(ctx,key),previous=(MessageDb)get(a,"db");
+        String oldKey=(String)get(a,"activeKey"),oldScreen=(String)get(a,"screen");
+        boolean oldHome=(boolean)get(a,"home");String oldQuery=(String)get(a,"q");
+        long wanted=0;
+        try{
+            SQLiteDatabase sql=fresh.getWritableDatabase();
+            sql.beginTransaction();
+            try{
+                for(int i=0;i<80;i++){
+                    long id=fresh.stage(sql,"Synthetic","2026-01-01 12:00","uniquequery result "+i,null,"");
+                    if(i==20)wanted=id;
+                }
+                sql.setTransactionSuccessful();
+            }finally{sql.endTransaction();}
+            fresh.publishStaged(sql);
+            final long target=wanted;
+            inst.runOnMainSync(()->{try{
+                set(a,"db",fresh);set(a,"activeKey",key);set(a,"home",false);
+                set(a,"screen","search");set(a,"q","uniquequery");set(a,"deep",false);
+                Method show=MainActivity.class.getDeclaredMethod("showPage");show.setAccessible(true);show.invoke(a);
+            }catch(Exception e){throw new AssertionError(e);}});
+            barrier(worker);inst.waitForIdleSync();
+            final int[] y={0};
+            inst.runOnMainSync(()->{try{
+                android.widget.ScrollView view=(android.widget.ScrollView)get(a,"scroll");
+                view.scrollTo(0,view.getChildAt(0).getHeight()/3);y[0]=view.getScrollY();
+                assertTrue("Synthetic results should be scrollable",y[0]>0);
+                Method jump=MainActivity.class.getDeclaredMethod("jump",long.class,String.class);
+                jump.setAccessible(true);jump.invoke(a,target,"search");
+            }catch(Exception e){throw new AssertionError(e);}});
+            barrier(worker);inst.waitForIdleSync();barrier(worker);inst.waitForIdleSync();
+            assertEquals("chat",get(a,"screen"));
+            inst.runOnMainSync(()->{try{
+                Method back=MainActivity.class.getDeclaredMethod("restoreReturn");back.setAccessible(true);back.invoke(a);
+            }catch(Exception e){throw new AssertionError(e);}});
+            barrier(worker);inst.waitForIdleSync();
+            assertEquals("search",get(a,"screen"));assertEquals("uniquequery",get(a,"q"));
+            inst.runOnMainSync(()->{try{
+                assertEquals("Result position must be restored",y[0],((android.widget.ScrollView)get(a,"scroll")).getScrollY());
+            }catch(Exception e){throw new AssertionError(e);}});
+        }finally{
+            barrier(worker);inst.runOnMainSync(()->{try{
+                set(a,"db",previous);set(a,"activeKey",oldKey);set(a,"screen",oldScreen);
+                set(a,"home",oldHome);set(a,"q",oldQuery);
+            }catch(Exception e){throw new AssertionError(e);}});
+            fresh.close();ctx.deleteDatabase("telegram_"+key+".db");
+        }
+    }
 }

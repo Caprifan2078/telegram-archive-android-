@@ -150,6 +150,7 @@ public class MainActivity extends Activity {
     private String screen="chat",mediaKind="all",q="",byAuthor="",mine="",returnScreen="";
     private boolean deep=false,onlyMedia=false,importing=false;
     private int chatOffset=0,searchOffset=0,mediaOffset=0,favOffset=0,total=0,loadToken=0;
+    private int searchReturnScroll=-1,pendingSearchScroll=-1;
     private long highlightId=-1;private long lastVisibleMessage=-1;private int lastVisibleTop=0;private final Map<Long,View> renderedMessageViews=new HashMap<>();private long pendingRestoreId=-1;private int pendingRestoreTop=0;private boolean restoringBackup=false;private boolean fullBackupMode=true;private char[] backupPassword=null;private String selectedBackupName="";
     private String info="";
     private boolean analyticsCommonWords=false;
@@ -1850,7 +1851,7 @@ public class MainActivity extends Activity {
         if(searchInput!=null)q=searchInput.getText().toString().trim();
         if(authorInput!=null&&deep)byAuthor=authorInput.getText().toString().trim();
         if(mediaOnly!=null&&deep)onlyMedia=mediaOnly.isChecked();
-        searchOffset=0;searchLoaded=PAGE;configureBars();hideKeyboard();showPage();
+        searchOffset=0;searchLoaded=PAGE;searchReturnScroll=-1;pendingSearchScroll=-1;configureBars();hideKeyboard();showPage();
     }
     private void hideKeyboard(){try{((InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(base.getWindowToken(),0);}catch(Exception ignored){}}
     private void identityDialog(){
@@ -2095,6 +2096,10 @@ public class MainActivity extends Activity {
                     if(gallery){renderMedia(attachments);scheduleMediaPrefetch(token,kind,pos+attachments.size(),count);}
                     else {lastLoadedMessageId=messages.isEmpty()?-1:messages.get(messages.size()-1).id;renderMessages(messages,links,replies,find,false);}
                     animateEntrance();
+                    if("search".equals(tab)&&pendingSearchScroll>=0){
+                        final int restoreY=pendingSearchScroll;pendingSearchScroll=-1;
+                        scroll.post(()->{if(token==loadToken&&"search".equals(screen))scroll.scrollTo(0,restoreY);});
+                    }
                     bottomPager.setVisibility(tab.equals("chat")||tab.equals("search")?View.GONE:View.VISIBLE);
                     int shown=gallery?attachments.size():messages.size();
                     verticalTimeline.setVisibility("chat".equals(tab)?View.VISIBLE:View.GONE);
@@ -4083,6 +4088,9 @@ public class MainActivity extends Activity {
         status.setText("Перехожу к сообщению…");
         final String requestedArchive=activeKey;
         final MessageDb requestedDb=db;
+        final int requestedToken=loadToken;
+        final String requestedScreen=screen;
+        final int resultScroll="search".equals(source)&&"search".equals(screen)?scroll.getScrollY():-1;
         if(requestedDb==null)return;
         worker.execute(()->{
             if(!requestedArchive.equals(activeKey)||db!=requestedDb)return;
@@ -4090,9 +4098,10 @@ public class MainActivity extends Activity {
             // A search/reply/media jump must not rotate the pinned-message
             // selector. Only explicit pinned controls should select another pin.
             runOnUiThread(()->{
-                if(!requestedArchive.equals(activeKey)||db!=requestedDb||isFinishing())return;
+                if(!requestedArchive.equals(activeKey)||db!=requestedDb||isFinishing()||requestedToken!=loadToken||!requestedScreen.equals(screen))return;
                 if(at<0){toast("Сообщение не найдено");return;}
                 home=false;autoLoaded=PAGE;
+                if(resultScroll>=0)searchReturnScroll=resultScroll;
                 returnScreen=source;screen="chat";chatOffset=Math.max(0,at-7);highlightId=id;showPage();
             });
         });
@@ -4102,6 +4111,7 @@ public class MainActivity extends Activity {
         String target=returnScreen;
         closeFloatingRound();stopPlayback();
         returnScreen="";highlightId=-1;screen=target;home=false;
+        if("search".equals(target)){pendingSearchScroll=searchReturnScroll;searchReturnScroll=-1;}
         autoFloating=false;showPage();
     }
 
