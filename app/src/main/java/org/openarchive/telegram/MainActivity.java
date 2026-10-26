@@ -151,6 +151,7 @@ public class MainActivity extends Activity {
     private boolean deep=false,onlyMedia=false,importing=false;
     private int chatOffset=0,searchOffset=0,mediaOffset=0,favOffset=0,total=0,loadToken=0;
     private int searchReturnScroll=-1,pendingSearchScroll=-1;
+    private int analyticsReturnScroll=-1,pendingAnalyticsScroll=-1;
     private long highlightId=-1;private long lastVisibleMessage=-1;private int lastVisibleTop=0;private final Map<Long,View> renderedMessageViews=new HashMap<>();private long pendingRestoreId=-1;private int pendingRestoreTop=0;private boolean restoringBackup=false;private boolean fullBackupMode=true;private char[] backupPassword=null;private String selectedBackupName="";
     private String info="";
     private boolean analyticsCommonWords=false;
@@ -1815,7 +1816,7 @@ public class MainActivity extends Activity {
             LinearLayout actions=row();
             Button date=btn("📅 Перейти к дате");actions.addView(date,new LinearLayout.LayoutParams(0,px(42),1));date.setOnClickListener(v->chooseDate());
             if(!returnScreen.isEmpty()){
-                backButton=btn("↩ Назад к "+("media".equals(returnScreen)?"медиа":"relationships".equals(returnScreen)?"Хронологиям":"echo".equals(returnScreen)?"Эхо фраз":"поиску"));
+                backButton=btn("↩ Назад к "+("media".equals(returnScreen)?"медиа":"relationships".equals(returnScreen)?"Хронологиям":"echo".equals(returnScreen)?"Эхо фраз":"analytics".equals(returnScreen)?"анализу":"поиску"));
                 actions.addView(backButton,p(-2,42));backButton.setOnClickListener(v->restoreReturn());
             }
             filterBar.addView(actions,p(-1,46));
@@ -2081,7 +2082,16 @@ public class MainActivity extends Activity {
                         if(isFinishing()||token!=loadToken)return;
                         lastAnalytics=report;list.removeAllViews();list.setBackgroundColor(BG);
                         renderAnalytics(report);
-                        scroll.post(()->scroll.scrollTo(0,0));
+                        if(pendingAnalyticsScroll>=0){
+                            final int restoreY=pendingAnalyticsScroll;pendingAnalyticsScroll=-1;
+                            list.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener(){
+                                @Override public boolean onPreDraw(){
+                                    if(list.getViewTreeObserver().isAlive())list.getViewTreeObserver().removeOnPreDrawListener(this);
+                                    if(token==loadToken&&"analytics".equals(screen))scroll.scrollTo(0,restoreY);
+                                    return true;
+                                }
+                            });
+                        }else scroll.post(()->{if(token==loadToken&&"analytics".equals(screen))scroll.scrollTo(0,0);});
                         bottomPager.setVisibility(View.GONE);
                         verticalTimeline.setVisibility(View.GONE);
                         status.setText("Статистика рассчитана локально · ничего не отправлено");
@@ -2446,7 +2456,7 @@ public class MainActivity extends Activity {
         Button next=btn((year+1)+" ›");navigation.addView(next,new LinearLayout.LayoutParams(0,px(45),1));
         next.setEnabled(year<latest);next.setOnClickListener(v->{analyticsCalendarYear=year+1;refreshAnalyticsView();});
         analyticsText(container,"Каждый день: верхнее число — дата, нижнее — сообщений. «—» означает 0. " +
-            "Цвет дополнительный, данные читаются и без него. Нажми на день для точного числа.",SUB,12);
+            "Цвет дополнительный, данные читаются и без него. Выбери всех участников и нажми активный день, чтобы открыть первое сообщение.",SUB,12);
         String[] weekdays={"Пн","Вт","Ср","Чт","Пт","Сб","Вс"};
         for(int month=1;month<=12;month++){
             LocalDate first=LocalDate.of(year,month,1);
@@ -2477,10 +2487,39 @@ public class MainActivity extends Activity {
                     LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,px(42),1f);
                     cp.setMargins(px(1),px(1),px(1),px(1));week.addView(cell,cp);
                     if(valid){cell.setContentDescription(date+": "+amount+" сообщений");
-                        cell.setOnClickListener(v->toast(date+": "+amount+" сообщений"));}
+                        cell.setOnClickListener(v->{
+                            if(amount==0){toast(date+": сообщений нет");return;}
+                            if(!analyticsSelectedAuthor.isEmpty()){
+                                toast(date+": "+amount+" сообщений выбранного участника. Для перехода выбери всех участников.");return;
+                            }
+                            toast(date+": "+amount+" сообщений");
+                            openAnalyticsDay(date);
+                        });}
                 }
             }
         }
+    }
+
+    /** Open an exact calendar day only; a nearest different date must never be presented as a match. */
+    private void openAnalyticsDay(LocalDate day){
+        if(!"analytics".equals(screen)||db==null)return;
+        final MessageDb source=db;final String key=activeKey;final int token=loadToken;
+        status.setText("Ищу первое сообщение за "+day+"…");
+        worker.execute(()->{
+            try{
+                MessageDb.DateMatch match=source.nearestDate(day.getYear(),day.getMonthValue(),day.getDayOfMonth());
+                List<MessageDb.Item> items=match.position<0||!day.toString().equals(match.day)
+                    ?java.util.Collections.emptyList():source.page(match.position,1,"",false,"",false,false);
+                final long id=items.isEmpty()?-1:items.get(0).id;
+                runOnUiThread(()->{
+                    if(isFinishing()||token!=loadToken||db!=source||!key.equals(activeKey)||!"analytics".equals(screen))return;
+                    if(id<0){toast("Сообщения за выбранный день не найдены");status.setText("Статистика рассчитана локально");return;}
+                    jump(id,"analytics");
+                });
+            }catch(Exception error){runOnUiThread(()->{
+                if(token==loadToken&&db==source&&"analytics".equals(screen))status.setText("Не удалось открыть выбранный день");
+            });}
+        });
     }
 
     /** The two sender profiles are compared over identical calendar months. */
@@ -4106,6 +4145,7 @@ public class MainActivity extends Activity {
         final int requestedToken=loadToken;
         final String requestedScreen=screen;
         final int resultScroll="search".equals(source)&&"search".equals(screen)?scroll.getScrollY():-1;
+        final int analysisScroll="analytics".equals(source)&&"analytics".equals(screen)?scroll.getScrollY():-1;
         if(requestedDb==null)return;
         worker.execute(()->{
             if(!requestedArchive.equals(activeKey)||db!=requestedDb)return;
@@ -4117,6 +4157,7 @@ public class MainActivity extends Activity {
                 if(at<0){toast("Сообщение не найдено");return;}
                 home=false;autoLoaded=PAGE;
                 if(resultScroll>=0)searchReturnScroll=resultScroll;
+                if(analysisScroll>=0)analyticsReturnScroll=analysisScroll;
                 returnScreen=source;screen="chat";chatOffset=Math.max(0,at-7);highlightId=id;showPage();
             });
         });
@@ -4127,6 +4168,7 @@ public class MainActivity extends Activity {
         closeFloatingRound();stopPlayback();
         returnScreen="";highlightId=-1;screen=target;home=false;
         if("search".equals(target)){pendingSearchScroll=searchReturnScroll;searchReturnScroll=-1;}
+        if("analytics".equals(target)){pendingAnalyticsScroll=analyticsReturnScroll;analyticsReturnScroll=-1;}
         autoFloating=false;showPage();
     }
 

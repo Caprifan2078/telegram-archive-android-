@@ -177,4 +177,54 @@ public class PinnedFocusNavigationRegressionTest {
             fresh.close();ctx.deleteDatabase("telegram_"+key+".db");
         }
     }
+
+    private static android.view.View described(android.view.View root,String value){
+        if(root.getContentDescription()!=null&&root.getContentDescription().toString().startsWith(value))return root;
+        if(root instanceof android.view.ViewGroup){
+            android.view.ViewGroup group=(android.view.ViewGroup)root;
+            for(int i=0;i<group.getChildCount();i++){
+                android.view.View found=described(group.getChildAt(i),value);if(found!=null)return found;
+            }
+        }
+        return null;
+    }
+    @Test public void calendarDayOpensFirstMessageAndReturnsToAnalysis()throws Exception{
+        Instrumentation inst=InstrumentationRegistry.getInstrumentation();MainActivity a=activity.getActivity();
+        Context ctx=inst.getTargetContext();ExecutorService worker=(ExecutorService)get(a,"worker");
+        barrier(worker);inst.waitForIdleSync();
+        String key="calendar_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb fresh=new MessageDb(ctx,key),previous=(MessageDb)get(a,"db");
+        String oldKey=(String)get(a,"activeKey"),oldScreen=(String)get(a,"screen");
+        boolean oldHome=(boolean)get(a,"home");long first;
+        try{
+            SQLiteDatabase sql=fresh.getWritableDatabase();fresh.clearStage(sql);
+            fresh.stage(sql,"A","2024-02-28 10:00","Other day",null,"");
+            first=fresh.stage(sql,"A","2024-02-29 10:00","Leap day first",null,"");
+            fresh.stage(sql,"B","2024-02-29 11:00","Leap day second",null,"");
+            fresh.publishStaged(sql);final long wanted=first;
+            inst.runOnMainSync(()->{try{
+                set(a,"db",fresh);set(a,"activeKey",key);set(a,"home",false);
+                set(a,"screen","analytics");set(a,"analyticsSelectedAuthor","");
+                android.widget.LinearLayout list=(android.widget.LinearLayout)get(a,"list");list.removeAllViews();
+                ChatTrends.Activity data=new ChatTrends.Activity();
+                data.days.put(java.time.LocalDate.of(2024,2,29),2L);
+                Method render=MainActivity.class.getDeclaredMethod("renderAnnualCalendar",ChatTrends.Activity.class);
+                render.setAccessible(true);render.invoke(a,data);
+                android.view.View day=described(list,"2024-02-29:");assertNotNull("Leap day missing",day);
+                assertTrue("Calendar day must be actionable",day.performClick());
+            }catch(Exception e){throw new AssertionError(e);}});
+            barrier(worker);inst.waitForIdleSync();barrier(worker);inst.waitForIdleSync();barrier(worker);inst.waitForIdleSync();
+            assertEquals("chat",get(a,"screen"));assertEquals("analytics",get(a,"returnScreen"));
+            assertEquals("First message on the exact day",wanted,(long)get(a,"highlightId"));
+            inst.runOnMainSync(()->{try{
+                Method back=MainActivity.class.getDeclaredMethod("restoreReturn");back.setAccessible(true);back.invoke(a);
+            }catch(Exception e){throw new AssertionError(e);}});
+            barrier(worker);inst.waitForIdleSync();assertEquals("analytics",get(a,"screen"));
+        }finally{
+            barrier(worker);inst.runOnMainSync(()->{try{
+                set(a,"db",previous);set(a,"activeKey",oldKey);set(a,"screen",oldScreen);set(a,"home",oldHome);
+            }catch(Exception e){throw new AssertionError(e);}});
+            fresh.close();ctx.deleteDatabase("telegram_"+key+".db");
+        }
+    }
 }
