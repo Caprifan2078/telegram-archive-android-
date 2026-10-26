@@ -4371,10 +4371,13 @@ public class MainActivity extends Activity {
     }
     /** TextureView lets Android crop video to a true circle while the SeekBar remains outside it. */
     private void startInlineRound(String path,FrameLayout holder,ImageView poster,TextView overlay){
-        if(player!=null&&path.equals(playingPath)){
+        // A repeated Telegram MP4 path does not identify a specific message.
+        // Only tapping the active tile toggles the current decoder.
+        if(player!=null&&RoundPlaybackTarget.isSameTarget(playingPath,path,inlineHolder,holder)){
             try{
                 if(player.isPlaying()){player.pause();overlay.setVisibility(View.VISIBLE);}
                 else{player.start();overlay.setVisibility(View.GONE);}
+                if(playerPause!=null)playerPause.setText(player.isPlaying()?"⏸":"▶");
             }catch(Exception ignored){}
             return;
         }
@@ -4413,6 +4416,7 @@ public class MainActivity extends Activity {
                             // TextureView receives its first updated frame.
                             poster.bringToFront();overlay.bringToFront();
                             mp.start();
+                            if(playerPause!=null)playerPause.setText("⏸");
                             diagnose[0]=new Runnable(){
                                 @Override public void run(){
                                     if(generation!=playbackGeneration||player!=mp||activeTexture!=texture)return;
@@ -4827,7 +4831,9 @@ public class MainActivity extends Activity {
         if(playerStrip!=null){
             playerStrip.setVisibility(View.VISIBLE);
             playerText.setText("◉ "+(attachment.author==null||attachment.author.trim().isEmpty()?"Видеосообщение":attachment.author));
-            playerPause.setText("⏸");
+            boolean actuallyPlaying=false;
+            try{actuallyPlaying=player!=null&&player.isPlaying();}catch(Exception ignored){}
+            playerPause.setText(actuallyPlaying?"⏸":"▶");
         }
     }
     private void toggleActivePlayback(){
