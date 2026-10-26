@@ -1372,13 +1372,15 @@ public class MainActivity extends Activity {
     private void chatManagementMenu(String key){
         JSONObject item=registeredChat(key);if(item==null)return;
         String[] options={"Открыть переписку","✎ Переименовать","▤ Описание / био",
-            "◉ Установить аватарку","Убрать из списка · файлы НЕ удалять"};
+            "◉ Установить аватарку",isChatPinned(key)?"Открепить чат":"📌 Закрепить чат",
+            "Убрать из списка · файлы НЕ удалять"};
         new FontDialog.Builder(this).setTitle(item.optString("name","Переписка"))
             .setItems(options,(dialog,which)->{
                 if(which==0)activateArchive(key);
                 else if(which==1)renameRegisteredChat(key);
                 else if(which==2)editRegisteredChatBio(key);
                 else if(which==3){pendingImageChatKey=key;pickPersonalImage(62);}
+                else if(which==4)toggleChatPin(key);
                 else confirmHideRegisteredChat(key);
             }).show();
     }
@@ -1964,7 +1966,7 @@ public class MainActivity extends Activity {
     }
     private void chooseFolder(){
         new FontDialog.Builder(this).setTitle("Добавить переписку").setItems(
-            new String[]{"Выбрать папку Telegram","Импортировать Telegram ZIP / RAR","Просмотреть файл или архив · 7z / ZIP / RAR / Office"},
+            new String[]{"Выбрать папку Telegram","Импортировать Telegram · 7z / ZIP / RAR / TAR (с паролем)","Просмотреть файл или архив · 7z / ZIP / RAR / Office"},
             (d,selected)->{if(selected==0)chooseExistingFolder();else if(selected==1)chooseCompressedArchive();else chooseReadOnlyPreview();}).show();
     }
     private void chooseReadOnlyPreview(){
@@ -2083,13 +2085,35 @@ public class MainActivity extends Activity {
                 if(c!=null&&c.moveToFirst())name=c.getString(0);
             }catch(Exception ignored){}
             String low=name==null?"":name.toLowerCase(Locale.ROOT);
-            String ext=low.endsWith(".rar")?"rar":low.endsWith(".zip")?"zip":"";
-            if(ext.isEmpty()){toast("Нужен ZIP или RAR");return;}
-            final String displayName=name;
-            new FontDialog.Builder(this).setTitle("Импорт "+displayName)
-                .setMessage("Архив автоматически распакуется во внутреннюю папку приложения. Для медиа потребуется свободное место.")
+            final String[] supported={".tar.bz2",".tar.gz",".tar.xz",".rar5",".tbz2",".tgz",".txz",".zip",".rar",".7z",".tar"};
+            String extension="";
+            for(String candidate:supported)if(low.endsWith(candidate)){extension=candidate.substring(1);break;}
+            if(extension.isEmpty()){toast("Поддерживаются 7z, ZIP, RAR/RAR5, TAR, TAR.GZ, TAR.XZ, TAR.BZ2");return;}
+            final String ext=extension,displayName=name;
+            LinearLayout form=column();form.setPadding(px(18),px(9),px(18),px(9));
+            EditText nickname=new EditText(this);nickname.setSingleLine(true);
+            nickname.setHint("Название переписки в приложении");
+            nickname.setText(displayName);nickname.setSelectAllOnFocus(true);
+            nickname.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(100)});
+            form.addView(nickname);
+            EditText password=new EditText(this);password.setSingleLine(true);
+            password.setHint("Пароль архива (если установлен)");
+            password.setInputType(android.text.InputType.TYPE_CLASS_TEXT|
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+            form.addView(password);
+            new FontDialog.Builder(this).setTitle("Импортировать "+displayName)
+                .setMessage("Пароль можно ввести прямо здесь. Исходный архив не меняется. "+
+                    "Содержимое Telegram будет скопировано во внутреннее хранилище приложения, "+
+                    "поэтому требуется свободное место. Для TAR пароль обычно не предусмотрен.")
+                .setView(form)
                 .setNegativeButton("Отмена",null)
-                .setPositiveButton("Импортировать",(d,w)->importCompressed(source,ext,displayName)).show();
+                .setPositiveButton("Импортировать",(d,w)->{
+                    String label=nickname.getText().toString().trim();
+                    if(label.isEmpty())label=displayName;
+                    char[] secret=password.getText().toString().toCharArray();
+                    importCompressed(source,ext,label,secret.length==0?null:secret);
+                    if(secret.length==0)java.util.Arrays.fill(secret,'\0');
+                }).show();
             return;
         }
         if(request!=PICK_FOLDER||result!=RESULT_OK||data==null||data.getData()==null)return;
@@ -2105,15 +2129,18 @@ public class MainActivity extends Activity {
                 .setPositiveButton("Импортировать",(d,w)->importArchive()).setNegativeButton("Отмена",null).show();
         }).setNegativeButton("Отмена",null).show();
     }
-    private void importCompressed(Uri source,String extension,String label){
-        if(importing)return;
+    private void importCompressed(Uri source,String extension,String label,char[] password){
+        if(importing){if(password!=null)java.util.Arrays.fill(password,'\0');return;}
         importing=true;folderButton.setEnabled(false);status.setText("Распаковка "+label+"…");
         String key=UUID.randomUUID().toString().replace("-","");
         worker.execute(()->{
             try{
-                java.io.File root=ArchiveFileImport.extract(this,source,extension,key,msg->runOnUiThread(()->status.setText(msg)));
+                java.io.File root=ArchiveFileImport.extract(this,source,extension,key,password,
+                    msg->runOnUiThread(()->status.setText(msg)));
                 MessageDb fresh=new MessageDb(this,key);
-                try{TelegramImporter.importFiles(getContentResolver(),new DocumentFolder(getContentResolver(),root),fresh,msg->runOnUiThread(()->status.setText(msg)));}finally{fresh.close();}
+                try{TelegramImporter.importFiles(getContentResolver(),
+                    new DocumentFolder(getContentResolver(),root),fresh,
+                    msg->runOnUiThread(()->status.setText(msg)));}finally{fresh.close();}
                 runOnUiThread(()->{
                     importing=false;folderButton.setEnabled(true);
                     try{
@@ -2123,9 +2150,14 @@ public class MainActivity extends Activity {
                     }catch(Exception error){toast("Ошибка регистрации чата: "+error.getMessage());}
                 });
             }catch(Exception error){
-                ArchiveFileImport.deleteTree(new java.io.File(new java.io.File(getFilesDir(),"telegram_imports"),key));
-                runOnUiThread(()->{importing=false;folderButton.setEnabled(true);status.setText("Ошибка архива: "+error.getMessage());});
-            }
+                // Only discard the newly created, incomplete INTERNAL import.
+                // The user's original source URI/archive is NEVER modified.
+                ArchiveFileImport.deleteTree(new java.io.File(
+                    new java.io.File(getFilesDir(),"telegram_imports"),key));
+                runOnUiThread(()->{importing=false;folderButton.setEnabled(true);
+                    status.setText("Ошибка импорта: "+error.getMessage()+
+                        " · Проверь пароль и целостность архива. Исходный файл не изменён.");});
+            }finally{if(password!=null)java.util.Arrays.fill(password,'\0');}
         });
     }
     private void importArchive(){
