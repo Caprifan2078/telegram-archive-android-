@@ -36,6 +36,13 @@ jobs:
         run: bash qa/host_tests/test_tgs_payload.sh
       - name: Test live Java search plans against FTS4 unicode61
         run: python3 qa/host_tests/test_yo_search_sqlite.py
+      - name: Check WCAG contrast of analytics palette
+        run: |
+          mkdir -p /tmp/archive-chart-qa
+          javac -encoding UTF-8 -d /tmp/archive-chart-qa \
+            app/src/main/java/org/openarchive/telegram/AnalyticsContrastPolicy.java \
+            qa/host_tests/AnalyticsContrastHostCheck.java
+          java -cp /tmp/archive-chart-qa org.openarchive.telegram.AnalyticsContrastHostCheck
       - name: Existing offline SQL regressions
         run: |
           python3 qa/host_tests/test_reply050.py
