@@ -227,4 +227,45 @@ public class PinnedFocusNavigationRegressionTest {
             fresh.close();ctx.deleteDatabase("telegram_"+key+".db");
         }
     }
+
+    @Test public void searchButtonsSubmitAndClearText()throws Exception{
+        Instrumentation inst=InstrumentationRegistry.getInstrumentation();MainActivity a=activity.getActivity();
+        Context ctx=inst.getTargetContext();ExecutorService worker=(ExecutorService)get(a,"worker");
+        barrier(worker);inst.waitForIdleSync();
+        String key="searchbuttons_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb fresh=new MessageDb(ctx,key),previous=(MessageDb)get(a,"db");
+        String oldKey=(String)get(a,"activeKey"),oldScreen=(String)get(a,"screen");
+        boolean oldHome=(boolean)get(a,"home");
+        try{
+            inst.runOnMainSync(()->{try{
+                set(a,"db",fresh);set(a,"activeKey",key);set(a,"home",false);set(a,"screen","search");
+                Method show=MainActivity.class.getDeclaredMethod("showPage");show.setAccessible(true);show.invoke(a);
+            }catch(Exception e){throw new AssertionError(e);}});
+            barrier(worker);inst.waitForIdleSync();
+            inst.runOnMainSync(()->{try{
+                ((android.widget.EditText)get(a,"searchInput")).setText("  Тест  ");
+            }catch(Exception e){throw new AssertionError(e);}});
+            inst.waitForIdleSync();
+            try(android.os.ParcelFileDescriptor shell=inst.getUiAutomation().executeShellCommand(
+                    "screencap -p /sdcard/Download/ta_synthetic_search.png");
+                java.io.FileInputStream output=new java.io.FileInputStream(shell.getFileDescriptor())){
+                byte[] drain=new byte[1024];while(output.read(drain)!=-1){}
+            }
+            inst.runOnMainSync(()->{try{
+                android.view.View submit=described((android.view.View)get(a,"searchArea"),"Выполнить поиск");
+                assertNotNull(submit);assertTrue(submit.performClick());
+            }catch(Exception e){throw new AssertionError(e);}});
+            barrier(worker);inst.waitForIdleSync();assertEquals("Тест",get(a,"q"));
+            inst.runOnMainSync(()->{try{
+                android.view.View clear=described((android.view.View)get(a,"searchArea"),"Очистить текст поиска");
+                assertNotNull(clear);assertTrue(clear.performClick());
+            }catch(Exception e){throw new AssertionError(e);}});
+            barrier(worker);inst.waitForIdleSync();assertEquals("",get(a,"q"));
+        }finally{
+            barrier(worker);inst.runOnMainSync(()->{try{
+                set(a,"db",previous);set(a,"activeKey",oldKey);set(a,"screen",oldScreen);set(a,"home",oldHome);
+            }catch(Exception e){throw new AssertionError(e);}});
+            fresh.close();ctx.deleteDatabase("telegram_"+key+".db");
+        }
+    }
 }

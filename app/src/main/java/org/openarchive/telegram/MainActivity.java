@@ -1827,7 +1827,17 @@ public class MainActivity extends Activity {
             searchInput=new EditText(this);searchInput.setText(q);searchInput.setTextSize(16);searchInput.setSingleLine(true);
             searchInput.setTextColor(FG);searchInput.setHintTextColor(SUB);searchInput.setHint("Слово, фраза или часть слова");
             searchInput.setPadding(px(14),px(3),px(14),px(3));searchInput.setBackground(shape(PANEL,12));
-            searchArea.addView(searchInput,p(-1,48));
+            searchInput.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
+            searchInput.setContentDescription("Поиск по сообщениям");
+            LinearLayout queryRow=row();queryRow.setGravity(Gravity.CENTER_VERTICAL);
+            queryRow.addView(searchInput,new LinearLayout.LayoutParams(0,px(48),1));
+            Button clear=btn("✕");clear.setContentDescription("Очистить текст поиска");
+            LinearLayout.LayoutParams clearSize=p(42,48);clearSize.leftMargin=px(4);queryRow.addView(clear,clearSize);
+            Button submit=btn("Найти");submit.setContentDescription("Выполнить поиск");
+            LinearLayout.LayoutParams submitSize=p(72,48);submitSize.leftMargin=px(4);queryRow.addView(submit,submitSize);
+            searchArea.addView(queryRow,p(-1,52));
+            clear.setOnClickListener(v->{searchInput.setText("");applySearch();});
+            submit.setOnClickListener(v->applySearch());
             LinearLayout controls=row();quickButton=btn("⚡ Быстрый поиск");deepButton=btn("⌕ Глубокий поиск");
             controls.addView(quickButton,new LinearLayout.LayoutParams(0,px(43),1));controls.addView(deepButton,new LinearLayout.LayoutParams(0,px(43),1));
             searchArea.addView(controls,p(-1,49));

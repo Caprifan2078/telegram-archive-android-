@@ -151,7 +151,8 @@ public class ArchivePreviewIntegrationTest {
             }
             try{ArchiveReadOnly.list(ctx,Uri.fromFile(archive),"large-dict.tar.xz",null);fail("Over-limit XZ dictionary accepted");}
             catch(IOException expected){
-                assertTrue("Expected memory limit error: "+expected,expected.getClass().getName().contains("MemoryLimit"));
+                assertNotNull(expected.getMessage());
+                assertTrue("Expected memory limit error: "+expected,expected.getMessage().contains("memory would be needed")&&expected.getMessage().contains("limit was"));
             }
         }finally{archive.delete();}
     }
