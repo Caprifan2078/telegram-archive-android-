@@ -46,6 +46,10 @@ public class MediaAssetsRegressionTest {
         try{
             info.setDataSource(f.getAbsolutePath());
             assertEquals("video/mp4",info.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE));
+            if("regular-video.mp4".equals(file)) {
+                assertEquals("96",info.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH));
+                assertEquals("64",info.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT));
+            }
             Bitmap frame=info.getFrameAtTime(600000,MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
             assertNotNull("Missing actual decoded MP4 video frame for "+file,frame);frame.recycle();
             p.setDataSource(f.getAbsolutePath());p.prepare();
@@ -56,7 +60,7 @@ public class MediaAssetsRegressionTest {
         }finally{p.release();info.release();f.delete();}
     }
     @Test public void roundVideoDecodesFrameAndSeeks()throws Exception {verifyMp4("short-round.mp4");}
-    @Test public void regularVideoDecodesFrameAndSeeks()throws Exception {verifyMp4("tutorial/clip.mp4");}
+    @Test public void regularVideoDecodesFrameAndSeeks()throws Exception {verifyMp4("regular-video.mp4");}
     @Test public void staticPhotoDecodes()throws Exception {
         Context ctx=InstrumentationRegistry.getInstrumentation().getContext();
         try(InputStream in=ctx.getAssets().open("photo.png")){
