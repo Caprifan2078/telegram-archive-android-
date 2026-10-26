@@ -124,4 +124,20 @@ public class ArchivePreviewIntegrationTest {
         }finally{archive.delete();}
     }
 
+
+    @Test public void duplicateArchiveNamesCannotSilentlyOpenWrongFile()throws Exception{
+        // Two valid ZIP entries have the same name but different bytes.
+        String raw="UEsDBBQAAAAAAKkbW11X7nGSBQAAAAUAAAAIAAAAc2FtZS50eHRmaXJzdFBLAwQUAAAAAACpG1tdaREftgYAAAAGAAAACAAAAHNhbWUudHh0c2Vjb25kUEsBAhQDFAAAAAAAqRtbXVfucZIFAAAABQAAAAgAAAAAAAAAAAAAAIABAAAAAHNhbWUudHh0UEsBAhQDFAAAAAAAqRtbXWkRH7YGAAAABgAAAAgAAAAAAAAAAAAAAIABKwAAAHNhbWUudHh0UEsFBgAAAAACAAIAbAAAAFcAAAAAAA==";
+        File archive=temp("zip");
+        try{
+            try(FileOutputStream out=new FileOutputStream(archive)){
+                out.write(android.util.Base64.decode(raw,android.util.Base64.DEFAULT));
+            }
+            Uri uri=Uri.fromFile(archive);
+            try{ArchiveReadOnly.list(ctx,uri,"duplicate.zip",null);fail("Ambiguous list accepted");}
+            catch(IOException expected){assertTrue(expected.getMessage().contains("повторяются"));}
+            try{ArchiveReadOnly.read(ctx,uri,"duplicate.zip",null,"same.txt");fail("Ambiguous name opened");}
+            catch(IOException expected){assertTrue(expected.getMessage().contains("повторяются"));}
+        }finally{archive.delete();}
+    }
 }

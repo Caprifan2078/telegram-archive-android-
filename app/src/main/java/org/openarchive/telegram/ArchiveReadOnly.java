@@ -51,10 +51,18 @@ final class ArchiveReadOnly {
     static List<Entry> list(Context ctx,Uri uri,String filename,char[] password)throws Exception{
         List<Entry> found=new ArrayList<>();
         access(ctx,uri,filename,password,null,MAX_PREVIEW_BYTES,found);
+        // A name is the UI's selection key; duplicated names cannot safely
+        // identify which archive member the user intended to open.
+        Set<String> names=new HashSet<>();
+        for(Entry entry:found)if(!names.add(entry.name))
+            throw new IOException("В архиве повторяются имена файлов; безопасный выбор невозможен");
         return found;
     }
     static byte[] read(Context ctx,Uri uri,String filename,char[] password,String requested)throws Exception{
         if(!safeName(requested))throw new IOException("Неподходящее имя вложенного файла");
+        // Validate the whole directory before opening by name, even for callers
+        // that bypass the preview list. This can require a second archive scan.
+        list(ctx,uri,filename,password);
         return access(ctx,uri,filename,password,requested,MAX_PREVIEW_BYTES,null);
     }
     private static void add(List<Entry> result,String name,long size,boolean dir,boolean encrypted)throws IOException{
@@ -102,14 +110,13 @@ final class ArchiveReadOnly {
             try(FileInputStream stream=new FileInputStream(fd.getFileDescriptor());
                 SevenZFile archive=SevenZFile.builder().setSeekableByteChannel(stream.getChannel())
                     .setMaxMemoryLimitKiB(65536).setPassword(password).get()){
-                SevenZArchiveEntry e;boolean matched=false;
+                SevenZArchiveEntry e;int count=0;
                 while((e=archive.getNextEntry())!=null){
+                    if(++count>MAX_ENTRIES)throw new IOException("Слишком много элементов 7z");
                     String path=e.getName();
                     if(found!=null)add(found,path,e.getSize(),e.isDirectory(),e.getContentMethods()!=null&&
                         e.getContentMethods().toString().contains("AES"));
                     if(requested!=null&&requested.equals(path)&&!e.isDirectory()){
-                        if(matched)throw new IOException("Повторяющееся имя файла в архиве");
-                        matched=true;
                         if(e.getSize()>limit)throw new IOException("Вложение слишком большое");
                         return copy7z(archive,limit);
                     }
