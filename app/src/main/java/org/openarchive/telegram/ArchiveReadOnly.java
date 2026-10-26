@@ -96,7 +96,7 @@ final class ArchiveReadOnly {
         try(ParcelFileDescriptor fd=ctx.getContentResolver().openFileDescriptor(uri,"r")){
             if(fd==null)throw new IOException("7z недоступен");
             try(FileInputStream stream=new FileInputStream(fd.getFileDescriptor());
-                SevenZFile archive=SevenZFile.builder().setChannel(stream.getChannel())
+                SevenZFile archive=SevenZFile.builder().setSeekableByteChannel(stream.getChannel())
                     .setMaxMemoryLimitKiB(65536).setPassword(password).get()){
                 SevenZArchiveEntry e;boolean matched=false;
                 while((e=archive.getNextEntry())!=null){
@@ -120,7 +120,7 @@ final class ArchiveReadOnly {
             if(fd==null)throw new IOException("ZIP недоступен");
             try(FileInputStream stream=new FileInputStream(fd.getFileDescriptor());
                 org.apache.commons.compress.archivers.zip.ZipFile archive=
-                    org.apache.commons.compress.archivers.zip.ZipFile.builder().setChannel(stream.getChannel()).get()){
+                    org.apache.commons.compress.archivers.zip.ZipFile.builder().setSeekableByteChannel(stream.getChannel()).get()){
                 Enumeration<ZipArchiveEntry> entries=archive.getEntries();int count=0;
                 while(entries.hasMoreElements()){
                     ZipArchiveEntry e=entries.nextElement();
