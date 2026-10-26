@@ -2102,7 +2102,7 @@ public class MainActivity extends Activity {
                         list.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener(){
                             @Override public boolean onPreDraw(){
                                 if(list.getViewTreeObserver().isAlive())list.getViewTreeObserver().removeOnPreDrawListener(this);
-                                if(token==loadToken&&"search".equals(screen)){scroll.fling(0);scroll.scrollTo(0,restoreY);}
+                                if(token==loadToken&&"search".equals(screen))scroll.scrollTo(0,restoreY);
                                 return true;
                             }
                         });
@@ -2683,7 +2683,7 @@ public class MainActivity extends Activity {
         scroll.post(()->{
             if(renderedToken!=loadToken||!renderedScreen.equals(screen))return;
             if(target!=null){
-                scroll.smoothScrollTo(0,Math.max(0,target.getTop()-px(120)));
+                scroll.scrollTo(0,Math.max(0,target.getTop()-px(120)));
                 if(targetBubble!=null){
                     targetBubble.postDelayed(()->pulseMessage(targetBubble,color,id),190);
                 }
