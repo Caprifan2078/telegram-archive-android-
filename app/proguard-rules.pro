@@ -30,3 +30,7 @@
 -keep class org.jsoup.** { *; }
 # Jsoup's compile-only nullness annotations are not needed by Android at runtime.
 -dontwarn org.jspecify.annotations.**
+
+# Commons Compress has an optional Zstandard backend. No zstd-jni is packaged;
+# ZIP methods 20/93 are explicitly rejected by ArchiveReadOnly before decode.
+-dontwarn com.github.luben.zstd.**

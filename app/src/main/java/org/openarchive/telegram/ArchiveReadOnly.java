@@ -138,6 +138,10 @@ final class ArchiveReadOnly {
                             if(password==null||password.length==0)throw new IOException("ZIP зашифрован: введите пароль");
                             return encryptedZip(ctx,uri,requested,password,limit);
                         }
+                        // ZIP ZSTD requires an optional native library deliberately excluded
+                        // from the offline reader to keep APK portable and small.
+                        if(e.getMethod()==93||e.getMethod()==20)
+                            throw new IOException("ZIP Zstandard пока не поддерживается");
                         if(!archive.canReadEntryData(e))throw new IOException("Сжатие вложения не поддерживается");
                         try(InputStream input=archive.getInputStream(e)){return copyLimited(input,limit);}
                     }
