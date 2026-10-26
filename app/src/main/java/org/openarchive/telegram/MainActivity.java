@@ -4189,7 +4189,9 @@ public class MainActivity extends Activity {
             startAudio(a.path,playerPause,playerText);
             playingAttachment=a;playerStrip.setVisibility(View.VISIBLE);
             playerText.setText("Голосовое · "+(a.author==null?"":a.author));
-        }else resolveMedia(a.path,uri->showReadOnlyPreview(uri,a.path));
+        }else if(ArchiveReadOnly.isArchive(a.path)||OfficePreviewText.supported(a.path))
+            resolveMedia(a.path,uri->showReadOnlyPreview(uri,a.path));
+        else resolveMedia(a.path,uri->external(uri,a.path));
     }
     /** Open the dedicated offline player for music, never for voice notes. */
     private void openMusicPlayer(MessageDb.Attachment song){

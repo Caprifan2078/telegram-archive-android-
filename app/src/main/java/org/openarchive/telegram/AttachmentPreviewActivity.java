@@ -32,6 +32,7 @@ public final class AttachmentPreviewActivity extends Activity {
     private final ExecutorService background=Executors.newSingleThreadExecutor();
     private final List<ArchiveReadOnly.Entry> entries=new ArrayList<>();
     private LinearLayout panel;
+    private ScrollView scroll;
     private Uri source;
     private String fileName;
     private char[] password;
@@ -43,7 +44,7 @@ public final class AttachmentPreviewActivity extends Activity {
         source=getIntent().getData();fileName=getIntent().getStringExtra("display_name");
         if(fileName==null||fileName.isEmpty())fileName=source==null?"Файл":source.getLastPathSegment();
         if(source==null){finish();return;}
-        ScrollView scroll=new ScrollView(this);
+        scroll=new ScrollView(this);
         panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(15),dp(20),dp(15),dp(20));panel.setBackgroundColor(BACKGROUND);
         scroll.addView(panel);setContentView(scroll);
@@ -63,6 +64,7 @@ public final class AttachmentPreviewActivity extends Activity {
     }
     private void showHeader(){
         panel.removeAllViews();
+        if(scroll!=null)scroll.post(()->scroll.scrollTo(0,0));
         TextView title=text("▣ "+fileName,19,FG);title.setTypeface(null,1);title.setMaxLines(2);
         panel.addView(title);
         panel.addView(text("Только просмотр · локально · исходный файл не меняется",12,SUB));
