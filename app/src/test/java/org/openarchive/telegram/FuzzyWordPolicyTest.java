@@ -17,4 +17,14 @@ public class FuzzyWordPolicyTest {
   OfflineSynonymSearch.Plan p=OfflineSynonymSearch.make("плахо",true,false,m);
   assertTrue(p.fts.contains("body:плохо"));assertTrue(p.fuzzy);assertTrue(p.sourceMatch("Мне плохо").contains("исправление опечатки"));}
  @Test public void explicitOffKeepsExact(){OfflineSynonymSearch.Plan p=OfflineSynonymSearch.make("плахо",true,false);assertFalse(p.fuzzy);assertFalse(p.fts.contains("body:плохо"));}
+ @Test public void indexedCyrillicYoSpellingSurvivesFuzzyFix(){
+  List<String> choices=FuzzyWordPolicy.suggest("ёлочкк",Arrays.asList("ёлочка","молоко"));
+  assertEquals(Arrays.asList("ёлочка"),choices);
+  Map<String,List<String>> typos=new LinkedHashMap<>();
+  typos.put("ёлочкк",choices);
+  OfflineSynonymSearch.Plan p=OfflineSynonymSearch.make("ёлочкк",true,false,typos);
+  assertTrue(p.fts.contains("body:ёлочка"));
+  assertFalse(p.fts.contains("body:елочка OR"));
+  assertTrue(p.sourceMatch("Ёлочка стоит дома").contains("исправление опечатки"));
+ }
 }
