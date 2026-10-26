@@ -142,4 +142,39 @@ public class PinnedFocusNavigationRegressionTest {
             fresh.close();ctx.deleteDatabase("telegram_"+key+".db");
         }
     }
+
+    @Test public void switchingModesKeepsUnsavedDeepFilters()throws Exception {
+        Instrumentation inst=InstrumentationRegistry.getInstrumentation();
+        MainActivity a=activity.getActivity();Context ctx=inst.getTargetContext();
+        ExecutorService worker=(ExecutorService)get(a,"worker");barrier(worker);inst.waitForIdleSync();
+        String key="mode_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb fresh=new MessageDb(ctx,key),previous=(MessageDb)get(a,"db");
+        String oldKey=(String)get(a,"activeKey"),oldScreen=(String)get(a,"screen");
+        boolean oldHome=(boolean)get(a,"home"),oldDeep=(boolean)get(a,"deep");
+        try {
+            inst.runOnMainSync(()->{try{
+                set(a,"db",fresh);set(a,"activeKey",key);set(a,"home",false);
+                set(a,"screen","search");set(a,"deep",true);
+                Method bars=MainActivity.class.getDeclaredMethod("configureBars");bars.setAccessible(true);bars.invoke(a);
+                ((android.widget.EditText)get(a,"authorInput")).setText("  Мария  ");
+                ((android.widget.CheckBox)get(a,"mediaOnly")).setChecked(true);
+                ((android.widget.Button)get(a,"quickButton")).performClick();
+            }catch(Exception e){throw new AssertionError(e);}});
+            barrier(worker);inst.waitForIdleSync();
+            assertEquals("Мария",get(a,"byAuthor"));assertEquals(true,get(a,"onlyMedia"));
+            inst.runOnMainSync(()->{try{((android.widget.Button)get(a,"deepButton")).performClick();}
+                catch(Exception e){throw new AssertionError(e);}});
+            barrier(worker);inst.waitForIdleSync();
+            inst.runOnMainSync(()->{try{
+                assertEquals("Мария",((android.widget.EditText)get(a,"authorInput")).getText().toString());
+                assertTrue(((android.widget.CheckBox)get(a,"mediaOnly")).isChecked());
+            }catch(Exception e){throw new AssertionError(e);}});
+        }finally{
+            barrier(worker);inst.runOnMainSync(()->{try{
+                set(a,"db",previous);set(a,"activeKey",oldKey);set(a,"screen",oldScreen);
+                set(a,"home",oldHome);set(a,"deep",oldDeep);
+            }catch(Exception e){throw new AssertionError(e);}});
+            fresh.close();ctx.deleteDatabase("telegram_"+key+".db");
+        }
+    }
 }

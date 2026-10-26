@@ -1821,6 +1821,8 @@ public class MainActivity extends Activity {
             filterBar.addView(actions,p(-1,46));
         }
         if("search".equals(screen)){
+            // Discard detached controls when the quick mode hides deep filters.
+            authorInput=null;mediaOnly=null;
             searchInput=new EditText(this);searchInput.setText(q);searchInput.setTextSize(16);searchInput.setSingleLine(true);
             searchInput.setTextColor(FG);searchInput.setHintTextColor(SUB);searchInput.setHint("Слово, фраза или часть слова");
             searchInput.setPadding(px(14),px(3),px(14),px(3));searchInput.setBackground(shape(PANEL,12));
@@ -1829,8 +1831,8 @@ public class MainActivity extends Activity {
             controls.addView(quickButton,new LinearLayout.LayoutParams(0,px(43),1));controls.addView(deepButton,new LinearLayout.LayoutParams(0,px(43),1));
             searchArea.addView(controls,p(-1,49));
             quickButton.setBackground(shape(!deep?HIGHLIGHT:PANEL,10));deepButton.setBackground(shape(deep?HIGHLIGHT:PANEL,10));
-            quickButton.setOnClickListener(v->{deep=false;applySearch();});
-            deepButton.setOnClickListener(v->{deep=true;applySearch();});
+            quickButton.setOnClickListener(v->switchSearchMode(false));
+            deepButton.setOnClickListener(v->switchSearchMode(true));
             if(deep){
                 authorInput=new EditText(this);authorInput.setText(byAuthor);authorInput.setSingleLine(true);
                 authorInput.setTextColor(FG);authorInput.setHintTextColor(SUB);authorInput.setTextSize(13);
@@ -1846,6 +1848,15 @@ public class MainActivity extends Activity {
             }
             searchInput.setOnEditorActionListener((v,action,event)->{applySearch();return true;});
         }
+    }
+    private void switchSearchMode(boolean nextDeep){
+        // Persist visible filters before hiding their controls.
+        if(deep){
+            if(authorInput!=null)byAuthor=authorInput.getText().toString().trim();
+            if(mediaOnly!=null)onlyMedia=mediaOnly.isChecked();
+        }
+        deep=nextDeep;
+        applySearch();
     }
     private void applySearch(){
         if(searchInput!=null)q=searchInput.getText().toString().trim();
