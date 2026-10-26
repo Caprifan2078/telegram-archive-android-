@@ -326,7 +326,21 @@ final class OfflineSynonymSearch {
             }
             // Single unfamiliar words retain the existing FTS prefix behavior.
             // Known short abbreviations (e.g. комп) are handled by exact lexicon forms.
-            if(forms.size()==1&&token.length()>=4){forms.clear();forms.add(token+"*");}
+            boolean prefixOnly=forms.size()==1&&token.length()>=4;
+            if(prefixOnly){forms.clear();forms.add(token+"*");}
+            // SQLite FTS4 unicode61 keeps Russian е and ё as DISTINCT tokens.
+            // Do not silently fold explicit ё to е. In opt-in expanded search,
+            // try a bounded single-letter spelling alternative in either
+            // direction; retain original prefix semantics for unknown words.
+            if(synonyms){
+                for(int pos=0;pos<token.length() && forms.size()<MAX_ALTERNATIVES;pos++){
+                    char ch=token.charAt(pos);
+                    if(ch!='е'&&ch!='ё')continue;
+                    String variant=token.substring(0,pos)+(ch=='е'?'ё':'е')+
+                        token.substring(pos+1)+(prefixOnly?"*":"");
+                    forms.add(variant);
+                }
+            }
             ArrayList<Variant> options=new ArrayList<>();
             for(String candidate:forms){
                 if(options.size()>=MAX_ALTERNATIVES)break;
@@ -351,6 +365,7 @@ final class OfflineSynonymSearch {
         return new Plan(String.join(" AND ",blocks),normalize(input),description,tokens,variants,
             Collections.unmodifiableList(explanations),expanded,broader,addedTypos);
     }
-    private static String normalize(String s){return s.toLowerCase(Locale.ROOT).replace('ё','е').trim();}
+    // Preserve Russian ё: FTS4 unicode61 indexes it separately from е.
+    private static String normalize(String s){return s.toLowerCase(Locale.ROOT).trim();}
     private OfflineSynonymSearch(){}
 }
