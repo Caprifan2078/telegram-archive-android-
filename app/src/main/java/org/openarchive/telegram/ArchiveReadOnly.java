@@ -218,7 +218,7 @@ final class ArchiveReadOnly {
             if(raw==null)throw new IOException("TAR недоступен");
             InputStream compression=raw;
             if(name.endsWith(".tgz")||name.endsWith(".tar.gz"))compression=new GZIPInputStream(raw);
-            else if(name.endsWith(".txz")||name.endsWith(".tar.xz"))compression=new XZCompressorInputStream(raw);
+            else if(name.endsWith(".txz")||name.endsWith(".tar.xz"))compression=XZCompressorInputStream.builder().setInputStream(raw).setMemoryLimitKiB(65536).get();
             else if(name.endsWith(".tbz2")||name.endsWith(".tar.bz2"))compression=new BZip2CompressorInputStream(raw);
             try(TarArchiveInputStream tar=new TarArchiveInputStream(compression)){
                 TarArchiveEntry e;int count=0;

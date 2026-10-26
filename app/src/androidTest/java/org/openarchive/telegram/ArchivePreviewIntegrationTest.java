@@ -140,4 +140,19 @@ public class ArchivePreviewIntegrationTest {
             catch(IOException expected){assertTrue(expected.getMessage().contains("повторяются"));}
         }finally{archive.delete();}
     }
+
+    @Test public void tarXzRejectsExcessiveDecoderMemoryBeforeAllocating()throws Exception{
+        // A tiny XZ stream requests a 128 MiB LZMA2 dictionary, over our 64 MiB limit.
+        String raw="/Td6WFoAAATm1rRGAgAhAR4AAACbB1FmAQALYXJjaGl2ZSB0ZXN0AANEBUKu7EeJAAEkDKYY2NgftvN9AQAAAAAEWVo=";
+        File archive=temp("tar.xz");
+        try{
+            try(FileOutputStream out=new FileOutputStream(archive)){
+                out.write(android.util.Base64.decode(raw,android.util.Base64.DEFAULT));
+            }
+            try{ArchiveReadOnly.list(ctx,Uri.fromFile(archive),"large-dict.tar.xz",null);fail("Over-limit XZ dictionary accepted");}
+            catch(IOException expected){
+                assertTrue("Expected memory limit error: "+expected,expected.getClass().getName().contains("MemoryLimit"));
+            }
+        }finally{archive.delete();}
+    }
 }
