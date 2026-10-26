@@ -2098,7 +2098,14 @@ public class MainActivity extends Activity {
                     animateEntrance();
                     if("search".equals(tab)&&pendingSearchScroll>=0){
                         final int restoreY=pendingSearchScroll;pendingSearchScroll=-1;
-                        scroll.post(()->{if(token==loadToken&&"search".equals(screen))scroll.scrollTo(0,restoreY);});
+                        // Wait until the newly rendered results have their final measured height.
+                        list.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener(){
+                            @Override public boolean onPreDraw(){
+                                if(list.getViewTreeObserver().isAlive())list.getViewTreeObserver().removeOnPreDrawListener(this);
+                                if(token==loadToken&&"search".equals(screen))scroll.scrollTo(0,restoreY);
+                                return true;
+                            }
+                        });
                     }
                     bottomPager.setVisibility(tab.equals("chat")||tab.equals("search")?View.GONE:View.VISIBLE);
                     int shown=gallery?attachments.size():messages.size();
