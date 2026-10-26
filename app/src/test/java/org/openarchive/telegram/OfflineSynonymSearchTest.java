@@ -85,4 +85,24 @@ public class OfflineSynonymSearchTest {
   assertTrue(p.fts.length()<1000);assertFalse(p.fts.contains("https:"));
   assertTrue(p.sourceMatch("тема компьютерные запчасти").contains("компьютерные (вариант)"));
  }
+ @Test public void cyrillicYoPreservedAndExpandedOnlyWhenEnabled(){
+  OfflineSynonymSearch.Plan yo=OfflineSynonymSearch.make("ёлка",true);
+  assertTrue(yo.fts.contains("body:ёлка*"));
+  assertTrue(yo.fts.contains("body:елка*"));
+  assertTrue(yo.expanded);
+  assertTrue(yo.sourceMatch("Ёлка в комнате").contains("ёлка (точно)"));
+
+  OfflineSynonymSearch.Plan plain=OfflineSynonymSearch.make("елка",true);
+  assertTrue(plain.fts.contains("body:ёлка*"));
+  assertTrue(plain.fts.contains("body:елка*"));
+
+  OfflineSynonymSearch.Plan exact=OfflineSynonymSearch.make("ёлка",false);
+  assertEquals("body:ёлка*",exact.fts);
+  assertFalse(exact.expanded);
+
+  OfflineSynonymSearch.Plan everything=OfflineSynonymSearch.make("всё",true);
+  assertTrue(everything.fts.contains("body:всё"));
+  assertTrue(everything.fts.contains("body:все"));
+  assertTrue(everything.sourceMatch("Это всё").contains("всё (точно)"));
+ }
 }
