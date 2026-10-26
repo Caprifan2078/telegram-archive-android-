@@ -50,7 +50,7 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 420
           script: |
-            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.ArchivePreviewIntegrationTest,org.openarchive.telegram.AttachmentPreviewScreenTest'
+            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.ArchivePreviewIntegrationTest,org.openarchive.telegram.AttachmentPreviewScreenTest,org.openarchive.telegram.EncryptedTelegramImportRegressionTest'
             mkdir -p qa-output
             adb pull /sdcard/Download/ta_office_preview_synthetic.png qa-output/office-preview-synthetic.png
             test -s qa-output/office-preview-synthetic.png
