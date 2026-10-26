@@ -1882,8 +1882,20 @@ public class MainActivity extends Activity {
     }
     private void chooseFolder(){
         new FontDialog.Builder(this).setTitle("Добавить переписку").setItems(
-            new String[]{"Выбрать папку Telegram","Выбрать ZIP или RAR"},
-            (d,selected)->{if(selected==0)chooseExistingFolder();else chooseCompressedArchive();}).show();
+            new String[]{"Выбрать папку Telegram","Импортировать Telegram ZIP / RAR","Просмотреть файл или архив · 7z / ZIP / RAR / Office"},
+            (d,selected)->{if(selected==0)chooseExistingFolder();else if(selected==1)chooseCompressedArchive();else chooseReadOnlyPreview();}).show();
+    }
+    private void chooseReadOnlyPreview(){
+        Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("*/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        startActivityForResult(intent,64);
+    }
+    private void showReadOnlyPreview(Uri uri,String display){
+        Intent intent=new Intent(this,AttachmentPreviewActivity.class);
+        intent.setData(uri);intent.putExtra("display_name",display);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        startActivity(intent);
     }
     private void chooseCompressedArchive(){
         Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -1977,6 +1989,11 @@ public class MainActivity extends Activity {
             try{getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}
             String label=uri.getLastPathSegment();String mime=getContentResolver().getType(uri);
             worker.execute(()->{savedStore.add("",label,uri.toString(),mime);runOnUiThread(this::renderSaved);});return;
+        }
+        if(request==64&&result==RESULT_OK&&data!=null&&data.getData()!=null){
+            Uri selected=data.getData();
+            String name=displayDocumentName(selected);
+            showReadOnlyPreview(selected,name);return;
         }
         if(request==57&&result==RESULT_OK&&data!=null&&data.getData()!=null){
             Uri source=data.getData();String name="Telegram.zip";
@@ -4172,7 +4189,7 @@ public class MainActivity extends Activity {
             startAudio(a.path,playerPause,playerText);
             playingAttachment=a;playerStrip.setVisibility(View.VISIBLE);
             playerText.setText("Голосовое · "+(a.author==null?"":a.author));
-        }else resolveMedia(a.path,uri->external(uri,a.path));
+        }else resolveMedia(a.path,uri->showReadOnlyPreview(uri,a.path));
     }
     /** Open the dedicated offline player for music, never for voice notes. */
     private void openMusicPlayer(MessageDb.Attachment song){
