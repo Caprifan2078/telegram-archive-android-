@@ -3102,7 +3102,7 @@ public class MainActivity extends Activity {
         }
         prepareRelationshipScreen(isTimeline?"◷ Воспоминания двух переписок":"⇄ Сравнение диалогов",
             "Две локальные базы. Сообщения, личности и медиа не объединяются, в интернет ничего не отправляется.");
-        Button back=btn("‹ К взаимоотношениям");list.addView(back,p(-1,45));
+        Button back=btn("‹ К разделу «Хронология»");list.addView(back,p(-1,45));
         back.setOnClickListener(v->{screen="relationships";showPage();});
         Button other=btn("⇄ Сменить вторую переписку");list.addView(other,p(-1,45));
         other.setOnClickListener(v->chooseDualChat(mode));
@@ -3233,8 +3233,8 @@ public class MainActivity extends Activity {
     private void renderEchoPage(){
         ++loadToken;
         if(home){screen="chat";showPage();return;}
-        prepareRelationshipScreen("❞ Эхо фраз","Введи выражение из переписки. Поиск учитывает регистр Unicode и повторы в разных сообщениях. Никаких выводов о чувствах людей не делается.");
-        Button back=btn("‹ К взаимоотношениям");list.addView(back,p(-1,44));
+        prepareRelationshipScreen("❞ Эхо фраз",RelationshipFeatureGuide.ECHO_DETAIL);
+        Button back=btn("‹ К разделу «Хронология»");list.addView(back,p(-1,44));
         back.setOnClickListener(v->{screen="relationships";showPage();});
         EditText phrase=new EditText(this);phrase.setSingleLine(true);phrase.setHint("Например: доброе утро");
         phrase.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(PhraseEcho.MAX_PHRASE)});
@@ -3326,7 +3326,10 @@ public class MainActivity extends Activity {
         TextView heading=text("◷  Хронология истории",21,FG);heading.setTypeface(null,Typeface.BOLD);
         heading.setPadding(px(12),px(12),px(12),px(10));list.addView(heading);
         analyticsText(list,"Этот раздел включается только вручную. Ты сам задаёшь названия и границы, даже посередине сообщения. Импортированный текст не меняется.",SUB,13);
-        Button back=btn("‹ К переписке");list.addView(back,p(-1,46));back.setOnClickListener(v->{screen="chat";showPage();});
+        Button back=btn("‹ К разделу «Хронология»");list.addView(back,p(-1,46));
+        back.setOnClickListener(v->{screen="relationships";showPage();});
+        Button chat=btn("↗ К переписке");list.addView(chat,p(-1,46));
+        chat.setOnClickListener(v->{screen="chat";showPage();});
         Button twoChats=btn("◷ Показать две переписки на общей временной линии");
         list.addView(twoChats,p(-1,48));twoChats.setOnClickListener(v->chooseDualChat("dual_memories"));
         TextView how=text("Как создать этап: открой «Переписка» → удерживай первое сообщение → «Отметить начало периода». Затем отметь конец в другом сообщении, придумай название и сохрани.",14,FG);

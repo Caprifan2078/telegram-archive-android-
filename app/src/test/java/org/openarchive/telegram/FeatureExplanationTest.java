@@ -14,6 +14,8 @@ public class FeatureExplanationTest {
             assertTrue("Missing purpose",description.startsWith("Зачем:"));
         }
         assertTrue(RelationshipFeatureGuide.INTRO.contains("не оценка чувств"));
+        assertTrue(RelationshipFeatureGuide.ECHO_DETAIL.contains("Регистр букв не важен"));
+        assertTrue(RelationshipFeatureGuide.ECHO_DETAIL.contains("лишние пробелы"));
         assertTrue(RelationshipFeatureGuide.COMPARE.contains("раздельными"));
         assertTrue(RelationshipFeatureGuide.MEDIA_HEALTH.contains("не доказывает потерю"));
     }
