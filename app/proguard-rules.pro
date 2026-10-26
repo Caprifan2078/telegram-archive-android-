@@ -41,3 +41,6 @@
 -keep class org.apache.commons.compress.archivers.sevenz.SevenZOutputFile { *; }
 -keep class org.apache.commons.compress.archivers.tar.TarArchiveOutputStream { *; }
 -keep class net.lingala.zip4j.** { *; }
+
+# Android synthetic TAR fixture creates entries through this public constructor.
+-keep class org.apache.commons.compress.archivers.tar.TarArchiveEntry { *; }
