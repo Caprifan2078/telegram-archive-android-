@@ -33,7 +33,8 @@ final class TgsPayload {
                 if(result.size()+n>MAX_JSON)throw new IOException("TGS распаковывается слишком сильно");
                 result.write(block,0,n);
             }
-            return result.toString(StandardCharsets.UTF_8);
+            // ByteArrayOutputStream.toString(Charset) is absent on older Android.
+            return new String(result.toByteArray(),StandardCharsets.UTF_8);
         }
     }
 }

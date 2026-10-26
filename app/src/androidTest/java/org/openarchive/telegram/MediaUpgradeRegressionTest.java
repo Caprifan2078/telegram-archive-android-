@@ -32,7 +32,7 @@ public class MediaUpgradeRegressionTest {
         MessageDb migrated=new MessageDb(context,suffix);
         try{
             SQLiteDatabase active=migrated.getWritableDatabase();
-            assertEquals(10,active.getVersion());
+            assertEquals(14,active.getVersion());
             try(Cursor c=active.rawQuery("SELECT kind FROM attachments ORDER BY id",null)){
                 assertTrue(c.moveToFirst());assertEquals("gif",c.getString(0));
                 assertTrue(c.moveToNext());assertEquals("voice",c.getString(0));

@@ -20,8 +20,9 @@ import static org.junit.Assert.*;
 @RunWith(AndroidJUnit4.class)
 public class MediaAssetsRegressionTest {
     private static File fixture(Context ctx,String name)throws IOException {
-        File f=new File(ctx.getCacheDir(),"media-fixture-"+UUID.randomUUID()+"-"+name);
-        try(InputStream in=InstrumentationRegistry.getInstrumentation().getContext().getAssets().open(name);
+        File f=new File(ctx.getCacheDir(),"media-fixture-"+UUID.randomUUID()+"-"+name.replace('/','_'));
+        Context source=name.startsWith("tutorial/")?ctx:InstrumentationRegistry.getInstrumentation().getContext();
+        try(InputStream in=source.getAssets().open(name);
             OutputStream out=new FileOutputStream(f)){
             byte[] block=new byte[16*1024];int n;
             while((n=in.read(block))!=-1)out.write(block,0,n);
@@ -55,7 +56,7 @@ public class MediaAssetsRegressionTest {
         }finally{p.release();info.release();f.delete();}
     }
     @Test public void roundVideoDecodesFrameAndSeeks()throws Exception {verifyMp4("short-round.mp4");}
-    @Test public void regularVideoDecodesFrameAndSeeks()throws Exception {verifyMp4("video.mp4");}
+    @Test public void regularVideoDecodesFrameAndSeeks()throws Exception {verifyMp4("tutorial/clip.mp4");}
     @Test public void staticPhotoDecodes()throws Exception {
         Context ctx=InstrumentationRegistry.getInstrumentation().getContext();
         try(InputStream in=ctx.getAssets().open("photo.png")){

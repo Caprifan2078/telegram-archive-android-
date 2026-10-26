@@ -50,7 +50,7 @@ public class CollectionsDatabaseTest {
         MessageDb current=new MessageDb(ctx,suffix);
         try{
             SQLiteDatabase upgraded=current.getWritableDatabase();
-            assertEquals(10,upgraded.getVersion());
+            assertEquals(14,upgraded.getVersion());
             try(Cursor c=upgraded.rawQuery("SELECT body FROM messages WHERE id=7",null)){
                 assertTrue(c.moveToFirst());assertEquals("preserved",c.getString(0));
             }
@@ -95,7 +95,7 @@ public class CollectionsDatabaseTest {
             try(Cursor c=upgraded.rawQuery("SELECT body FROM messages WHERE id=123",null)){
                 assertTrue(c.moveToFirst());assertEquals("keep",c.getString(0));
             }
-            assertEquals(10,upgraded.getVersion());
+            assertEquals(14,upgraded.getVersion());
             assertEquals(0,db.collections().size());
         }finally{db.close();ctx.deleteDatabase(dbName);}
     }

@@ -2,8 +2,6 @@ package org.openarchive.telegram;
 
 import android.content.ContentResolver;
 import android.database.sqlite.SQLiteDatabase;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import java.io.InputStream;
@@ -30,14 +28,12 @@ class TelegramImporter {
             progress.post("Импорт "+(f+1)+" из "+parts.size()+": "+entry.name+" · "+saved+" сообщений");
             try(InputStream stream=resolver.openInputStream(folder.uriFor(entry.id))){
                 if(stream==null)throw new IllegalStateException("Файл недоступен");
-                Document doc=Jsoup.parse(stream,"UTF-8","");
-                Elements messages=doc.select("div.history > div.message");
-                if(messages.isEmpty())messages=doc.select("div.message.default, div.message.service");
-                if(messages.isEmpty())throw new IllegalArgumentException("В HTML не найдено сообщений");
                 String authorCandidate=lastAuthor;int written=0,medias=0;
                 d.beginTransaction();
-                try{
-                    for(Element msg:messages){
+                try(TelegramHtmlStream messages=new TelegramHtmlStream(stream)){
+                    Element msg;boolean found=false;
+                    while((msg=messages.next())!=null){
+                        found=true;
                         Element from=msg.selectFirst(".body .from_name");
                         Element date=msg.selectFirst(".body .date.details, .date.details");
                         Element content=msg.selectFirst(".body .text");
@@ -65,6 +61,7 @@ class TelegramImporter {
                             written++;
                         }
                     }
+                    if(!found)throw new IllegalArgumentException("В HTML не найдено сообщений");
                     d.setTransactionSuccessful();
                 }finally{d.endTransaction();}
                 lastAuthor=authorCandidate;saved+=written;mediaCount+=medias;

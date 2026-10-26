@@ -15,3 +15,7 @@
 -keep class androidx.** { *; }
 -keep class kotlin.** { *; }
 -keep class kotlinx.** { *; }
+# The classifier regression tests also call Jsoup's facade directly.
+-keep class org.jsoup.** { *; }
+# Jsoup's compile-only nullness annotations are not needed by Android at runtime.
+-dontwarn org.jspecify.annotations.**
