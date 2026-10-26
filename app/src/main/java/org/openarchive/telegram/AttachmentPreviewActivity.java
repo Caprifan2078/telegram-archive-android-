@@ -110,6 +110,9 @@ public final class AttachmentPreviewActivity extends Activity {
         });
     }
     private void renderIndex(){
+        // Returning while a selected file is still decoding must invalidate
+        // its callback; otherwise that old result replaces the archive list.
+        ++requestId;
         showHeader();
         panel.addView(text("Вложений: "+entries.size()+" · показаны не более "+PAGE_SIZE+" на странице",13,ACCENT));
         int from=page*PAGE_SIZE,to=Math.min(entries.size(),from+PAGE_SIZE);
