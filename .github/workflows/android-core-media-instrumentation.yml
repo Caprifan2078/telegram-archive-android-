@@ -47,11 +47,8 @@ jobs:
           emulator-boot-timeout: 420
           script: |
             mkdir -p qa-output
-            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest \
-              '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.MediaAssetsRegressionTest,org.openarchive.telegram.MediaPlaybackTest,org.openarchive.telegram.RoundPlayerActivityTest,org.openarchive.telegram.PlaybackLifecycleTest,org.openarchive.telegram.ImportRollbackRegressionTest' \
-              ; result=$?
+            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.MediaAssetsRegressionTest,org.openarchive.telegram.MediaPlaybackTest,org.openarchive.telegram.RoundPlayerActivityTest,org.openarchive.telegram.PlaybackLifecycleTest,org.openarchive.telegram.ImportRollbackRegressionTest,org.openarchive.telegram.MissingMediaPlaybackRegressionTest'
             adb logcat -d -t 400 > qa-output/emulator-log.txt || true
-            exit $result
       - name: Save synthetic instrumentation results
         if: always()
         uses: actions/upload-artifact@v4
