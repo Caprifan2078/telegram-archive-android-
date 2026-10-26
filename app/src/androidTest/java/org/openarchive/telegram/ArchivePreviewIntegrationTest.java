@@ -94,39 +94,34 @@ public class ArchivePreviewIntegrationTest {
                 ArchiveReadOnly.read(ctx,uri,"history.tar.gz",null,items.get(0).name),StandardCharsets.UTF_8));
         }finally{archive.delete();}
     }
+    /**
+     * Tiny real TAR fixtures compressed offline with Python's lzma/bz2. The
+     * Android minified APK deliberately contains DECODERS but not ENCODERS;
+     * generating TAR.XZ/BZip2 in androidTest would fail with NoClassDefFound.
+     */
     @Test public void tarXzListsAndReadsTextWithoutExtracting()throws Exception{
-        File file=temp("tar.xz");
-        try{
-            try(TarArchiveOutputStream tar=new TarArchiveOutputStream(
-                new org.apache.commons.compress.compressors.xz.XZCompressorOutputStream(
-                    new FileOutputStream(file)))){
-                byte[] body="XZ читается".getBytes(StandardCharsets.UTF_8);
-                TarArchiveEntry e=new TarArchiveEntry("folder/test.txt");e.setSize(body.length);
-                tar.putArchiveEntry(e);tar.write(body);tar.closeArchiveEntry();
-            }
-            Uri uri=Uri.fromFile(file);
-            List<ArchiveReadOnly.Entry> names=ArchiveReadOnly.list(ctx,uri,"test.tar.xz",null);
-            assertEquals(1,names.size());
-            assertEquals("XZ читается",new String(
-                ArchiveReadOnly.read(ctx,uri,"test.tar.xz",null,names.get(0).name),StandardCharsets.UTF_8));
-        }finally{file.delete();}
+        verifyCompressedFixture("tar.xz",
+            "/Td6WFoAAATm1rRGAgAhARYAAAB0L+Wj4Cf/AHhdADMbyc2KqWBC3VDqX/k/JQCSij3M88/OQnuLyBIdGv0/Y/4L+byQEU1FLmAadS65O1QgECK/kDWEMq+1z/IiD5pGMlp5UMYkwqys/1821XCvqlfX05Vc8gIEMvb+8FzOJDnyO1G8fRO5NS36swPY2OQiGR3DgTbgAABaEbROqE+MAQABlAGAUAAAszEn+bHEZ/sCAAAAAARZWg==",
+            "XZ читается");
     }
     @Test public void tarBzip2ListsAndReadsTextWithoutExtracting()throws Exception{
-        File file=temp("tar.bz2");
+        verifyCompressedFixture("tar.bz2",
+            "QlpoOTFBWSZTWfVOMTkAAHJfysqEQAH9gBAAIBBnJN5AMIDCQGAACAggAHURJ6gA00GmgGTIGnqCSlGR6aQwAQYTAHFrjohBk8hCI7ZGnVzeyBDAYRub5fE+wROJgthWhNZ0nnmIVQIXqKs2LYtgNc4GtccjARvHvEi64sSQci7kinChIeqcYnI=",
+            "BZip2 читается");
+    }
+    private void verifyCompressedFixture(String type,String base64,String value)throws Exception{
+        File archive=temp(type);
         try{
-            try(TarArchiveOutputStream tar=new TarArchiveOutputStream(
-                new org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream(
-                    new FileOutputStream(file)))){
-                byte[] body="BZip2 читается".getBytes(StandardCharsets.UTF_8);
-                TarArchiveEntry e=new TarArchiveEntry("folder/test.txt");e.setSize(body.length);
-                tar.putArchiveEntry(e);tar.write(body);tar.closeArchiveEntry();
-            }
-            Uri uri=Uri.fromFile(file);
-            List<ArchiveReadOnly.Entry> names=ArchiveReadOnly.list(ctx,uri,"test.tar.bz2",null);
-            assertEquals(1,names.size());
-            assertEquals("BZip2 читается",new String(
-                ArchiveReadOnly.read(ctx,uri,"test.tar.bz2",null,names.get(0).name),StandardCharsets.UTF_8));
-        }finally{file.delete();}
+            byte[] data=android.util.Base64.decode(base64,android.util.Base64.DEFAULT);
+            try(FileOutputStream out=new FileOutputStream(archive)){out.write(data);}
+            Uri uri=Uri.fromFile(archive);
+            List<ArchiveReadOnly.Entry> items=ArchiveReadOnly.list(ctx,uri,"sample."+type,null);
+            assertEquals(1,items.size());
+            assertEquals("folder/test.txt",items.get(0).name);
+            assertEquals(value,new String(
+                ArchiveReadOnly.read(ctx,uri,"sample."+type,null,items.get(0).name),
+                StandardCharsets.UTF_8));
+        }finally{archive.delete();}
     }
 
 }
