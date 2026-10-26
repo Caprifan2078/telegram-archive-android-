@@ -1286,13 +1286,15 @@ public class MainActivity extends Activity {
             LinearLayout info=column();info.setPadding(px(14),0,0,0);item.addView(info,new LinearLayout.LayoutParams(0,-2,1));
             TextView nameLabel=text((isChatPinned(key)?"📌  ":"")+name,16,FG);nameLabel.setTypeface(null,Typeface.BOLD);nameLabel.setSingleLine(true);
             nameLabel.setEllipsize(TextUtils.TruncateAt.END);info.addView(nameLabel);
-            info.addView(text("Переписка на устройстве · офлайн",12,SUB));
-            TextView arrow=text("›",25,ACCENT);item.addView(arrow);
+            String bio=chat.optString("bio","").trim();
+            TextView bioLabel=text(bio.isEmpty()?"Переписка на устройстве · офлайн":bio,12,SUB);
+            bioLabel.setSingleLine(true);bioLabel.setEllipsize(TextUtils.TruncateAt.END);
+            info.addView(bioLabel);
+            TextView arrow=text("⋮",25,ACCENT);item.addView(arrow);
+            arrow.setContentDescription("Действия с перепиской "+name);
+            arrow.setOnClickListener(v->chatManagementMenu(key));
             item.setOnClickListener(v->{item.animate().alpha(.75f).setDuration(90).withEndAction(()->{item.setAlpha(1);activateArchive(key);}).start();});
-            item.setOnLongClickListener(v->{new FontDialog.Builder(this).setTitle(name)
-                .setItems(new String[]{isChatPinned(key)?"Открепить чат":"📌 Закрепить чат", "Открыть переписку"},(d,which)->{
-                    if(which==0)toggleChatPin(key);else activateArchive(key);
-                }).show();return true;});
+            item.setOnLongClickListener(v->{chatManagementMenu(key);return true;});
         }
         TextView add=text("＋   Добавить переписку",15,ACCENT);add.setTypeface(null,Typeface.BOLD);
         add.setGravity(Gravity.CENTER);add.setPadding(px(12),px(17),px(12),px(17));
@@ -1304,6 +1306,81 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams ap=p(-1,60);ap.setMargins(px(2),px(9),px(2),px(8));list.addView(add,ap);
         add.setOnClickListener(v->chooseFolder());
         animateEntrance();scroll.post(()->scroll.scrollTo(0,0));
+    }
+    private JSONObject registeredChat(String key){
+        for(int i=0;i<archives.length();i++){
+            JSONObject item=archives.optJSONObject(i);
+            if(item!=null&&key.equals(item.optString("key")))return item;
+        }
+        return null;
+    }
+    private void renameRegisteredChat(String key){
+        JSONObject item=registeredChat(key);if(item==null)return;
+        EditText input=new EditText(this);
+        input.setSingleLine(true);input.setText(item.optString("name","Переписка"));
+        input.setSelectAllOnFocus(true);
+        input.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(100)});
+        new FontDialog.Builder(this).setTitle("Переименовать переписку")
+            .setMessage("Это название только в просмотрщике. Telegram и исходные файлы не изменятся.")
+            .setView(input).setNegativeButton("Отмена",null)
+            .setPositiveButton("Сохранить",(d,w)->{
+                String name=input.getText().toString().trim();
+                if(name.isEmpty()){toast("Название не может быть пустым");return;}
+                try{item.put("name",name);if(key.equals(activeKey))activeName=name;saveRegistry();
+                    showPage();toast("Название сохранено");}
+                catch(Exception ex){toast("Не удалось переименовать чат");}
+            }).show();
+    }
+    private void editRegisteredChatBio(String key){
+        JSONObject item=registeredChat(key);if(item==null)return;
+        EditText input=new EditText(this);input.setMinLines(3);input.setMaxLines(6);
+        input.setHint("Например, переписка с другом или коллегой");
+        input.setText(item.optString("bio",""));
+        input.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(1500)});
+        new FontDialog.Builder(this).setTitle("Описание переписки")
+            .setMessage("Локальная заметка для тебя. Не редактирует сообщения и файлы.")
+            .setView(input).setNegativeButton("Отмена",null)
+            .setPositiveButton("Сохранить",(d,w)->{
+                try{item.put("bio",input.getText().toString());saveRegistry();
+                    showPage();toast("Описание сохранено");}
+                catch(Exception ex){toast("Описание не сохранено");}
+            }).show();
+    }
+    private void confirmHideRegisteredChat(String key){
+        JSONObject item=registeredChat(key);if(item==null)return;
+        final String name=item.optString("name","Переписка");
+        new FontDialog.Builder(this).setTitle("Убрать «"+name+"» из списка?")
+            .setMessage("Только скрыть из просмотрщика. Никакие исходные папки, ZIP/7z/RAR, фото, медиа и локальные файлы НЕ удаляются. "+
+                "Чтобы снова добавить переписку в список, потребуется импортировать её заново. "+
+                "Сохранённые данные приложения тоже останутся на устройстве.")
+            .setNegativeButton("Отмена",null).setPositiveButton("Убрать из списка",(d,w)->{
+                if(importing||batchRunning){toast("Дождись завершения импорта или копирования");return;}
+                String oldKey=activeKey;
+                try{
+                    JSONArray next=ChatRegistryActions.without(archives,key);
+                    if(next.length()==archives.length())return;
+                    if(key.equals(oldKey)){
+                        saveReadingProgress();closeFloatingRound();stopPlayback();++loadToken;
+                        clearMediaSelection();home=true;screen="chat";returnScreen="";
+                    }
+                    archives=next;
+                    // Absolutely no deleteTree, deleteDatabase, cache purge, or SAF delete.
+                    saveRegistry();showPage();toast("Чат убран из списка. Файлы не затронуты");
+                }catch(Exception ex){toast("Не удалось убрать переписку");}
+            }).show();
+    }
+    private void chatManagementMenu(String key){
+        JSONObject item=registeredChat(key);if(item==null)return;
+        String[] options={"Открыть переписку","✎ Переименовать","▤ Описание / био",
+            "◉ Установить аватарку","Убрать из списка · файлы НЕ удалять"};
+        new FontDialog.Builder(this).setTitle(item.optString("name","Переписка"))
+            .setItems(options,(dialog,which)->{
+                if(which==0)activateArchive(key);
+                else if(which==1)renameRegisteredChat(key);
+                else if(which==2)editRegisteredChatBio(key);
+                else if(which==3){pendingImageChatKey=key;pickPersonalImage(62);}
+                else confirmHideRegisteredChat(key);
+            }).show();
     }
     private boolean isChatPinned(String key){return getPreferences(MODE_PRIVATE).getBoolean("pinned_chat_"+key,false);}
     private void toggleChatPin(String key){
@@ -1531,14 +1608,14 @@ public class MainActivity extends Activity {
     private void loadArchiveRegistry(){
         try{archives=new JSONArray(getPreferences(MODE_PRIVATE).getString("archive_registry","[]"));}catch(Exception e){archives=new JSONArray();}
         activeKey=getPreferences(MODE_PRIVATE).getString("active_archive","default");
-        if(archives.length()==0){
+        if(archives.length()==0&&!getPreferences(MODE_PRIVATE).getBoolean("registry_initialized",false)){
             String old=getPreferences(MODE_PRIVATE).getString("tree",null);
             if(old!=null)try{JSONObject o=new JSONObject();o.put("key","default");o.put("name","Первая переписка");o.put("tree",old);archives.put(o);saveRegistry();}catch(Exception ignored){}
         }
         for(int i=0;i<archives.length();i++){JSONObject o=archives.optJSONObject(i);if(o!=null&&activeKey.equals(o.optString("key"))){activeName=o.optString("name","Архив");return;}}
         if(archives.length()>0){JSONObject o=archives.optJSONObject(0);activeKey=o.optString("key","default");activeName=o.optString("name","Архив");}
     }
-    private void saveRegistry(){getPreferences(MODE_PRIVATE).edit().putString("archive_registry",archives.toString()).putString("active_archive",activeKey).apply();}
+    private void saveRegistry(){getPreferences(MODE_PRIVATE).edit().putBoolean("registry_initialized",true).putString("archive_registry",archives.toString()).putString("active_archive",activeKey).apply();}
     private String activeTree(){for(int i=0;i<archives.length();i++){JSONObject o=archives.optJSONObject(i);if(o!=null&&activeKey.equals(o.optString("key")))return o.optString("tree",null);}return null;}
     private void registerArchive(String name,String tree){
         try{JSONObject o=new JSONObject();String key=UUID.randomUUID().toString().replace("-","");o.put("key",key);o.put("name",name);o.put("tree",tree);archives.put(o);activateArchive(key);}catch(Exception e){toast("Ошибка добавления чата");}
@@ -1583,11 +1660,16 @@ public class MainActivity extends Activity {
     }
     private void showConversationInfo(){
         new FontDialog.Builder(this).setTitle(activeName)
-            .setItems(new String[]{"▦ Медиатека","⌕ Поиск сообщений","▥ Анализ переписки","⚙ Оформление переписки","Локальный профиль и заметка"},(d,i)->{
+            .setItems(new String[]{"▦ Медиатека","⌕ Поиск сообщений","▥ Анализ переписки","⚙ Оформление переписки","Локальный профиль и заметка","✎ Переименовать","▤ Описание / био","◉ Аватар чата","Убрать чат из списка"},(d,i)->{
                 if(i==0)screen="media";
                 else if(i==1)screen="search";
                 else if(i==2)screen="analytics";
-                else if(i==3){settingsMenu();return;}else{editLocalProfile();return;}
+                else if(i==3){settingsMenu();return;}
+                else if(i==4){editLocalProfile();return;}
+                else if(i==5){renameRegisteredChat(activeKey);return;}
+                else if(i==6){editRegisteredChatBio(activeKey);return;}
+                else if(i==7){pendingImageChatKey=activeKey;pickPersonalImage(62);return;}
+                else if(i==8){confirmHideRegisteredChat(activeKey);return;}
                 showPage();
             }).show();
     }
