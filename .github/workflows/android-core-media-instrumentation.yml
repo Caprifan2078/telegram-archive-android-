@@ -1,4 +1,5 @@
 name: Android core-media instrumentation
+# Focus: real decoder seek, absent originals and crash-safe HTML import.
 on:
   push:
     branches:
