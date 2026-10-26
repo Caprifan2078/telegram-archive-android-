@@ -9,7 +9,7 @@ android {
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         testProguardFiles 'proguard-test-rules.pro'
         targetSdk 35
-        versionCode 51
+        versionCode (project.findProperty('qaVersionCode') ?: '51').toString().toInteger()
         versionName '0.51'
     }
     // Stable QA signing is opt-in and supplied externally; never commit a keystore.
@@ -45,7 +45,7 @@ android {
             signingConfig signingConfigs.stableQa
         }
     }
-    testBuildType 'compactQa'
+    testBuildType (project.findProperty('qaStableInstrumentation') == 'true' ? 'stableQa' : 'compactQa')
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17

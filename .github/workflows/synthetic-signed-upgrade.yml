@@ -1,0 +1,90 @@
+name: Synthetic signed upgrade test
+on:
+  push:
+    branches: [qa/v052-duplicate-id-safety-20261026]
+    paths: ['.github/workflows/synthetic-signed-upgrade.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  upgrade:
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ARCHIVE_QA_KEYSTORE: /tmp/archive-synthetic-test.jks
+      ARCHIVE_QA_STORE_PASSWORD: synthetic-only-123
+      ARCHIVE_QA_KEY_ALIAS: synthetic-qa
+      ARCHIVE_QA_KEY_PASSWORD: synthetic-only-123
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android platform
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: Check signing fails closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if env -u ARCHIVE_QA_KEYSTORE -u ARCHIVE_QA_STORE_PASSWORD -u ARCHIVE_QA_KEY_ALIAS -u ARCHIVE_QA_KEY_PASSWORD gradle --no-daemon assembleStableQa > /tmp/qa-signing-negative.log 2>&1; then
+            echo "ERROR: stable QA build accepted missing signing material"; exit 1
+          fi
+          grep -q "Stable QA signing is not configured" /tmp/qa-signing-negative.log
+      - name: Build two versions using a disposable test key
+        shell: bash
+        run: |
+          set -euo pipefail
+          keytool -genkeypair -keystore "$ARCHIVE_QA_KEYSTORE" -storepass "$ARCHIVE_QA_STORE_PASSWORD" -keypass "$ARCHIVE_QA_KEY_PASSWORD" -alias "$ARCHIVE_QA_KEY_ALIAS" -keyalg RSA -keysize 2048 -validity 1 -dname "CN=Disposable Test Only"
+          gradle --no-daemon --max-workers=2 assembleStableQa assembleStableQaAndroidTest -PqaStableInstrumentation=true -PqaVersionCode=201
+          mkdir -p qa-upgrade
+          cp app/build/outputs/apk/stableQa/app-stableQa.apk qa-upgrade/old.apk
+          cp app/build/outputs/apk/androidTest/stableQa/app-stableQa-androidTest.apk qa-upgrade/test.apk
+          gradle --no-daemon --max-workers=2 assembleStableQa -PqaStableInstrumentation=true -PqaVersionCode=202
+          cp app/build/outputs/apk/stableQa/app-stableQa.apk qa-upgrade/new.apk
+          for apk in qa-upgrade/old.apk qa-upgrade/new.apk; do
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p'
+          done > qa-upgrade/certificates.txt
+          old=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs qa-upgrade/old.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          new=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs qa-upgrade/new.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          test -n "$old" && test "$old" = "$new"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: |
+            set -e
+            adb install qa-upgrade/old.apk
+            adb install qa-upgrade/test.apk
+            adb shell am instrument -w -r -e class org.openarchive.telegram.SignedUpgradeSentinelTest -e upgradePhase seed org.openarchive.telegram.qa.previewstable.test/androidx.test.runner.AndroidJUnitRunner | tee qa-upgrade/seed.txt
+            grep -q "OK (1 test)" qa-upgrade/seed.txt
+            adb install -r qa-upgrade/new.apk
+            adb shell am instrument -w -r -e class org.openarchive.telegram.SignedUpgradeSentinelTest -e upgradePhase verify org.openarchive.telegram.qa.previewstable.test/androidx.test.runner.AndroidJUnitRunner | tee qa-upgrade/verify.txt
+            grep -q "OK (1 test)" qa-upgrade/verify.txt
+      - name: Save synthetic test results only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-signed-upgrade-results
+          path: |
+            qa-upgrade/*.txt
+          if-no-files-found: warn
+      - name: Remove disposable key
+        if: always()
+        run: python3 -c 'import os; p=os.environ["ARCHIVE_QA_KEYSTORE"]; os.path.exists(p) and os.unlink(p)'
