@@ -3710,19 +3710,19 @@ public class MainActivity extends Activity {
             seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
                 @Override public void onStartTrackingTouch(SeekBar bar){
                     controls.dragging=true;controls.wasPlaying=false;
-                    try{if(player!=null&&a.path.equals(playingPath)){
+                    try{if(player!=null&&RoundPlaybackTarget.isSameTarget(playingPath,a.path,inlineHolder,holder)){
                         controls.wasPlaying=player.isPlaying();if(controls.wasPlaying)player.pause();
                     }}catch(Exception ignored){}
                 }
                 @Override public void onProgressChanged(SeekBar bar,int value,boolean user){
                     if(!user)return;
-                    try{if(player!=null&&a.path.equals(playingPath)){
+                    try{if(player!=null&&RoundPlaybackTarget.isSameTarget(playingPath,a.path,inlineHolder,holder)){
                         int length=Math.max(0,player.getDuration());
                         duration.setText(formatTime(Math.round(length*value/1000f)/1000)+" / "+formatTime(length/1000));
                     }}catch(Exception ignored){}
                 }
                 @Override public void onStopTrackingTouch(SeekBar bar){
-                    try{if(player!=null&&a.path.equals(playingPath)){
+                    try{if(player!=null&&RoundPlaybackTarget.isSameTarget(playingPath,a.path,inlineHolder,holder)){
                         int length=Math.max(0,player.getDuration());
                         player.seekTo(Math.round(length*bar.getProgress()/1000f));
                         if(controls.wasPlaying){player.start();overlay.setVisibility(View.GONE);}
