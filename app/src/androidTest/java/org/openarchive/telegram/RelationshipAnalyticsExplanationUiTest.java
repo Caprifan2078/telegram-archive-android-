@@ -75,6 +75,11 @@ public class RelationshipAnalyticsExplanationUiTest {
                 assertTrue("Missing visible feature explanation: "+description,
                     contains(list,description));
             assertTrue(contains(list,RelationshipFeatureGuide.INTRO));
+            TextView header=(TextView)get(a,"title");
+            TextView subheader=(TextView)get(a,"subtitle");
+            assertEquals("The special screen must not retain the home title",
+                "Хронология",header.getText().toString());
+            assertTrue(subheader.getText().toString().contains("события"));
             // Keep an external synthetic UI capture after Gradle uninstalls
             // the tested APK: app-specific external files are removed on uninstall.
             Bitmap image=inst.getUiAutomation().takeScreenshot();

@@ -1,5 +1,6 @@
 name: Android core-media instrumentation
 # Focus: decoder seek, media, synthetic import, reply links, basic navigation, readable UI.
+# Includes screenshot and header assertions for the relationship workspace.
 on:
   push:
     branches:

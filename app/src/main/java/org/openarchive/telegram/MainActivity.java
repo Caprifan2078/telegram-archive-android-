@@ -2774,6 +2774,12 @@ public class MainActivity extends Activity {
     }
     /** Opt-in relationship workspace: no automatic categorization or upload. */
     private void prepareRelationshipScreen(String heading,String description){
+        // These pages bypass showPage's normal refreshTabs path. Without
+        // refreshing the header they still display stale "Мои переписки" and
+        // its home subtitle while showing an unrelated workspace.
+        refreshTabs();
+        title.setText("Хронология");
+        subtitle.setText("relationships".equals(screen)?"Личные события и инструменты":heading);
         if(scheduledPrefetch!=null){handler.removeCallbacks(scheduledPrefetch);scheduledPrefetch=null;}
         bottomNav.setVisibility(View.GONE);pinnedBar.removeAllViews();
         filterBar.removeAllViews();searchArea.removeAllViews();
@@ -3320,6 +3326,7 @@ public class MainActivity extends Activity {
         int token=++loadToken;
         if(home){screen="chat";showPage();return;}
         bottomNav.setVisibility(View.VISIBLE);refreshTabs();
+        title.setText("Хронология");subtitle.setText("Периоды истории · вручную");
         filterBar.removeAllViews();searchArea.removeAllViews();
         bottomPager.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
         list.removeAllViews();list.setBackgroundColor(BG);status.setText("Загружаю твою хронологию…");
@@ -3389,6 +3396,7 @@ public class MainActivity extends Activity {
         int token=++loadToken;
         if(home){screen="chat";showPage();return;}
         bottomNav.setVisibility(View.VISIBLE);refreshTabs();
+        title.setText("Кинолента");subtitle.setText("Медиа по годам · офлайн");
         filterBar.removeAllViews();searchArea.removeAllViews();
         bottomPager.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
         list.removeAllViews();list.setBackgroundColor(BG);
