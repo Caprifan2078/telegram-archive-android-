@@ -1,0 +1,44 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'org.openarchive.telegram'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'org.openarchive.telegram.qa'
+        minSdk 26
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        testProguardFiles 'proguard-test-rules.pro'
+        targetSdk 35
+        versionCode 47
+        versionName '0.47'
+    }
+    // Build both the proven non-minified QA and a separate side-by-side
+    // compact QA package. Never change the original QA application ID.
+    buildTypes {
+        compactQa {
+            initWith debug
+            applicationIdSuffix '.preview47'
+            versionNameSuffix ''
+            matchingFallbacks = ['debug']
+            debuggable false
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug
+        }
+    }
+    testBuildType 'compactQa'
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies { implementation 'androidx.core:core:1.15.0'; implementation 'com.airbnb.android:lottie:6.7.1'; implementation 'org.jsoup:jsoup:1.21.2'; implementation 'com.github.junrar:junrar:8.1.2'; testImplementation 'junit:junit:4.13.2'; androidTestImplementation 'androidx.test.ext:junit:1.2.1'; androidTestImplementation 'androidx.test:runner:1.6.2'; androidTestImplementation 'androidx.test:rules:1.6.1'; androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1' }
+
+// Converge Kotlin runtime artifacts when AndroidX FileProvider and legacy media
+// dependencies pull different jdk7/jdk8 shim versions.
+configurations.configureEach {
+    resolutionStrategy.force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22',
+        'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22'
+}
