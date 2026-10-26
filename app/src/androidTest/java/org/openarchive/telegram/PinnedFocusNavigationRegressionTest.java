@@ -33,6 +33,42 @@ public class PinnedFocusNavigationRegressionTest {
         worker.execute(done::countDown);
         assertTrue("UI worker remained blocked",done.await(6,TimeUnit.SECONDS));
     }
+    @Test public void rejectedReimportShowsPersistentExplanation()throws Exception {
+        Instrumentation inst=InstrumentationRegistry.getInstrumentation();
+        MainActivity a=activity.getActivity();Context ctx=inst.getTargetContext();
+        ExecutorService worker=(ExecutorService)get(a,"worker");barrier(worker);inst.waitForIdleSync();
+        String key="importdialog_"+UUID.randomUUID().toString().replace("-","");
+        java.io.File folder=new java.io.File(ctx.getCacheDir(),key);assertTrue(folder.mkdirs());
+        try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(folder,"messages.html"))) {
+            out.write(("<div class='history'><div class='message default' id='message1'>"+
+                "<div class='body'><div class='from_name'>Other</div><div class='text'>Changed</div></div></div></div>")
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+        MessageDb fresh=new MessageDb(ctx,key),previous=(MessageDb)get(a,"db");
+        Object oldFolder=get(a,"folder");String oldKey=(String)get(a,"activeKey"),oldScreen=(String)get(a,"screen");
+        boolean oldHome=(boolean)get(a,"home");
+        try {
+            SQLiteDatabase sql=fresh.getWritableDatabase();
+            long id=fresh.stage(sql,"Original","2024-01-01","Saved",null,"");fresh.publishStaged(sql);fresh.toggleFavorite(id);
+            inst.runOnMainSync(()->{try {
+                set(a,"db",fresh);set(a,"folder",new DocumentFolder(ctx.getContentResolver(),folder));
+                set(a,"activeKey",key);set(a,"screen","chat");set(a,"home",false);
+                Method m=MainActivity.class.getDeclaredMethod("importArchive");m.setAccessible(true);m.invoke(a);
+            }catch(Exception e){throw new AssertionError(e);}});
+            barrier(worker);inst.waitForIdleSync();barrier(worker);inst.waitForIdleSync();
+            android.view.accessibility.AccessibilityNodeInfo root=inst.getUiAutomation().getRootInActiveWindow();
+            assertNotNull(root);
+            assertFalse("Import error must remain visible",root.findAccessibilityNodeInfosByText("Импорт не завершён").isEmpty());
+            assertEquals(1,fresh.totalMessages());assertEquals(1,fresh.count("",false,"",false,true));
+        } finally {
+            barrier(worker);inst.runOnMainSync(()->{try {
+                set(a,"db",previous);set(a,"folder",oldFolder);set(a,"activeKey",oldKey);
+                set(a,"screen",oldScreen);set(a,"home",oldHome);
+            }catch(Exception e){throw new AssertionError(e);}});
+            fresh.close();ctx.deleteDatabase("telegram_"+key+".db");ArchiveFileImport.deleteTree(folder);
+        }
+    }
+
     @Test public void ordinaryJumpLeavesPinnedSelectionUnchanged()throws Exception{
         final Instrumentation inst=InstrumentationRegistry.getInstrumentation();
         final MainActivity a=activity.getActivity();

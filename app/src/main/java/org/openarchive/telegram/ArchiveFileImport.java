@@ -29,14 +29,22 @@ final class ArchiveFileImport {
         }
     }
     static File extract(Context ctx,Uri uri,String suffix,String key,Progress progress) throws Exception{
+        return extract(ctx,uri,suffix,key,null,progress);
+    }
+    static File extract(Context ctx,Uri uri,String suffix,String key,char[] password,Progress progress) throws Exception{
         if(!key.matches("[a-f0-9]{32}"))throw new IOException("Недопустимый идентификатор импорта");
         File root=new File(new File(ctx.getFilesDir(),"telegram_imports"),key);
         if(root.exists())throw new IOException("Папка архива уже существует");
         if(!root.mkdirs())throw new IOException("Не удалось создать папку для распаковки");
         try{
             Budget budget=new Budget();
-            if("zip".equalsIgnoreCase(suffix))extractZip(ctx,uri,root,budget,progress);
-            else if("rar".equalsIgnoreCase(suffix))extractRar(ctx,uri,root,budget,progress);
+            if("zip".equalsIgnoreCase(suffix)){
+                if(password!=null&&password.length>0)extractZipWithPassword(ctx,uri,root,password,budget,progress);
+                else extractZip(ctx,uri,root,budget,progress);
+            }else if("rar".equalsIgnoreCase(suffix)){
+                if(password!=null&&password.length>0)throw new IOException("Импорт RAR с паролем пока не поддерживается");
+                extractRar(ctx,uri,root,budget,progress);
+            }
             else throw new IOException("Ожидался ZIP или RAR");
             File selected=findChatRoot(root,0);
             if(selected==null)throw new IOException("В архиве не обнаружены messages.html или messages2.html. Экспортируй чат Telegram в формате HTML");
@@ -83,6 +91,36 @@ final class ArchiveFileImport {
                         }
                     }
                     zip.closeEntry();emit(budget,progress);
+                }
+            }
+        }
+    }
+    private static void extractZipWithPassword(Context ctx,Uri uri,File root,char[] password,
+            Budget budget,Progress progress)throws Exception{
+        try(InputStream source=ctx.getContentResolver().openInputStream(uri)){
+            if(source==null)throw new IOException("Нет доступа к ZIP");
+            try(net.lingala.zip4j.io.inputstream.ZipInputStream zip=
+                    new net.lingala.zip4j.io.inputstream.ZipInputStream(
+                        new BufferedInputStream(source,128*1024),password)){
+                net.lingala.zip4j.model.LocalFileHeader entry;
+                byte[] bytes=new byte[128*1024];
+                while((entry=zip.getNextEntry())!=null){
+                    String name=entry.getFileName();
+                    budget.next(name==null?"":name);
+                    BackupEntryPolicy.requireSafe(name,entry.isDirectory());
+                    if(entry.isDirectory())continue;
+                    File target=safeFile(root,name);
+                    File parent=target.getParentFile();
+                    if(!parent.isDirectory()&&!parent.mkdirs())throw new IOException("Не создана папка ZIP");
+                    if(target.exists())throw new IOException("Повторное имя в ZIP");
+                    long written=0;
+                    try(OutputStream out=new BufferedOutputStream(new FileOutputStream(target))){
+                        int count;while((count=zip.read(bytes))!=-1){
+                            written+=count;budget.add(count,written);
+                            out.write(bytes,0,count);
+                        }
+                    }
+                    emit(budget,progress);
                 }
             }
         }

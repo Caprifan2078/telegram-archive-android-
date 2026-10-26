@@ -2026,10 +2026,18 @@ public class MainActivity extends Activity {
             String ext=low.endsWith(".rar")?"rar":low.endsWith(".zip")?"zip":"";
             if(ext.isEmpty()){toast("Нужен ZIP или RAR");return;}
             final String displayName=name;
-            new FontDialog.Builder(this).setTitle("Импорт "+displayName)
-                .setMessage("Архив автоматически распакуется во внутреннюю папку приложения. Для медиа потребуется свободное место.")
-                .setNegativeButton("Отмена",null)
-                .setPositiveButton("Импортировать",(d,w)->importCompressed(source,ext,displayName)).show();
+            EditText archivePassword=new EditText(this);archivePassword.setSingleLine(true);
+            archivePassword.setHint("Пароль ZIP, если есть");
+            archivePassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+            FontDialog.Builder confirm=new FontDialog.Builder(this);
+            confirm.setTitle("Импорт "+displayName).setMessage("Архив распакуется во внутреннюю папку приложения. Для медиа потребуется свободное место."+
+                    ("rar".equals(ext)?" Импорт RAR с паролем пока не поддерживается.":""));
+            if("zip".equals(ext))confirm.setView(archivePassword);
+            confirm.setNegativeButton("Отмена",null).setPositiveButton("Импортировать",(d,w)->{
+                char[] password="zip".equals(ext)?archivePassword.getText().toString().toCharArray():null;
+                importCompressed(source,ext,displayName,password);
+                archivePassword.setText("");
+            }).show();
             return;
         }
         if(request!=PICK_FOLDER||result!=RESULT_OK||data==null||data.getData()==null)return;
@@ -2045,13 +2053,13 @@ public class MainActivity extends Activity {
                 .setPositiveButton("Импортировать",(d,w)->importArchive()).setNegativeButton("Отмена",null).show();
         }).setNegativeButton("Отмена",null).show();
     }
-    private void importCompressed(Uri source,String extension,String label){
-        if(importing)return;
+    private void importCompressed(Uri source,String extension,String label,char[] password){
+        if(importing){if(password!=null)java.util.Arrays.fill(password,'\0');return;}
         importing=true;folderButton.setEnabled(false);status.setText("Распаковка "+label+"…");
         String key=UUID.randomUUID().toString().replace("-","");
         worker.execute(()->{
             try{
-                java.io.File root=ArchiveFileImport.extract(this,source,extension,key,msg->runOnUiThread(()->status.setText(msg)));
+                java.io.File root=ArchiveFileImport.extract(this,source,extension,key,password,msg->runOnUiThread(()->status.setText(msg)));
                 MessageDb fresh=new MessageDb(this,key);
                 try{TelegramImporter.importFiles(getContentResolver(),new DocumentFolder(getContentResolver(),root),fresh,msg->runOnUiThread(()->status.setText(msg)));}finally{fresh.close();}
                 runOnUiThread(()->{
@@ -2065,16 +2073,26 @@ public class MainActivity extends Activity {
             }catch(Exception error){
                 ArchiveFileImport.deleteTree(new java.io.File(new java.io.File(getFilesDir(),"telegram_imports"),key));
                 runOnUiThread(()->{importing=false;folderButton.setEnabled(true);status.setText("Ошибка архива: "+error.getMessage());});
-            }
+            }finally{if(password!=null)java.util.Arrays.fill(password,'\0');}
         });
     }
     private void importArchive(){
         if(folder==null||importing)return;closeFloatingRound();stopPlayback();importing=true;folderButton.setEnabled(false);status.setText("Создаю локальную базу, не копируя медиа…");
         list.removeAllViews();DocumentFolder current=folder;
         worker.execute(()->{
+            String failure=null;
             try{TelegramImporter.importFiles(getContentResolver(),current,db,s->runOnUiThread(()->status.setText(s)));info="Импорт завершён";}
-            catch(Exception e){info="Ошибка импорта: "+e.getMessage();}
-            runOnUiThread(()->{importing=false;folderButton.setEnabled(true);status.setText(info);chatOffset=0;mediaOffset=0;searchOffset=0;favOffset=0;showPage();});
+            catch(Exception e){failure=e.getMessage();if(failure==null||failure.trim().isEmpty())failure="Не удалось импортировать архив. Проверь файлы и повтори попытку.";info="Ошибка импорта: "+failure;}
+            final String importFailure=failure;
+            runOnUiThread(()->{
+                importing=false;folderButton.setEnabled(true);status.setText(info);
+                chatOffset=0;mediaOffset=0;searchOffset=0;favOffset=0;showPage();
+                // showPage replaces the transient status immediately. Keep failures
+                // visible so that users know the old archive was retained.
+                if(importFailure!=null&&!isFinishing()&&!isDestroyed())
+                    new FontDialog.Builder(this).setTitle("Импорт не завершён")
+                        .setMessage(importFailure).setPositiveButton("Понятно",null).show();
+            });
         });
     }
     private int getOffset(){switch(screen){case "media":return mediaOffset;case "search":return searchOffset;case "favorites":return favOffset;default:return chatOffset;}}
