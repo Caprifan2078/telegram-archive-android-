@@ -12,6 +12,16 @@ android {
         versionCode 51
         versionName '0.51'
     }
+    // Stable QA signing is opt-in and supplied externally; never commit a keystore.
+    signingConfigs {
+        stableQa {
+            def path = System.getenv('ARCHIVE_QA_KEYSTORE')
+            if (path) storeFile file(path)
+            storePassword System.getenv('ARCHIVE_QA_STORE_PASSWORD')
+            keyAlias System.getenv('ARCHIVE_QA_KEY_ALIAS')
+            keyPassword System.getenv('ARCHIVE_QA_KEY_PASSWORD')
+        }
+    }
     // Build both the proven non-minified QA and a separate side-by-side
     // compact QA package. Never change the original QA application ID.
     buildTypes {
@@ -25,6 +35,14 @@ android {
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.debug
+        }
+    }
+    // Separate application ID protects existing preview51 data when its key differs.
+    buildTypes {
+        stableQa {
+            initWith compactQa
+            applicationIdSuffix '.previewstable'
+            signingConfig signingConfigs.stableQa
         }
     }
     testBuildType 'compactQa'
@@ -41,4 +59,14 @@ dependencies { implementation 'androidx.core:core:1.15.0'; implementation 'com.a
 configurations.configureEach {
     resolutionStrategy.force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22',
         'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22'
+}
+
+// Refuse to produce an unsigned or accidentally debug-signed stable QA APK.
+gradle.taskGraph.whenReady { graph ->
+    if (graph.allTasks.any { it.name.toLowerCase(Locale.ROOT).contains('stableqa') }) {
+        def required = ['ARCHIVE_QA_KEYSTORE', 'ARCHIVE_QA_STORE_PASSWORD', 'ARCHIVE_QA_KEY_ALIAS', 'ARCHIVE_QA_KEY_PASSWORD']
+        def missing = required.findAll { !System.getenv(it) }
+        if (!missing.isEmpty()) throw new GradleException("Stable QA signing is not configured: " + missing.join(', '))
+        if (!file(System.getenv('ARCHIVE_QA_KEYSTORE')).isFile()) throw new GradleException('Stable QA keystore file not found')
+    }
 }
