@@ -29,15 +29,25 @@ final class ArchiveFileImport {
         }
     }
     static File extract(Context ctx,Uri uri,String suffix,String key,Progress progress) throws Exception{
+        return extract(ctx,uri,suffix,key,null,progress);
+    }
+    static File extract(Context ctx,Uri uri,String suffix,String key,char[] password,Progress progress) throws Exception{
         if(!key.matches("[a-f0-9]{32}"))throw new IOException("Недопустимый идентификатор импорта");
         File root=new File(new File(ctx.getFilesDir(),"telegram_imports"),key);
         if(root.exists())throw new IOException("Папка архива уже существует");
         if(!root.mkdirs())throw new IOException("Не удалось создать папку для распаковки");
         try{
             Budget budget=new Budget();
-            if("zip".equalsIgnoreCase(suffix))extractZip(ctx,uri,root,budget,progress);
-            else if("rar".equalsIgnoreCase(suffix))extractRar(ctx,uri,root,budget,progress);
-            else throw new IOException("Ожидался ZIP или RAR");
+            String fmt=suffix.toLowerCase(Locale.ROOT);
+            if(fmt.equals("zip")){
+                if(password!=null&&password.length>0)extractZipWithPassword(ctx,uri,root,password,budget,progress);
+                else extractZip(ctx,uri,root,budget,progress);
+            }else if(fmt.equals("rar")||fmt.equals("rar5"))extractRar(ctx,uri,root,password,budget,progress);
+            else if(fmt.equals("7z"))extract7z(ctx,uri,root,password,budget,progress);
+            else if(fmt.equals("tar")||fmt.equals("tar.gz")||fmt.equals("tgz")||
+                fmt.equals("tar.xz")||fmt.equals("txz")||fmt.equals("tar.bz2")||fmt.equals("tbz2"))
+                extractTar(ctx,uri,root,fmt,budget,progress);
+            else throw new IOException("Неподдерживаемый формат архива");
             File selected=findChatRoot(root,0);
             if(selected==null)throw new IOException("В архиве не обнаружены messages.html или messages2.html. Экспортируй чат Telegram в формате HTML");
             progress.update("Распаковано файлов: "+budget.count+"; найден экспорт Telegram");
@@ -87,7 +97,7 @@ final class ArchiveFileImport {
             }
         }
     }
-    private static void extractRar(Context ctx,Uri uri,File root,Budget budget,Progress progress) throws Exception{
+    private static void extractRar(Context ctx,Uri uri,File root,char[] password,Budget budget,Progress progress) throws Exception{
         // Junrar needs random access for efficient RAR5/solid decoding. Keep a temporary copy
         // until import has finished; original remains at its selected SAF location.
         File compressed=File.createTempFile("telegram-", ".rar",ctx.getCacheDir());
@@ -103,7 +113,9 @@ final class ArchiveFileImport {
                     out.write(buffer,0,n);
                 }
             }
-            try(Archive rar=new Archive(compressed)){
+            try(Archive rar=new Archive(compressed,
+                    com.github.junrar.ArchiveOptions.builder().password(password)
+                        .maxDictionarySize(128L*1024*1024).build())){
                 for(FileHeader entry:rar.getFileHeaders()){
                     // Even skipped directories and links consume the bounded entry budget.
                     String name=entry.getFileName();
@@ -131,6 +143,108 @@ final class ArchiveFileImport {
                 }
             }
         }finally{compressed.delete();}
+    }
+    /** Password-aware streaming ZIP decoder. Does not mutate or replace the original ZIP. */
+    private static void extractZipWithPassword(Context ctx,Uri uri,File root,char[] password,
+            Budget budget,Progress progress)throws Exception{
+        try(InputStream source=ctx.getContentResolver().openInputStream(uri)){
+            if(source==null)throw new IOException("Нет доступа к ZIP");
+            try(net.lingala.zip4j.io.inputstream.ZipInputStream zip=
+                    new net.lingala.zip4j.io.inputstream.ZipInputStream(
+                        new BufferedInputStream(source,128*1024),password)){
+                net.lingala.zip4j.model.LocalFileHeader entry;
+                byte[] bytes=new byte[128*1024];
+                while((entry=zip.getNextEntry())!=null){
+                    String name=entry.getFileName();
+                    budget.next(name==null?"":name);
+                    BackupEntryPolicy.requireSafe(name,entry.isDirectory());
+                    if(entry.isDirectory()){zip.closeEntry();continue;}
+                    File target=safeFile(root,name);
+                    File parent=target.getParentFile();
+                    if(!parent.isDirectory()&&!parent.mkdirs())throw new IOException("Не создана папка ZIP");
+                    if(target.exists())throw new IOException("Повторное имя в ZIP");
+                    long written=0;
+                    try(OutputStream out=new BufferedOutputStream(new FileOutputStream(target))){
+                        int count;while((count=zip.read(bytes))!=-1){
+                            written+=count;budget.add(count,written);
+                            out.write(bytes,0,count);
+                        }
+                    }
+                    zip.closeEntry();emit(budget,progress);
+                }
+            }
+        }
+    }
+    /** Selective streaming 7z import with AES password, 128 MiB decoder ceiling. */
+    private static void extract7z(Context ctx,Uri uri,File root,char[] password,
+            Budget budget,Progress progress)throws Exception{
+        try(android.os.ParcelFileDescriptor descriptor=ctx.getContentResolver().openFileDescriptor(uri,"r")){
+            if(descriptor==null)throw new IOException("Нет доступа к 7z");
+            try(FileInputStream input=new FileInputStream(descriptor.getFileDescriptor());
+                org.apache.commons.compress.archivers.sevenz.SevenZFile archive=
+                    org.apache.commons.compress.archivers.sevenz.SevenZFile.builder()
+                        .setSeekableByteChannel(input.getChannel())
+                        .setPassword(password)
+                        .setMaxMemoryLimitKiB(131072).get()){
+                org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry entry;
+                byte[] bytes=new byte[128*1024];
+                while((entry=archive.getNextEntry())!=null){
+                    String name=entry.getName();budget.next(name==null?"":name);
+                    BackupEntryPolicy.requireSafe(name,entry.isDirectory());
+                    if(entry.isDirectory())continue;
+                    if(entry.getSize()>MAX_ENTRY)throw new IOException("7z содержит слишком большой файл");
+                    File target=safeFile(root,name);
+                    File parent=target.getParentFile();
+                    if(!parent.isDirectory()&&!parent.mkdirs())throw new IOException("Не создана папка 7z");
+                    if(target.exists())throw new IOException("Повторное имя в 7z");
+                    long written=0;
+                    try(OutputStream out=new BufferedOutputStream(new FileOutputStream(target))){
+                        int count;while((count=archive.read(bytes))!=-1){
+                            written+=count;budget.add(count,written);
+                            out.write(bytes,0,count);
+                        }
+                    }
+                    emit(budget,progress);
+                }
+            }
+        }
+    }
+    private static void extractTar(Context ctx,Uri uri,File root,String extension,
+            Budget budget,Progress progress)throws Exception{
+        try(InputStream input=ctx.getContentResolver().openInputStream(uri)){
+            if(input==null)throw new IOException("Нет доступа к TAR");
+            InputStream compressed=input;
+            if(extension.endsWith(".gz")||extension.equals("tgz"))
+                compressed=new java.util.zip.GZIPInputStream(input);
+            else if(extension.endsWith(".xz")||extension.equals("txz"))
+                compressed=new org.apache.commons.compress.compressors.xz.XZCompressorInputStream(input);
+            else if(extension.endsWith(".bz2")||extension.equals("tbz2"))
+                compressed=new org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream(input);
+            try(org.apache.commons.compress.archivers.tar.TarArchiveInputStream tar=
+                    new org.apache.commons.compress.archivers.tar.TarArchiveInputStream(compressed)){
+                org.apache.commons.compress.archivers.tar.TarArchiveEntry entry;
+                byte[] bytes=new byte[128*1024];
+                while((entry=tar.getNextEntry())!=null){
+                    String name=entry.getName();budget.next(name==null?"":name);
+                    if(entry.isSymbolicLink()||entry.isLink())continue;
+                    BackupEntryPolicy.requireSafe(name,entry.isDirectory());
+                    if(entry.isDirectory())continue;
+                    if(entry.getSize()>MAX_ENTRY)throw new IOException("TAR содержит слишком большой файл");
+                    File target=safeFile(root,name);
+                    File parent=target.getParentFile();
+                    if(!parent.isDirectory()&&!parent.mkdirs())throw new IOException("Не создана папка TAR");
+                    if(target.exists())throw new IOException("Повторное имя в TAR");
+                    long written=0;
+                    try(OutputStream out=new BufferedOutputStream(new FileOutputStream(target))){
+                        int count;while((count=tar.read(bytes))!=-1){
+                            written+=count;budget.add(count,written);
+                            out.write(bytes,0,count);
+                        }
+                    }
+                    emit(budget,progress);
+                }
+            }
+        }
     }
     private static File findChatRoot(File folder,int depth){
         if(depth>5)return null;
