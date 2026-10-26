@@ -158,7 +158,7 @@ final class ArchiveFileImport {
                     String name=entry.getFileName();
                     budget.next(name==null?"":name);
                     BackupEntryPolicy.requireSafe(name,entry.isDirectory());
-                    if(entry.isDirectory()){zip.closeEntry();continue;}
+                    if(entry.isDirectory())continue;
                     File target=safeFile(root,name);
                     File parent=target.getParentFile();
                     if(!parent.isDirectory()&&!parent.mkdirs())throw new IOException("Не создана папка ZIP");
@@ -170,7 +170,7 @@ final class ArchiveFileImport {
                             out.write(bytes,0,count);
                         }
                     }
-                    zip.closeEntry();emit(budget,progress);
+                    emit(budget,progress);
                 }
             }
         }
