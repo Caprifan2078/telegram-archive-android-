@@ -4068,15 +4068,11 @@ public class MainActivity extends Activity {
         worker.execute(()->{
             if(!requestedArchive.equals(activeKey)||db!=requestedDb)return;
             int at=requestedDb.hasMessage(id)?requestedDb.positionFor(id):-1;
-            List<MessageDb.Item> candidates=requestedDb.pinned();
-            long nextPinned=-1;
-            for(MessageDb.Item candidate:candidates)if(candidate.id<id){nextPinned=candidate.id;break;}
-            if(nextPinned<0&&!candidates.isEmpty())nextPinned=candidates.get(0).id;
-            final long rotation=nextPinned;
+            // A search/reply/media jump must not rotate the pinned-message
+            // selector. Only explicit pinned controls should select another pin.
             runOnUiThread(()->{
                 if(!requestedArchive.equals(activeKey)||db!=requestedDb||isFinishing())return;
                 if(at<0){toast("Сообщение не найдено");return;}
-                if(rotation>=0)pinnedFocus=rotation;
                 home=false;autoLoaded=PAGE;
                 returnScreen=source;screen="chat";chatOffset=Math.max(0,at-7);highlightId=id;showPage();
             });
