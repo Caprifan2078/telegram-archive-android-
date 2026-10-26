@@ -2102,7 +2102,7 @@ public class MainActivity extends Activity {
                         list.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener(){
                             @Override public boolean onPreDraw(){
                                 if(list.getViewTreeObserver().isAlive())list.getViewTreeObserver().removeOnPreDrawListener(this);
-                                if(token==loadToken&&"search".equals(screen))scroll.scrollTo(0,restoreY);
+                                if(token==loadToken&&"search".equals(screen)){scroll.fling(0);scroll.scrollTo(0,restoreY);}
                                 return true;
                             }
                         });
@@ -2668,6 +2668,7 @@ public class MainActivity extends Activity {
         }
         lastRenderedDay=last;
         if(append)return; // Never jump to the top when more history is appended.
+        if(results&&pendingSearchScroll>=0)return; // The return path restores after layout.
         if(pendingRestoreId>0){
             final View restored=renderedMessageViews.get(pendingRestoreId);
             final int top=pendingRestoreTop;
@@ -2678,7 +2679,9 @@ public class MainActivity extends Activity {
         final View targetBubble=glowBubble;
         final int color=glowBase;
         final long id=glowId;
+        final int renderedToken=loadToken;final String renderedScreen=screen;
         scroll.post(()->{
+            if(renderedToken!=loadToken||!renderedScreen.equals(screen))return;
             if(target!=null){
                 scroll.smoothScrollTo(0,Math.max(0,target.getTop()-px(120)));
                 if(targetBubble!=null){
