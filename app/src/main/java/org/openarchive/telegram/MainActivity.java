@@ -717,6 +717,23 @@ public class MainActivity extends Activity {
         EditText author=new EditText(this);author.setSingleLine(true);author.setHint("Автор · необязательно");controls.addView(author);
         EditText year=new EditText(this);year.setSingleLine(true);year.setHint("Год · необязательно");year.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);controls.addView(year);
         CheckBox onlyMedia=new CheckBox(this);onlyMedia.setText("Только сообщения с медиа");controls.addView(onlyMedia);
+        CheckBox synonyms=new CheckBox(this);synonyms.setText("Индекс + локальные синонимы (рекомендуется)");
+        synonyms.setChecked(true);controls.addView(synonyms);
+        CheckBox broader=new CheckBox(this);
+        broader.setText("Показывать и близкие темы (больше результатов, возможны ошибки)");
+        broader.setChecked(false);controls.addView(broader);
+        CheckBox fuzzyWords=new CheckBox(this);
+        fuzzyWords.setText("Исправлять опечатки (медленнее; только по отдельной галочке)");
+        fuzzyWords.setChecked(false);controls.addView(fuzzyWords);
+        synonyms.setOnCheckedChangeListener((buttonView,isChecked)->{
+            broader.setEnabled(isChecked);fuzzyWords.setEnabled(isChecked);
+            if(!isChecked){broader.setChecked(false);fuzzyWords.setChecked(false);}
+        });
+        TextView explanation=text("Например: благодарю → спасибо; покупаю машину → купил тачку. " +
+            "Катана и меч — не точные синонимы: включай широкий поиск отдельно. " +
+            "По отдельной галочке «Опечатки» попробует плахо → плохо через локальный словарь слов чата. " +
+            "Не исправляет все ошибки в любом слове. Все результаты — настоящие сообщения с переходом к оригиналу.",12,SUB);
+        controls.addView(explanation);
         new FontDialog.Builder(this).setTitle("Умный поиск по всем чатам")
             .setMessage("Текст, автор, год и медиа. Работает офлайн и не объединяет переписки.")
             .setView(controls).setNegativeButton("Отмена",null)
@@ -730,10 +747,15 @@ public class MainActivity extends Activity {
                 if(q.length()>120||a.length()>120){toast("Запрос слишком длинный (максимум 120 символов)");return;}
                 if(q.codePointCount(0,q.length())<2&&a.codePointCount(0,a.length())<2){
                     toast("Введи минимум 2 символа текста или имени автора");return;}
-                discoverySearchRun(q,a,y,onlyMedia.isChecked());
+                discoverySearchRun(q,a,y,onlyMedia.isChecked(),synonyms.isChecked(),broader.isChecked(),fuzzyWords.isChecked());
             }).show();
     }
-    private void discoverySearchRun(String query,String author,Integer year,boolean media){
+    private void discoverySearchRun(String query,String author,Integer year,boolean media,boolean indexed,boolean broaden,boolean typoMode){
+        final OfflineSynonymSearch.Plan plan;
+        if(indexed&&!query.isEmpty()){
+            try{plan=OfflineSynonymSearch.make(query,true,broaden);}
+            catch(IllegalArgumentException bad){toast(bad.getMessage());return;}
+        }else plan=null;
         final ArrayList<String> keys=new ArrayList<>(),names=new ArrayList<>();
         for(int i=0;i<archives.length()&&keys.size()<25;i++){
             JSONObject item=archives.optJSONObject(i);
@@ -744,10 +766,17 @@ public class MainActivity extends Activity {
         status.setText("Ищу в "+keys.size()+" локальных чатах…");
         worker.execute(()->{
             ArrayList<DiscoveryRules.Hit> result=new ArrayList<>();
+            ArrayList<DiscoveryRules.Hit> earliestCandidates=new ArrayList<>();
             int unavailable=0;
-            StringBuilder where=new StringBuilder(" WHERE messages.id > (SELECT COALESCE(MAX(id),0)-100000 FROM messages)");
+            final java.util.Map<String,OfflineSynonymSearch.Plan> perChatPlans=new java.util.HashMap<>();
+            boolean unsupportedFuzzy=false;
+            // Indexed mode searches the ENTIRE SQLite FTS4 index, not only the newest 100k IDs.
+            // Legacy substring mode keeps its old bounded scan and is always labelled partial.
+            StringBuilder where=new StringBuilder(plan!=null?" WHERE messages.id IN (SELECT docid FROM messages_fts WHERE messages_fts MATCH ?)":
+                " WHERE messages.id > (SELECT COALESCE(MAX(id),0)-100000 FROM messages)");
             ArrayList<String> params=new ArrayList<>();
-            if(!query.isEmpty()){
+            if(plan!=null)params.add(plan.fts);
+            else if(!query.isEmpty()){
                 where.append(" AND (body_fold LIKE ? ESCAPE '\\' OR author_fold LIKE ? ESCAPE '\\')");
                 String pat=DiscoveryRules.likePattern(query);params.add(pat);params.add(pat);
             }
@@ -764,15 +793,43 @@ public class MainActivity extends Activity {
                     java.io.File file=dualChatDbFile(key);
                     if(!file.isFile()){unavailable++;continue;}
                     try(android.database.sqlite.SQLiteDatabase d=android.database.sqlite.SQLiteDatabase.openDatabase(
-                        file.getAbsolutePath(),null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY);
-                        android.database.Cursor c=d.rawQuery(sql,params.toArray(new String[0]))){
+                        file.getAbsolutePath(),null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY)){
+                        OfflineSynonymSearch.Plan chatPlan=plan;
+                        java.util.ArrayList<String> localParams=new java.util.ArrayList<>(params);
+                        if(typoMode&&indexed&&plan!=null){
+                            IndexedTypoLookup.Result fuzzy=IndexedTypoLookup.collect(d,plan.terms);
+                            chatPlan=OfflineSynonymSearch.make(query,true,broaden,fuzzy.suggestions);
+                            if(fuzzy.notice.contains("недоступен"))unsupportedFuzzy=true;
+                            localParams.set(0,chatPlan.fts);
+                        }
+                        if(chatPlan!=null)perChatPlans.put(key,chatPlan);
+                        try(android.database.Cursor c=d.rawQuery(sql,localParams.toArray(new String[0]))){
                         while(c.moveToNext()){
                             result.add(new DiscoveryRules.Hit(key,names.get(i),c.getLong(0),c.getString(1),c.getString(2),c.getString(3)));
+                        }
+                        }
+                        // Separate earliest lookup is necessary: the main UI shows recent hits.
+                        // FTS4 matches older messages without scanning the text on the UI thread.
+                        if(plan!=null){
+                            String firstSql="SELECT id,author,date_text,body FROM messages"+where+" ORDER BY id ASC LIMIT 1";
+                            try(android.database.Cursor first=d.rawQuery(firstSql,localParams.toArray(new String[0]))){
+                                if(first.moveToNext())earliestCandidates.add(new DiscoveryRules.Hit(
+                                    key,names.get(i),first.getLong(0),first.getString(1),first.getString(2),first.getString(3)));
+                            }
                         }
                     }
                 }catch(Exception e){unavailable++;}
             }
             final int misses=unavailable;
+            final boolean fuzzyUnavailable=unsupportedFuzzy;
+            DiscoveryRules.Hit candidate=null;
+            // Earliest dates from distinct chats are compared only if parsable.
+            for(DiscoveryRules.Hit hit:earliestCandidates){
+                ChatTrends.Moment t=ChatTrends.parse(hit.date);
+                if(t==null)continue;
+                if(candidate==null||t.day.isBefore(ChatTrends.parse(candidate.date).day))candidate=hit;
+            }
+            final DiscoveryRules.Hit earliest=candidate;
             result.sort((a,b)->{
                 ChatTrends.Moment da=ChatTrends.parse(a.date),dbDate=ChatTrends.parse(b.date);
                 if(da==null&&dbDate==null)return Long.compare(b.id,a.id);
@@ -783,19 +840,33 @@ public class MainActivity extends Activity {
             if(result.size()>80)result.subList(80,result.size()).clear();
             runOnUiThread(()->{
                 if(isFinishing())return;
-                status.setText("Поиск завершён · найдено "+result.size()+" примеров");
-                if(result.isEmpty()){toast("Совпадений не найдено"+(misses>0?" · недоступно чатов: "+misses:""));return;}
+                status.setText("Поиск завершён · показано "+result.size()+" результатов (список ограничен)");
+                if(result.isEmpty()){toast("Совпадений не найдено"+(misses>0?" · недоступно чатов: "+misses:"")+
+                    (fuzzyUnavailable?" · поиск опечаток не поддержан":""));return;}
                 String[] labels=new String[result.size()];
-                for(int i=0;i<labels.length;i++)labels[i]=result.get(i).name+" · "+result.get(i).label();
-                new FontDialog.Builder(this).setTitle("Поиск · "+result.size()+" результатов")
-                    .setMessage("Показаны последние 36 совпадений на чат, максимум 80 всего. Поиск ограничен последними 100 000 ID на чат. "+
+                for(int i=0;i<labels.length;i++){
+                    DiscoveryRules.Hit hit=result.get(i);
+                    OfflineSynonymSearch.Plan explained=perChatPlans.get(hit.key);
+                    labels[i]=hit.name+" · "+(explained==null?"":explained.sourceMatch(hit.body)+" · ")+hit.label();
+                }
+                AlertDialog.Builder foundDialog=new FontDialog.Builder(this).setTitle("Поиск · показано "+result.size())
+                    .setMessage((plan==null?"Обычный поиск: проверены последние 100 000 ID на чат. ":
+                        "Полный FTS4 индекс каждого доступного чата; "+plan.description+". ")+
+                        "Показаны не более 36 последних совпадений из каждого чата и 80 всего. "+
                         (keys.size()>=25?"Не более 25 чатов за запрос. ":"")+
-                        (misses>0?"Недоступно чатов: "+misses+". ":"")+"Это может быть частичный результат.")
+                        (misses>0?"Недоступно чатов: "+misses+". ":"")+
+                        (fuzzyUnavailable?"На некоторых устройствах расширение опечаток недоступно. ":"")+
+                        (typoMode?"Опечатки ищутся только среди индексированных слов с похожим началом; не гарантируется полнота. ":"")+
+                        (earliest!=null?"\nСамое раннее подтверждённое совпадение по дате: "+earliest.date+" · "+earliest.name+".":"")+
+                        " Список ограничен, поэтому не все совпадения показаны.")
                     .setItems(labels,(d,index)->{
                         DiscoveryRules.Hit item=result.get(index);
                         if(!canOpenQuoteArchive(item.key)){toast("Чат отсутствует");return;}
                         openSavedQuote(item.id,item.key);
-                    }).setNegativeButton("Закрыть",null).show();
+                    });
+                if(earliest!=null)foundDialog.setNeutralButton("Перейти к раннему",(d,w)->
+                    openSavedQuote(earliest.id,earliest.key));
+                foundDialog.setNegativeButton("Закрыть",null).show();
             });
         });
     }
@@ -1374,6 +1445,7 @@ public class MainActivity extends Activity {
             try{
                 List<MessageDb.Item> part=afterId>0?sourceDb.pageAfter(afterId,PAGE,searching?term:"",searching&&mode,searching&&mode?who:"",searching&&mode&&withMedia,false):sourceDb.page(offset,PAGE,searching?term:"",searching&&mode,searching&&mode?who:"",searching&&mode&&withMedia,false);
                 Map<Long,List<MessageDb.Attachment>> files=sourceDb.attachmentsForMessages(part);
+                Map<Long,MessageDb.ReplyInfo> replies=sourceDb.replyPreviews(part);
                 runOnUiThread(()->{
                     if(token!=loadToken)return;
                     loadingMore=false;
@@ -1381,7 +1453,7 @@ public class MainActivity extends Activity {
                     if(searching)searchLoaded+=part.size();else autoLoaded+=part.size();
                     lastLoadedMessageId=part.get(part.size()-1).id;
                     int y=scroll.getScrollY();
-                    renderMessages(part,files,searching,true);
+                    renderMessages(part,files,replies,searching,true);
                     scroll.post(()->{if(!searching&&token==loadToken)pruneChatWindow();else scroll.scrollTo(0,y);});
                     pageLabel.setText((getOffset()+1)+"–"+Math.min(total,getOffset()+(searching?searchLoaded:autoLoaded))+" / "+total);
                 });
@@ -2009,6 +2081,7 @@ public class MainActivity extends Activity {
                 List<MessageDb.Attachment> attachments=gallery?db.mediaPage(kind,pos,MEDIA_PAGE):null;
                 List<MessageDb.Item> messages=gallery?null:db.page(pos,tab.equals("chat")?Math.max(PAGE,autoLoaded):tab.equals("search")?Math.max(PAGE,searchLoaded):PAGE,find?search:"",find&&deepMode,find&&deepMode?who:"",find&&deepMode&&hasMedia,favs);
                 Map<Long,List<MessageDb.Attachment>> links=messages==null?new HashMap<>():db.attachmentsForMessages(messages);
+                Map<Long,MessageDb.ReplyInfo> replies=messages==null?new HashMap<>():db.replyPreviews(messages);
                 MessageDb.SearchStats stats=find?db.searchStats(search,deepMode,deepMode?who:"",deepMode&&hasMedia):null;
                 runOnUiThread(()->{
                     if(isFinishing()||token!=loadToken)return;
@@ -2019,7 +2092,7 @@ public class MainActivity extends Activity {
                     }
                     else list.setBackgroundColor(BG);
                     if(gallery){renderMedia(attachments);scheduleMediaPrefetch(token,kind,pos+attachments.size(),count);}
-                    else {lastLoadedMessageId=messages.isEmpty()?-1:messages.get(messages.size()-1).id;renderMessages(messages,links,find);}
+                    else {lastLoadedMessageId=messages.isEmpty()?-1:messages.get(messages.size()-1).id;renderMessages(messages,links,replies,find,false);}
                     animateEntrance();
                     bottomPager.setVisibility(tab.equals("chat")||tab.equals("search")?View.GONE:View.VISIBLE);
                     int shown=gallery?attachments.size():messages.size();
@@ -2499,10 +2572,7 @@ public class MainActivity extends Activity {
             }
         }return span;
     }
-    private void renderMessages(List<MessageDb.Item> messages,Map<Long,List<MessageDb.Attachment>> files,boolean results){
-        renderMessages(messages,files,results,false);
-    }
-    private void renderMessages(List<MessageDb.Item> messages,Map<Long,List<MessageDb.Attachment>> files,boolean results,boolean append){
+    private void renderMessages(List<MessageDb.Item> messages,Map<Long,List<MessageDb.Attachment>> files,Map<Long,MessageDb.ReplyInfo> replies,boolean results,boolean append){
         if(messages.isEmpty())return;
         if(!append)renderedMessageViews.clear();
         String last=append?lastRenderedDay:"";View focus=null;View glowBubble=null;int glowBase=0;long glowId=-1;
@@ -2546,6 +2616,19 @@ public class MainActivity extends Activity {
             if(!roundOnly){
                 TextView from=text(author,12,0xffe8f6ff);from.setMaxWidth(mw);from.setTypeface(null,Typeface.BOLD);bubble.addView(from);
                 from.setOnLongClickListener(v->{pickAuthorColor(author);return true;});
+            }
+            MessageDb.ReplyInfo reply=replies.get(m.id);
+            if(reply!=null&&!roundOnly){
+                final String reference=reply.targetId>0?
+                    "↪ "+(reply.author.isEmpty()?"Ответ на сообщение":reply.author)+" · "+
+                    (reply.preview.isEmpty()?"Сообщение с вложением":reply.preview):
+                    "↪ Ответ на сообщение Telegram #"+reply.telegramId+" (оригинал отсутствует)";
+                TextView link=text(reference,12,reply.targetId>0?0xffd9faff:SUB);
+                link.setMaxWidth(mw);link.setMaxLines(2);link.setEllipsize(TextUtils.TruncateAt.END);
+                link.setPadding(px(10),px(8),px(10),px(8));
+                link.setBackground(shape(0x44345b76,8));
+                bubble.addView(link,p(-1,-2));
+                if(reply.targetId>0)link.setOnClickListener(v->jump(reply.targetId,""));
             }
             if(m.body!=null&&!m.body.isEmpty()&&!roundOnly){
                 TextView body=text("",15,FG);body.setMaxWidth(mw);body.setText(highlighted(m.body,results?q:""));

@@ -75,6 +75,7 @@ public class PortableRestoreRegressionTest {
                 assertEquals("Первая встреча",copy.periods().get(0).name);
                 assertEquals(1,copy.relationshipEvents().size());
                 assertEquals("@training",copy.localProfile()[1]);
+                assertTrue(copy.replyPreviews(copy.page(0,10,"",false,"",false,false)).isEmpty());
                 assertEquals("1990-01-01",copy.calendarPeriods().get(0).start);
             }finally{copy.close();}
             boolean quoteRestored=false,attachmentRestored=false;

@@ -1,0 +1,62 @@
+name: Integrated archive QA
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: integrated-qa-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: Host checks and optimized APK
+        run: |
+          python3 qa/host_tests/test_reply050.py
+          python3 qa/host_tests/test_search049_sqlite.py
+          gradle testCompactQaUnitTest assembleCompactQa assembleCompactQaAndroidTest --no-daemon --max-workers=2
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          script: |
+            mkdir -p qa-output
+            gradle connectedCompactQaAndroidTest --no-daemon --max-workers=2; result=$?; adb pull /sdcard/Android/data/org.openarchive.telegram.qa.preview51/files/qa-screens qa-output/screens || true; adb logcat -d -t 300 > qa-output/emulator-tail.txt; exit $result
+      - name: Package checks
+        if: always()
+        run: |
+          mkdir -p qa-output
+          apk=app/build/outputs/apk/compactQa/app-compactQa.apk
+          test -f "$apk"
+          cp "$apk" qa-output/TelegramArchive_0.51.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" > qa-output/apk-badging.txt
+          ! grep -q android.permission.INTERNET qa-output/apk-badging.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$apk"
+          sha256sum qa-output/*.apk > qa-output/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Archive-051-QA
+          path: |
+            qa-output/
+            app/build/test-results/
+            app/build/outputs/androidTest-results/

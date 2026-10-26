@@ -54,6 +54,13 @@ class TelegramImporter {
                         if(!body.isEmpty()||!media.isEmpty()){
                             Media first=media.isEmpty()?null:media.get(0);
                             long messageId=helper.stage(d,TelegramAuthorPolicy.stageAuthor(authorCandidate,service),when,body,first==null?null:first.path,first==null?"":first.kind);
+                            long telegramId=TelegramReplyPolicy.sourceMessageId(msg.id());
+                            if(telegramId>0)helper.stageTelegramId(d,messageId,telegramId);
+                            Element replyAnchor=msg.selectFirst(".reply_to a[href], .reply_to_details a[href]");
+                            if(replyAnchor!=null){
+                                long target=TelegramReplyPolicy.replyTargetFromHref(replyAnchor.attr("href"));
+                                if(target>0)helper.stageReply(d,messageId,target);
+                            }
                             for(Media a:media){helper.stageAttachment(d,messageId,a.path,a.kind);medias++;}
                             written++;
                         }

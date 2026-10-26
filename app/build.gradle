@@ -9,15 +9,15 @@ android {
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         testProguardFiles 'proguard-test-rules.pro'
         targetSdk 35
-        versionCode 47
-        versionName '0.47'
+        versionCode 51
+        versionName '0.51'
     }
     // Build both the proven non-minified QA and a separate side-by-side
     // compact QA package. Never change the original QA application ID.
     buildTypes {
         compactQa {
             initWith debug
-            applicationIdSuffix '.preview47'
+            applicationIdSuffix '.preview51'
             versionNameSuffix ''
             matchingFallbacks = ['debug']
             debuggable false

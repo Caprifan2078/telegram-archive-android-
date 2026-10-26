@@ -18,10 +18,19 @@ class MessageDb extends SQLiteOpenHelper {
     static final class Item {
         long id; String author,date,body,media,mediaType; boolean favorite;
     }
+    static final class ReplyInfo {
+        final long targetId,telegramId;
+        final String author,preview;
+        ReplyInfo(long targetId,long telegramId,String author,String preview){
+            this.targetId=targetId;this.telegramId=telegramId;
+            this.author=author==null?"":author;
+            this.preview=preview==null?"":preview;
+        }
+    }
     static final class Attachment {
         long id,messageId; String path,kind,author,date,body;
     }
-    MessageDb(Context ctx,String key){super(ctx,"default".equals(key)?"telegram_archive.db":"telegram_"+key+".db",null,13);}
+    MessageDb(Context ctx,String key){super(ctx,"default".equals(key)?"telegram_archive.db":"telegram_"+key+".db",null,14);}
     @Override public void onConfigure(SQLiteDatabase d){super.onConfigure(d);d.enableWriteAheadLogging();}
     @Override public void onCreate(SQLiteDatabase d){
         d.execSQL("CREATE TABLE messages (id INTEGER PRIMARY KEY,author TEXT,date_text TEXT,body TEXT,media TEXT,media_type TEXT,body_fold TEXT,author_fold TEXT)");
@@ -33,7 +42,45 @@ class MessageDb extends SQLiteOpenHelper {
         collectionTables(d);
         timelineTables(d);
         relationshipTables(d);
+        replyTables(d);
         localProfileTables(d);
+    }
+    /** Reply links use real Telegram IDs. Staging and publishing are transactional.
+     * A missing target remains explicitly unresolved; never guess from row position. */
+    private void replyTables(SQLiteDatabase d){
+        d.execSQL("CREATE TABLE IF NOT EXISTS staged_telegram_ids (message_id INTEGER PRIMARY KEY,telegram_id INTEGER NOT NULL UNIQUE)");
+        d.execSQL("CREATE TABLE IF NOT EXISTS staged_reply_ids (message_id INTEGER PRIMARY KEY,target_telegram_id INTEGER NOT NULL)");
+        d.execSQL("CREATE TABLE IF NOT EXISTS telegram_ids (message_id INTEGER PRIMARY KEY,telegram_id INTEGER NOT NULL UNIQUE)");
+        d.execSQL("CREATE TABLE IF NOT EXISTS message_replies (message_id INTEGER PRIMARY KEY,target_telegram_id INTEGER NOT NULL,target_message_id INTEGER)");
+        d.execSQL("CREATE INDEX IF NOT EXISTS ix_reply_target ON message_replies(target_message_id)");
+    }
+    void stageTelegramId(SQLiteDatabase d,long messageId,long telegramId){
+        ContentValues v=new ContentValues();v.put("message_id",messageId);v.put("telegram_id",telegramId);
+        d.insertWithOnConflict("staged_telegram_ids",null,v,SQLiteDatabase.CONFLICT_IGNORE);
+    }
+    void stageReply(SQLiteDatabase d,long messageId,long targetTelegramId){
+        ContentValues v=new ContentValues();v.put("message_id",messageId);v.put("target_telegram_id",targetTelegramId);
+        d.insertWithOnConflict("staged_reply_ids",null,v,SQLiteDatabase.CONFLICT_REPLACE);
+    }
+    /** A single bounded query for a visible page; never an N+1 query per message. */
+    Map<Long,ReplyInfo> replyPreviews(List<Item> page){
+        HashMap<Long,ReplyInfo> out=new HashMap<>();
+        if(page==null||page.isEmpty())return out;
+        for(int start=0;start<page.size();start+=200){
+            int end=Math.min(start+200,page.size());
+            StringBuilder sql=new StringBuilder("SELECT r.message_id,r.target_telegram_id,r.target_message_id,t.author,t.body "+
+                "FROM message_replies r LEFT JOIN messages t ON t.id=r.target_message_id WHERE r.message_id IN (");
+            String[] args=new String[end-start];
+            for(int i=start;i<end;i++){if(i>start)sql.append(',');sql.append('?');args[i-start]=String.valueOf(page.get(i).id);}
+            sql.append(')');
+            try(Cursor c=getReadableDatabase().rawQuery(sql.toString(),args)){
+                while(c.moveToNext()){
+                    String body=c.getString(4);if(body!=null){body=body.replace('\n',' ').trim();if(body.length()>110)body=body.substring(0,110)+"…";}
+                    out.put(c.getLong(0),new ReplyInfo(c.isNull(2)?-1:c.getLong(2),c.getLong(1),c.getString(3),body));
+                }
+            }
+        }
+        return out;
     }
     private void localProfileTables(SQLiteDatabase d){
         d.execSQL("CREATE TABLE IF NOT EXISTS calendar_periods (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,note TEXT NOT NULL,start_date TEXT NOT NULL,end_date TEXT NOT NULL)");
@@ -207,7 +254,7 @@ class MessageDb extends SQLiteOpenHelper {
         if(old<9)collectionTables(d);
         if(old<11)timelineTables(d);
         if(old<12)relationshipTables(d);
-        if(old<13)localProfileTables(d);
+        if(old<14){replyTables(d);localProfileTables(d);}
         if(old<10){
             // Older synthetic/minimal databases may lack optional media tables.
             mediaTables(d);
@@ -392,7 +439,7 @@ class MessageDb extends SQLiteOpenHelper {
         return new ArrayList<>(unique.values());
     }
     private static String fold(String s){return (s==null?"":s).toLowerCase(Locale.ROOT);}
-    void clearStage(SQLiteDatabase d){d.delete("staged_attachments",null,null);d.delete("staged_messages",null,null);}
+    void clearStage(SQLiteDatabase d){d.delete("staged_reply_ids",null,null);d.delete("staged_telegram_ids",null,null);d.delete("staged_attachments",null,null);d.delete("staged_messages",null,null);}
     long stage(SQLiteDatabase d,String author,String date,String body,String media,String type){
         ContentValues v=new ContentValues();v.put("author",author);v.put("date_text",date);v.put("body",body);
         v.put("media",media);v.put("media_type",type);v.put("body_fold",fold(body));v.put("author_fold",fold(author));
@@ -412,6 +459,12 @@ class MessageDb extends SQLiteOpenHelper {
             d.execSQL("DELETE FROM pins WHERE message_id NOT IN (SELECT id FROM messages)");
             // Never leave collection entries linked to re-used attachment IDs.
             d.execSQL("DELETE FROM collection_entries WHERE NOT EXISTS (SELECT 1 FROM attachments a WHERE a.id=collection_entries.attachment_id AND a.path=collection_entries.path)");
+            // Resolve replies only after all numbered HTML parts were staged.
+            d.delete("message_replies",null,null);d.delete("telegram_ids",null,null);
+            d.execSQL("INSERT INTO telegram_ids(message_id,telegram_id) SELECT message_id,telegram_id FROM staged_telegram_ids");
+            d.execSQL("INSERT INTO message_replies(message_id,target_telegram_id,target_message_id) "+
+                "SELECT r.message_id,r.target_telegram_id,t.message_id FROM staged_reply_ids r "+
+                "LEFT JOIN telegram_ids t ON t.telegram_id=r.target_telegram_id");
             d.execSQL("INSERT INTO messages_fts(messages_fts) VALUES('rebuild')");
             clearStage(d);d.setTransactionSuccessful();
         }finally{d.endTransaction();}
