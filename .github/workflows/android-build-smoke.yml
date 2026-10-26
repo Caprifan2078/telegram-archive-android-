@@ -1,0 +1,63 @@
+name: Android compile and APK smoke
+on:
+  push:
+    branches:
+      - qa/v052-duplicate-id-safety-20261026
+    paths:
+      - 'app/**'
+      - 'build.gradle'
+      - 'settings.gradle'
+      - 'gradle.properties'
+      - '.github/workflows/android-build-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: android-build-smoke-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  compile:
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK platform
+        run: |
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
+      - name: Verify Android source, unit tests and compact APK
+        run: |
+          gradle --no-daemon --max-workers=2 \
+            testCompactQaUnitTest assembleCompactQa assembleCompactQaAndroidTest
+      - name: Inspect signed debug QA package
+        run: |
+          apk="app/build/outputs/apk/compactQa/app-compactQa.apk"
+          test -s "$apk"
+          "${ANDROID_HOME}/build-tools/35.0.0/aapt" dump badging "$apk" > apk-badging.txt
+          if grep -q android.permission.INTERNET apk-badging.txt; then
+            echo 'Unexpected INTERNET permission in offline archive viewer'
+            exit 1
+          fi
+          "${ANDROID_HOME}/build-tools/35.0.0/apksigner" verify "$apk"
+          sha256sum "$apk" > APK-SHA256.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: archive-android-smoke
+          retention-days: 3
+          path: |
+            app/build/outputs/apk/compactQa/*.apk
+            app/build/outputs/apk/androidTest/**/*.apk
+            app/build/test-results/
+            app/build/reports/tests/
+            apk-badging.txt
+            APK-SHA256.txt
