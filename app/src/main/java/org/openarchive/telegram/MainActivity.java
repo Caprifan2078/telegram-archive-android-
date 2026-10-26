@@ -4131,8 +4131,13 @@ public class MainActivity extends Activity {
         if(a.kind.equals("round")){showFloatingRound(a);return;}
         if(a.kind.equals("video"))resolveMedia(a.path,this::fullVideo);
         else if(a.kind.equals("audio"))openMusicPlayer(a);
-        else if(a.kind.equals("voice"))resolveMedia(a.path,uri->external(uri,a.path));
-        else resolveMedia(a.path,uri->external(uri,a.path));
+        else if(a.kind.equals("voice")){
+            // Voice messages use the same built-in offline player whether the
+            // user taps the play icon or the media-gallery card.
+            startAudio(a.path,playerPause,playerText);
+            playingAttachment=a;playerStrip.setVisibility(View.VISIBLE);
+            playerText.setText("Голосовое · "+(a.author==null?"":a.author));
+        }else resolveMedia(a.path,uri->external(uri,a.path));
     }
     /** Open the dedicated offline player for music, never for voice notes. */
     private void openMusicPlayer(MessageDb.Attachment song){

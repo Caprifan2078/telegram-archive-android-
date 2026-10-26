@@ -79,6 +79,24 @@ public class MissingMediaPlaybackRegressionTest {
             assertStripClears();
         }finally{empty.delete();}
     }
+    @Test public void galleryVoiceUsesOfflinePlayerInsteadOfExternalApp() throws Exception {
+        MainActivity a=activity.getActivity();
+        File empty=new File(a.getCacheDir(),"missing-gallery-voice-"+UUID.randomUUID());
+        assertTrue(empty.mkdirs());
+        try{
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{
+                try{
+                    set(a,"folder",new DocumentFolder(a.getContentResolver(),empty));
+                    Method open=MainActivity.class.getDeclaredMethod("openMedia",MessageDb.Attachment.class);
+                    open.setAccessible(true);
+                    open.invoke(a,missing("voice"));
+                    assertEquals("Media gallery must use the built-in player",View.VISIBLE,
+                        ((LinearLayout)get(a,"playerStrip")).getVisibility());
+                }catch(Exception ex){throw new AssertionError(ex);}
+            });
+            assertStripClears();
+        }finally{empty.delete();}
+    }
     @Test public void missingRoundDoesNotLeavePlaybackControlsVisible() throws Exception {
         MainActivity a=activity.getActivity();
         File empty=new File(a.getCacheDir(),"missing-round-"+UUID.randomUUID());
