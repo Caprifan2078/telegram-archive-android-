@@ -44,4 +44,18 @@ public class ReadableUiTest {
         }
         try(ActivityScenario<DemoChatActivity> scenario=ActivityScenario.launch(DemoChatActivity.class)){capture("tutorial");}
     }
+
+    @Test public void unicodeHighlightsKeepValidAndroidSpanOffsets()throws Exception{
+        try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
+            scenario.onActivity(a->{try{
+                Field mode=MainActivity.class.getDeclaredField("deep");mode.setAccessible(true);mode.set(a,false);
+                Method highlight=MainActivity.class.getDeclaredMethod("highlighted",String.class,String.class);highlight.setAccessible(true);
+                android.text.Spanned text=(android.text.Spanned)highlight.invoke(a,"İx 😀x","x");
+                android.text.style.BackgroundColorSpan[] spans=text.getSpans(0,text.length(),android.text.style.BackgroundColorSpan.class);
+                assertEquals(2,spans.length);
+                assertEquals(1,text.getSpanStart(spans[0]));assertEquals(2,text.getSpanEnd(spans[0]));
+                assertEquals(5,text.getSpanStart(spans[1]));assertEquals(6,text.getSpanEnd(spans[1]));
+            }catch(ReflectiveOperationException e){throw new AssertionError(e);}});
+        }
+    }
 }

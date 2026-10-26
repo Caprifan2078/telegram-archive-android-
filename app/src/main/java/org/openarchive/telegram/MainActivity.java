@@ -2578,16 +2578,10 @@ public class MainActivity extends Activity {
     }
     private CharSequence highlighted(String body,String find){
         if(body==null)return "";if(find==null||find.trim().isEmpty())return body;
-        SpannableString span=new SpannableString(body);String hay=body.toLowerCase(Locale.ROOT);
-        ArrayList<String> needles=new ArrayList<>();
-        if(deep)needles.add(find.toLowerCase(Locale.ROOT));
-        else for(String token:find.split("[^\\p{L}\\p{N}]+"))if(!token.isEmpty())needles.add(token.toLowerCase(Locale.ROOT));
-        for(String needle:needles){int from=0,n=0,at;
-            while(!needle.isEmpty()&&(at=hay.indexOf(needle,from))>=0&&n++<30){
-                span.setSpan(new BackgroundColorSpan(0xffa37528),at,at+needle.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                from=at+needle.length();
-            }
-        }return span;
+        SpannableString span=new SpannableString(body);
+        for(int[] range:SearchHighlightPolicy.ranges(body,find,deep))
+            span.setSpan(new BackgroundColorSpan(0xffa37528),range[0],range[1],Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return span;
     }
     private void renderMessages(List<MessageDb.Item> messages,Map<Long,List<MessageDb.Attachment>> files,Map<Long,MessageDb.ReplyInfo> replies,boolean results,boolean append){
         if(messages.isEmpty())return;
