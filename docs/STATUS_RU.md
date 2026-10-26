@@ -56,6 +56,14 @@
   возврата к двум одинаковым MP4; вместе с проверкой конфликтующих
   Telegram-ID подключён к существующему `qa-integrated.yml`.
   Workflow по-прежнему **не выполняется при Private**.
+- Добавлен самостоятельный тест `qa/host_tests/TgsHostCheck.java` с
+  запуском `bash qa/host_tests/test_tgs_payload.sh`, не требующий Android
+  SDK, Jsoup или сетевого доступа. Локально компилировался production
+  `TgsPayload.java` с Git blob `e5e2db02589fc775b967cb94e6878d78c6d2b231`;
+  **PASS**: GZIP/UTF-8 Unicode, невалидный GZIP, сырой JSON,
+  переполнение распакованного объёма и лимит сжатого объёма.
+  Это JVM-проверка, НЕ Android/Lottie интеграция. Скрипт добавлен
+  в public-only QA workflow без изменения защиты от приватных запусков.
 - Корневой README обновлён с учётом интегрированной QA 0.51;
   `main` и настройки публичности не изменялись. APK отсутствует.
 
