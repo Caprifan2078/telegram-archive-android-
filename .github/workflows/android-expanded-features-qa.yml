@@ -6,6 +6,13 @@ on:
       - qa/v052-duplicate-id-safety-20261026
     paths:
       - '.github/workflows/android-expanded-features-qa.yml'
+      - 'app/src/main/java/org/openarchive/telegram/MessageDb.java'
+      - 'app/src/main/java/org/openarchive/telegram/ArchiveFileImport.java'
+      - 'app/src/main/java/org/openarchive/telegram/ArchiveBackup.java'
+      - 'app/src/main/java/org/openarchive/telegram/FullBackup.java'
+      - 'app/src/main/java/org/openarchive/telegram/RestoreJournal.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/PortableRestoreRegressionTest.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/RestoreRecoveryTest.java'
   workflow_dispatch:
 permissions:
   contents: read
