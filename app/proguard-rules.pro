@@ -30,3 +30,10 @@
 -keep class org.jsoup.** { *; }
 # Jsoup's compile-only nullness annotations are not needed by Android at runtime.
 -dontwarn org.jspecify.annotations.**
+
+# Required by archive preview and its Android integration tests.
+-dontwarn com.github.luben.zstd.**
+-keep class org.apache.commons.compress.archivers.sevenz.SevenZOutputFile { *; }
+-keep class org.apache.commons.compress.archivers.tar.TarArchiveOutputStream { *; }
+-keep class org.apache.commons.compress.archivers.tar.TarArchiveEntry { *; }
+-keep class net.lingala.zip4j.** { *; }
