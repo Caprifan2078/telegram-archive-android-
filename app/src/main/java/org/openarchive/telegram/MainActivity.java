@@ -161,6 +161,7 @@ public class MainActivity extends Activity {
     private int playbackGeneration=0;
     private Runnable progressUpdater;private MessageDb.Attachment playingAttachment;private LinearLayout playerStrip;private TextView playerText;private Button playerPause;private FrameLayout inlineHolder;private int floatingStart=0;
     private RoundControls activeRound;
+    private TextView activeAudioButton;
     private static final class RoundControls {
         SeekBar seek;
         TextView timer;
@@ -4090,7 +4091,14 @@ public class MainActivity extends Activity {
     }
 
     private void resolveMedia(String path,java.util.function.Consumer<Uri> success){
-        if(folder==null){toast("Сначала выбери папку с экспортом");return;}
+        resolveMedia(path,success,null);
+    }
+    private void resolveMedia(String path,java.util.function.Consumer<Uri> success,Runnable onMissing){
+        if(folder==null){
+            toast("Сначала выбери папку с экспортом");
+            if(onMissing!=null)handler.post(onMissing);
+            return;
+        }
         DocumentFolder current=folder;
         final String requestedArchive=activeKey;
         final int requestedLoad=loadToken;
@@ -4102,8 +4110,11 @@ public class MainActivity extends Activity {
                 // selected chat after navigation or player closure.
                 if(isFinishing()||!MediaRequestGuard.isCurrent(requestedArchive,activeKey,
                         requestedLoad,loadToken,requestedPlayback,playbackGeneration))return;
-                if(uri==null){status.setText("Файл не найден: "+path);toast("Медиа не найдено в выбранной папке");}
-                else success.accept(uri);
+                if(uri==null){
+                    status.setText("Файл не найден: "+path);
+                    toast("Медиа не найдено в выбранной папке");
+                    if(onMissing!=null)onMissing.run();
+                }else success.accept(uri);
             });
         });
     }
@@ -4349,7 +4360,7 @@ public class MainActivity extends Activity {
         ++playbackGeneration; // invalidate any unresolved media callbacks from the previous tab
         if(progressUpdater!=null){handler.removeCallbacks(progressUpdater);progressUpdater=null;}
         if(playerStrip!=null)playerStrip.setVisibility(View.GONE);
-        inlineHolder=null;playingAttachment=null;
+        inlineHolder=null;playingAttachment=null;activeAudioButton=null;
         if(player!=null){
             try{player.stop();}catch(Exception ignored){}
             try{player.release();}catch(Exception ignored){}
@@ -4499,18 +4510,31 @@ public class MainActivity extends Activity {
             });
             holder.addView(texture,1,new FrameLayout.LayoutParams(-1,-1));
             overlay.bringToFront();
+        },()->{
+            // A missing original is common in Telegram exports without media.
+            // Never leave a fake "playing" strip when no decoder exists.
+            if(generation==playbackGeneration){
+                stopPlayback();
+                overlay.setText("⚠ Нет файла");
+                overlay.setTextSize(14);
+                overlay.setVisibility(View.VISIBLE);
+            }
         });
     }
     private void startAudio(String path,TextView play,TextView timer){
-        if(player!=null&&path.equals(playingPath)){
-            try{if(player.isPlaying()){player.pause();play.setText("▶");}else{player.start();play.setText("❚❚");}}catch(Exception ignored){}
+        if(player!=null&&path.equals(playingPath)&&activeAudioButton==play){
+            try{if(player.isPlaying()){player.pause();play.setText("▶");}else{player.start();play.setText("❚❚");}
+                if(playerPause!=null)playerPause.setText(player.isPlaying()?"⏸":"▶");
+            }catch(Exception ignored){}
             return;
         }
         stopPlayback();final int request=playbackGeneration;resolveMedia(path,uri->{
             if(request!=playbackGeneration||isFinishing()||isDestroyed()||!play.isAttachedToWindow())return;
             try{
-                MediaPlayer p=new MediaPlayer();player=p;playingPath=path;p.setDataSource(this,uri);
+                MediaPlayer p=new MediaPlayer();player=p;playingPath=path;activeAudioButton=play;
+                p.setDataSource(this,uri);
                 p.setOnPreparedListener(mp->{if(mp!=player)return;mp.start();play.setText("❚❚");
+                    if(playerPause!=null)playerPause.setText("⏸");
                     progressUpdater=new Runnable(){@Override public void run(){
                         if(mp!=player)return;
                         try{int seconds=mp.getCurrentPosition()/1000;
@@ -4524,6 +4548,12 @@ public class MainActivity extends Activity {
                 p.setOnErrorListener((mp,what,extra)->{if(mp!=player)return true;toast("Не удалось воспроизвести аудио");stopPlayback();play.setText("▶");return true;});
                 p.prepareAsync();
             }catch(Exception e){stopPlayback();toast("Аудиофайл недоступен");}
+        },()->{
+            if(request==playbackGeneration){
+                stopPlayback();
+                play.setText("▶");
+                timer.setText("Файл не найден");
+            }
         });
     }
     private String formatTime(int s){return String.format(Locale.ROOT,"%d:%02d",s/60,s%60);}
