@@ -82,6 +82,84 @@ public class ImportRollbackRegressionTest {
             ArchiveFileImport.deleteTree(folder);
         }
     }
+    @Test public void reorderedReimportCannotReassignSavedReferences() {
+        Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key="reimport_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb db=new MessageDb(ctx,key);
+        try {
+            SQLiteDatabase sql=db.getWritableDatabase();
+            long first=db.stage(sql,"Alice","2024-01-01","First",null,"");
+            long second=db.stage(sql,"Bob","2024-01-02","Saved",null,"");
+            db.stageTelegramId(sql,first,101);db.stageTelegramId(sql,second,102);
+            db.publishStaged(sql);
+            sql.execSQL("INSERT INTO favorites(message_id) VALUES (?)",new Object[]{second});
+            sql.execSQL("INSERT INTO pins(message_id) VALUES (?)",new Object[]{second});
+            db.stage(sql,"New","2023-12-31","Inserted before",null,"");
+            db.stage(sql,"Alice","2024-01-01","First",null,"");
+            db.stage(sql,"Bob","2024-01-02","Saved",null,"");
+            try { db.publishStaged(sql); fail("Changed IDs must not publish"); }
+            catch(IllegalStateException expected) { assertTrue(expected.getMessage().contains("сохранены")); }
+            try(Cursor c=sql.rawQuery("SELECT m.body FROM favorites f JOIN messages m ON m.id=f.message_id",null)) {
+                assertTrue(c.moveToFirst());assertEquals("Saved",c.getString(0));
+            }
+            try(Cursor c=sql.rawQuery("SELECT m.body FROM pins p JOIN messages m ON m.id=p.message_id",null)) {
+                assertTrue(c.moveToFirst());assertEquals("Saved",c.getString(0));
+            }
+            assertEquals(2,db.totalMessages());
+        } finally { db.close();ctx.deleteDatabase("telegram_"+key+".db"); }
+    }
+    @Test public void unchangedPrefixCanBeExtendedWithoutLosingFavorite() {
+        Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key="append_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb db=new MessageDb(ctx,key);
+        try {
+            SQLiteDatabase sql=db.getWritableDatabase();
+            long first=db.stage(sql,"Alice","2024-01-01","First",null,"");
+            db.stageTelegramId(sql,first,101);db.publishStaged(sql);db.toggleFavorite(first);
+            long same=db.stage(sql,"Alice","2024-01-01","First",null,"");
+            db.stageTelegramId(sql,same,101);
+            db.stage(sql,"Bob","2024-01-02","Next",null,"");
+            db.publishStaged(sql);
+            assertEquals(2,db.totalMessages());assertEquals(1,db.count("",false,"",false,true));
+        } finally { db.close();ctx.deleteDatabase("telegram_"+key+".db"); }
+    }
+    @Test public void changedTelegramIdCannotReuseIdenticalMessageRow() {
+        Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key="sourceid_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb db=new MessageDb(ctx,key);
+        try {
+            SQLiteDatabase sql=db.getWritableDatabase();
+            long id=db.stage(sql,"Alice","2024-01-01","Same text",null,"");
+            db.stageTelegramId(sql,id,101);db.publishStaged(sql);db.toggleFavorite(id);
+            long staged=db.stage(sql,"Alice","2024-01-01","Same text",null,"");
+            db.stageTelegramId(sql,staged,202);
+            try { db.publishStaged(sql);fail("Reused row with different Telegram ID must not publish"); }
+            catch(IllegalStateException expected) { assertTrue(expected.getMessage().contains("сохранены")); }
+            try(Cursor c=sql.rawQuery("SELECT telegram_id FROM telegram_ids WHERE message_id=1",null)) {
+                assertTrue(c.moveToFirst());assertEquals(101,c.getLong(0));
+            }
+            assertEquals(1,db.count("",false,"",false,true));
+        } finally { db.close();ctx.deleteDatabase("telegram_"+key+".db"); }
+    }
+    @Test public void changedAttachmentCannotDeleteCollectionEntry() {
+        Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key="attachment_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb db=new MessageDb(ctx,key);
+        try {
+            SQLiteDatabase sql=db.getWritableDatabase();
+            long id=db.stage(sql,"Alice","2024-01-01","Photo","a.jpg","image");
+            db.stageAttachment(sql,id,"a.jpg","image");db.publishStaged(sql);
+            sql.execSQL("INSERT INTO media_collections(id,name) VALUES (1,'Synthetic')");
+            sql.execSQL("INSERT INTO collection_entries(collection_id,attachment_id,path) VALUES (1,1,'a.jpg')");
+            long same=db.stage(sql,"Alice","2024-01-01","Photo","a.jpg","image");
+            db.stageAttachment(sql,same,"other.jpg","image");
+            try { db.publishStaged(sql);fail("Changed attachment must not publish"); }
+            catch(IllegalStateException expected) { assertTrue(expected.getMessage().contains("сохранены")); }
+            try(Cursor c=sql.rawQuery("SELECT a.path FROM collection_entries e JOIN attachments a ON a.id=e.attachment_id",null)) {
+                assertTrue(c.moveToFirst());assertEquals("a.jpg",c.getString(0));
+            }
+        } finally { db.close();ctx.deleteDatabase("telegram_"+key+".db"); }
+    }
     private static void write(File root,String name,String html) throws Exception {
         try(FileOutputStream out=new FileOutputStream(new File(root,name))) {
             out.write(html.getBytes(StandardCharsets.UTF_8));

@@ -458,12 +458,27 @@ class MessageDb extends SQLiteOpenHelper {
         ContentValues v=new ContentValues();v.put("message_id",messageId);v.put("path",path);v.put("kind",kind);
         d.insertOrThrow("staged_attachments",null,v);
     }
+    /** Fail closed before modifying published rows; the caller can import into a new archive. */
+    private void assertSafeReimport(SQLiteDatabase d){
+        String[] checks={
+            "SELECT 1 FROM messages m LEFT JOIN staged_messages s ON s.id=m.id WHERE s.id IS NULL OR m.author IS NOT s.author OR m.date_text IS NOT s.date_text OR m.body IS NOT s.body OR m.media IS NOT s.media OR m.media_type IS NOT s.media_type LIMIT 1",
+            "SELECT 1 FROM attachments a LEFT JOIN staged_attachments s ON s.id=a.id WHERE s.id IS NULL OR a.message_id IS NOT s.message_id OR a.path IS NOT s.path OR a.kind IS NOT s.kind LIMIT 1",
+            "SELECT 1 FROM telegram_ids t LEFT JOIN staged_telegram_ids s ON s.telegram_id=t.telegram_id WHERE s.message_id IS NOT t.message_id LIMIT 1"
+        };
+        for(String query:checks){
+            try(Cursor c=d.rawQuery(query,null)){
+                if(c.moveToFirst())throw new IllegalStateException("Повторный импорт изменяет существующие сообщения или вложения. Прежний архив и ваши отметки сохранены. Импортируйте экспорт как новый архив; заранее создайте резервную копию.");
+            }
+        }
+    }
     void publishStaged(SQLiteDatabase d){
         d.beginTransaction();try{
-            // Favorites are stored by stable chronological message ID across re-imports.
+            // IDs are positional, not intrinsically stable across exports. Refuse any
+            // re-import that could silently reassign local annotations to another row.
+            assertSafeReimport(d);
             d.delete("attachments",null,null);d.delete("messages",null,null);
             d.execSQL("INSERT INTO messages(id,author,date_text,body,media,media_type,body_fold,author_fold) SELECT id,author,date_text,body,media,media_type,body_fold,author_fold FROM staged_messages ORDER BY id");
-            d.execSQL("INSERT INTO attachments(message_id,path,kind) SELECT message_id,path,kind FROM staged_attachments ORDER BY id");
+            d.execSQL("INSERT INTO attachments(id,message_id,path,kind) SELECT id,message_id,path,kind FROM staged_attachments ORDER BY id");
             d.execSQL("DELETE FROM favorites WHERE message_id NOT IN (SELECT id FROM messages)");
             d.execSQL("DELETE FROM pins WHERE message_id NOT IN (SELECT id FROM messages)");
             // Never leave collection entries linked to re-used attachment IDs.

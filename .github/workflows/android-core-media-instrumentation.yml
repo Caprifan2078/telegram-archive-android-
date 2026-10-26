@@ -8,6 +8,8 @@ on:
     paths:
       - '.github/workflows/android-core-media-instrumentation.yml'
       - 'app/src/main/java/org/openarchive/telegram/MainActivity.java'
+      - 'app/src/main/java/org/openarchive/telegram/MessageDb.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/ImportRollbackRegressionTest.java'
       - 'app/src/androidTest/java/org/openarchive/telegram/PinnedFocusNavigationRegressionTest.java'
   workflow_dispatch:
 permissions:
