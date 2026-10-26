@@ -94,4 +94,39 @@ public class ArchivePreviewIntegrationTest {
                 ArchiveReadOnly.read(ctx,uri,"history.tar.gz",null,items.get(0).name),StandardCharsets.UTF_8));
         }finally{archive.delete();}
     }
+    @Test public void tarXzListsAndReadsTextWithoutExtracting()throws Exception{
+        File file=temp("tar.xz");
+        try{
+            try(TarArchiveOutputStream tar=new TarArchiveOutputStream(
+                new org.apache.commons.compress.compressors.xz.XZCompressorOutputStream(
+                    new FileOutputStream(file)))){
+                byte[] body="XZ читается".getBytes(StandardCharsets.UTF_8);
+                TarArchiveEntry e=new TarArchiveEntry("folder/test.txt");e.setSize(body.length);
+                tar.putArchiveEntry(e);tar.write(body);tar.closeArchiveEntry();
+            }
+            Uri uri=Uri.fromFile(file);
+            List<ArchiveReadOnly.Entry> names=ArchiveReadOnly.list(ctx,uri,"test.tar.xz",null);
+            assertEquals(1,names.size());
+            assertEquals("XZ читается",new String(
+                ArchiveReadOnly.read(ctx,uri,"test.tar.xz",null,names.get(0).name),StandardCharsets.UTF_8));
+        }finally{file.delete();}
+    }
+    @Test public void tarBzip2ListsAndReadsTextWithoutExtracting()throws Exception{
+        File file=temp("tar.bz2");
+        try{
+            try(TarArchiveOutputStream tar=new TarArchiveOutputStream(
+                new org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream(
+                    new FileOutputStream(file)))){
+                byte[] body="BZip2 читается".getBytes(StandardCharsets.UTF_8);
+                TarArchiveEntry e=new TarArchiveEntry("folder/test.txt");e.setSize(body.length);
+                tar.putArchiveEntry(e);tar.write(body);tar.closeArchiveEntry();
+            }
+            Uri uri=Uri.fromFile(file);
+            List<ArchiveReadOnly.Entry> names=ArchiveReadOnly.list(ctx,uri,"test.tar.bz2",null);
+            assertEquals(1,names.size());
+            assertEquals("BZip2 читается",new String(
+                ArchiveReadOnly.read(ctx,uri,"test.tar.bz2",null,names.get(0).name),StandardCharsets.UTF_8));
+        }finally{file.delete();}
+    }
+
 }
