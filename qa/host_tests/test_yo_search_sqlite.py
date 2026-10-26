@@ -28,10 +28,11 @@ expected = {
     "ежик": {"ёжик", "ежик"},
     "всё": {"всё", "все"},
     "все": {"всё", "все"},
+    "ё-опечатка": {"ёлочка"},
 }
 db = sqlite3.connect(":memory:")
 db.execute("CREATE VIRTUAL TABLE messages_fts USING fts4(author,body,date_text,tokenize=unicode61)")
-for name in {"ёлка", "елка", "ёжик", "ежик", "всё", "все"}:
+for name in {"ёлка", "елка", "ёжик", "ежик", "всё", "все", "ёлочка"}:
     db.execute("INSERT INTO messages_fts(author,body,date_text) VALUES(?,?,?)",
                ("Синтетический автор", name, "2026-01-01"))
 for term, desired in expected.items():
@@ -43,4 +44,4 @@ for term, desired in expected.items():
     except sqlite3.OperationalError as exc:
         raise AssertionError(f"FTS query rejected for {term!r}: {expr}") from exc
     assert hits == desired, f"{term!r}: expected {desired}, got {hits} with {expr}"
-print("PASS: production Java FTS plans find both е/ё spellings (6 queries, synthetic corpus)")
+print("PASS: production Java FTS plans find both е/ё spellings (7 queries, synthetic corpus)")
