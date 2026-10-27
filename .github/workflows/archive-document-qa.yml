@@ -4,6 +4,7 @@ on:
     branches:
       - qa/universal-archive-document-viewer-20261027
       - qa/v052-duplicate-id-safety-20261026
+      - qa/telegram-7z-import-20261027
     paths:
       - '.github/workflows/archive-document-qa.yml'
       - 'app/src/main/**'
@@ -51,7 +52,7 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 420
           script: |
-            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.ArchivePreviewIntegrationTest,org.openarchive.telegram.AttachmentPreviewScreenTest,org.openarchive.telegram.EncryptedTelegramImportRegressionTest,org.openarchive.telegram.RarCompatibilityRegressionTest'
+            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.ArchivePreviewIntegrationTest,org.openarchive.telegram.AttachmentPreviewScreenTest,org.openarchive.telegram.EncryptedTelegramImportRegressionTest,org.openarchive.telegram.RarCompatibilityRegressionTest,org.openarchive.telegram.SevenZTelegramImportRegressionTest'
             mkdir -p qa-output
             adb pull /sdcard/Download/ta_office_preview_synthetic.png qa-output/office-preview-synthetic.png
             test -s qa-output/office-preview-synthetic.png
