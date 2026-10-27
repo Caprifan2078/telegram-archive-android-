@@ -66,4 +66,36 @@ public class OfficePreviewTextTest {
         try{OfficePreviewText.render(new ByteArrayInputStream(out.toByteArray()),"x.docx");fail("Inflated ignored content must be bounded");}
         catch(java.io.IOException expected){assertTrue(expected.getMessage().contains("слишком много данных"));}
     }
+    @Test public void sharedStringsAreResolvedAndInvalidIndexIsNotPresentedAsData()throws Exception{
+        String sheet="<worksheet><sheetData><row><c r='A1' t='s'><v>0</v></c></row></sheetData></worksheet>";
+        ByteArrayOutputStream out=new ByteArrayOutputStream();
+        try(ZipOutputStream zip=new ZipOutputStream(out)){
+            zip.putNextEntry(new ZipEntry("xl/sharedStrings.xml"));
+            zip.write("<sst><si><t>Общий текст</t></si></sst>".getBytes(StandardCharsets.UTF_8));zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("xl/worksheets/sheet1.xml"));zip.write(sheet.getBytes(StandardCharsets.UTF_8));zip.closeEntry();
+        }
+        assertTrue(OfficePreviewText.render(new ByteArrayInputStream(out.toByteArray()),"x.xlsx").contains("Общий текст"));
+        String bad="<worksheet><sheetData><row><c r='A1' t='s'><v>99</v></c></row></sheetData></worksheet>";
+        try{OfficePreviewText.render(new ByteArrayInputStream(doc("xl/worksheets/sheet1.xml",bad)),"x.xlsx");fail("Invalid shared string must not render as a number");}
+        catch(org.xml.sax.SAXException expected){}
+    }
+    @Test public void duplicateOfficePartNamesAreRejected()throws Exception{
+        ByteArrayOutputStream out=new ByteArrayOutputStream();
+        try(ZipOutputStream zip=new ZipOutputStream(out)){
+            for(int i=1;i<=2;i++){
+                zip.putNextEntry(new ZipEntry("xl/worksheets/sheet"+i+".xml"));
+                zip.write("<worksheet><sheetData/></worksheet>".getBytes(StandardCharsets.UTF_8));zip.closeEntry();
+            }
+        }
+        byte[] bytes=out.toByteArray();
+        byte[] from="xl/worksheets/sheet2.xml".getBytes(StandardCharsets.UTF_8);
+        byte[] to="xl/worksheets/sheet1.xml".getBytes(StandardCharsets.UTF_8);int replacements=0;
+        for(int i=0;i<=bytes.length-from.length;i++){
+            boolean match=true;for(int j=0;j<from.length;j++)if(bytes[i+j]!=from[j]){match=false;break;}
+            if(match){System.arraycopy(to,0,bytes,i,to.length);replacements++;i+=from.length-1;}
+        }
+        assertEquals("Both local and central directory names must be changed",2,replacements);
+        try{OfficePreviewText.render(new ByteArrayInputStream(bytes),"x.xlsx");fail("Duplicate sheet part must not appear as two sheets");}
+        catch(java.io.IOException expected){assertTrue(expected.getMessage().contains("повторяется часть"));}
+    }
 }

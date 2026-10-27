@@ -65,7 +65,6 @@ public final class AttachmentPreviewActivity extends Activity {
     }
     private void showHeader(){
         panel.removeAllViews();
-        if(scroll!=null)scroll.post(()->scroll.scrollTo(0,0));
         TextView title=text("▣ "+fileName,19,FG);title.setTypeface(null,1);title.setMaxLines(2);
         panel.addView(title);
         panel.addView(text("Только просмотр · локально · исходный файл не меняется",12,SUB));
@@ -73,9 +72,12 @@ public final class AttachmentPreviewActivity extends Activity {
         if(ArchiveReadOnly.isArchive(fileName))
             button("🔐 Ввести / изменить пароль",this::askPassword);
     }
+    private void scrollToTopIfCurrent(int token){
+        scroll.post(()->{if(token==requestId&&!isFinishing()&&!isDestroyed())scroll.scrollTo(0,0);});
+    }
     private void busy(String label){panel.addView(text(label,14,ACCENT));}
     private void fail(String error,boolean forArchive){
-        showHeader();
+        showHeader();scrollToTopIfCurrent(requestId);
         TextView msg=text("Не удалось открыть: "+error,15,FG);
         panel.addView(msg);
         if(forArchive)button("Повторить",this::loadIndex);
@@ -96,7 +98,7 @@ public final class AttachmentPreviewActivity extends Activity {
     private char[] passCopy(){return password==null?null:password.clone();}
     private void loadIndex(){
         final int current=++requestId;
-        showHeader();busy("Читаю список вложений без распаковки всего архива…");
+        showHeader();scrollToTopIfCurrent(current);busy("Читаю список вложений без распаковки всего архива…");
         char[] pass=passCopy();
         background.execute(()->{
             try{
@@ -140,7 +142,7 @@ public final class AttachmentPreviewActivity extends Activity {
         if(nested!=null&&!nestedOpen)indexScrollY=scroll.getScrollY();
         nestedOpen=nested!=null;
         final int current=++requestId;
-        showHeader();
+        showHeader();scrollToTopIfCurrent(current);
         if(nested!=null)button("‹ Вернуться к списку",this::renderIndex);
         busy("Читаю файл…");
         char[] pass=passCopy();
@@ -166,7 +168,7 @@ public final class AttachmentPreviewActivity extends Activity {
                     if(bitmap==null)throw new java.io.IOException("Изображение не декодируется");
                     runOnUiThread(()->{
                         if(current!=requestId||isFinishing()||isDestroyed()){bitmap.recycle();return;}
-                        showHeader();if(nested!=null)button("‹ К архиву",this::renderIndex);
+                        showHeader();scrollToTopIfCurrent(current);if(nested!=null)button("‹ К архиву",this::renderIndex);
                         ImageView image=new ImageView(this);image.setImageBitmap(bitmap);
                         image.setAdjustViewBounds(true);image.setScaleType(ImageView.ScaleType.FIT_CENTER);
                         panel.addView(image,new LinearLayout.LayoutParams(-1,-2));
@@ -177,7 +179,7 @@ public final class AttachmentPreviewActivity extends Activity {
                     String result=OfficePreviewText.render(new ByteArrayInputStream(bytes),name);
                     runOnUiThread(()->{
                         if(current!=requestId||isFinishing()||isDestroyed())return;
-                        showHeader();if(nested!=null)button("‹ К архиву",this::renderIndex);
+                        showHeader();scrollToTopIfCurrent(current);if(nested!=null)button("‹ К архиву",this::renderIndex);
                         TextView viewer=text(result,14,FG);
                         if(ext.equals("xlsx")||ext.equals("csv"))viewer.setTypeface(android.graphics.Typeface.MONOSPACE);
                         viewer.setTextIsSelectable(true);panel.addView(viewer);

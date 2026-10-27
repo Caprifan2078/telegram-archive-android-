@@ -65,7 +65,7 @@ final class OfficePreviewText {
             throw new IOException("Старый бинарный Office-формат пока нельзя корректно отобразить внутри приложения");
         if(!ext.equals("docx")&&!ext.equals("xlsx")&&!ext.equals("pptx"))
             throw new IOException("Этот формат пока не имеет безопасного внутреннего просмотрщика");
-        List<Part> parts=new ArrayList<>();
+        List<Part> parts=new ArrayList<>();java.util.Set<String> partNames=new java.util.HashSet<>();
         int seen=0,total=0,skipped=0;byte[] discard=new byte[8192];
         try(ZipInputStream zip=new ZipInputStream(stream)){
             ZipEntry entry;
@@ -76,6 +76,7 @@ final class OfficePreviewText {
                     ||ext.equals("xlsx")&&(name.equals("xl/sharedStrings.xml")||name.matches("xl/worksheets/sheet[0-9]+\\.xml"))
                     ||ext.equals("pptx")&&name.matches("ppt/slides/slide[0-9]+\\.xml");
                 if(keep&&!entry.isDirectory()){
+                    if(!partNames.add(name))throw new IOException("В документе повторяется часть: "+name);
                     byte[] bytes=limited(zip,ENTRY_LIMIT);
                     total+=bytes.length;
                     if(total>20*1024*1024)throw new IOException("Превышен лимит просмотра документа");
@@ -238,16 +239,19 @@ final class OfficePreviewText {
                 else cell.append(ch,start,length);
             } else if(inText)append(new String(ch,start,length));
         }
-        @Override public void endElement(String uri,String local,String qName){
+        @Override public void endElement(String uri,String local,String qName)throws org.xml.sax.SAXException{
             String t=tag(local,qName);
             if(spreadsheet){
                 if(t.equals("v")||t.equals("t"))inValue=false;
                 if(t.equals("c")){
                     String text=cell.toString();
                     if(cellShared){
-                        try{int index=Integer.parseInt(text.trim());
-                            if(index>=0&&index<shared.size())text=shared.get(index);
-                        }catch(Exception ignored){}
+                        final int index;
+                        try{index=Integer.parseInt(text.trim());}
+                        catch(NumberFormatException bad){throw new org.xml.sax.SAXException("Некорректный индекс строки таблицы",bad);}
+                        if(shared==null||index<0||index>=shared.size())
+                            throw new org.xml.sax.SAXException("Общая строка таблицы отсутствует");
+                        text=shared.get(index);
                     }
                     append(text.replace('\t',' ').replace('\n',' '));append("\t");nextColumn++;
                 }

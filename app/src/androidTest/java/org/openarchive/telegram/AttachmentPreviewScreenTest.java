@@ -76,6 +76,19 @@ public class AttachmentPreviewScreenTest {
         fail("Preview screen never displayed: "+expected+"; actual UI: "+
             visibleText(screen.getActivity().findViewById(android.R.id.content)));
     }
+    private void awaitArchiveScroll(int expected)throws Exception{
+        long deadline=android.os.SystemClock.uptimeMillis()+4000;final int[] current={-1};
+        while(android.os.SystemClock.uptimeMillis()<deadline){
+            instrumentation.waitForIdleSync();
+            instrumentation.runOnMainSync(()->{try{
+                java.lang.reflect.Field field=AttachmentPreviewActivity.class.getDeclaredField("scroll");field.setAccessible(true);
+                current[0]=((android.widget.ScrollView)field.get(screen.getActivity())).getScrollY();
+            }catch(Exception e){throw new AssertionError(e);}});
+            if(current[0]==expected)return;
+            Thread.sleep(80);
+        }
+        assertEquals("Archive list scroll should be restored",expected,current[0]);
+    }
     @Test public void docxAppearsAsReadableOfflineText()throws Exception{
         String document="<w:document xmlns:w='urn:w'><w:body><w:p><w:r><w:t>Документ из переписки</w:t></w:r></w:p></w:body></w:document>";
         File file=generate(".docx","word/document.xml",document);
@@ -187,7 +200,7 @@ public class AttachmentPreviewScreenTest {
             }catch(Exception e){throw new AssertionError(e);}});
             awaitText("Учебный документ офлайн");
             instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
-            awaitText("Вложений: 26");
+            awaitText("Вложений: 26");awaitArchiveScroll(position[0]);
             instrumentation.runOnMainSync(()->{try{
                 assertFalse("System Back must keep archive preview open",screen.getActivity().isFinishing());
                 java.lang.reflect.Field field=AttachmentPreviewActivity.class.getDeclaredField("scroll");field.setAccessible(true);
@@ -224,6 +237,29 @@ public class AttachmentPreviewScreenTest {
                 FileInputStream stream=new FileInputStream(p.getFileDescriptor())){
                 byte[] buffer=new byte[256];while(stream.read(buffer)!=-1){}
             }
+        }finally{file.delete();}
+    }
+    @Test public void excelSharedStringIsShownOnAndroid()throws Exception{
+        File valid=File.createTempFile("synthetic-shared-", ".xlsx",app.getCacheDir());
+        try(ZipOutputStream zip=new ZipOutputStream(new FileOutputStream(valid))){
+            zip.putNextEntry(new ZipEntry("xl/sharedStrings.xml"));
+            zip.write("<sst><si><t>Синтетическая общая строка</t></si></sst>".getBytes(StandardCharsets.UTF_8));zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("xl/worksheets/sheet1.xml"));
+            zip.write("<worksheet><sheetData><row><c r='A1' t='s'><v>0</v></c></row></sheetData></worksheet>".getBytes(StandardCharsets.UTF_8));zip.closeEntry();
+        }
+        try{
+            Intent intent=new Intent(app,AttachmentPreviewActivity.class);
+            intent.setData(Uri.fromFile(valid));intent.putExtra("display_name","Общие строки.xlsx");
+            screen.launchActivity(intent);awaitText("Синтетическая общая строка");
+        }finally{valid.delete();}
+    }
+    @Test public void excelMissingSharedStringShowsErrorInsteadOfIndex()throws Exception{
+        String sheet="<worksheet><sheetData><row><c r='A1' t='s'><v>99</v></c></row></sheetData></worksheet>";
+        File file=generate(".xlsx","xl/worksheets/sheet1.xml",sheet);
+        try{
+            Intent intent=new Intent(app,AttachmentPreviewActivity.class);
+            intent.setData(Uri.fromFile(file));intent.putExtra("display_name","Повреждённая таблица.xlsx");
+            screen.launchActivity(intent);awaitText("Не удалось открыть");awaitText("Общая строка таблицы отсутствует");
         }finally{file.delete();}
     }
 }
