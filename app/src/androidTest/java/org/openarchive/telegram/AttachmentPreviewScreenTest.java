@@ -87,6 +87,16 @@ public class AttachmentPreviewScreenTest {
         fail("Preview screen never displayed: "+expected+"; actual UI: "+
             visibleText(screen.getActivity().findViewById(android.R.id.content)));
     }
+    private void awaitWindowFocus()throws Exception{
+        long deadline=android.os.SystemClock.uptimeMillis()+6000;final boolean[] focused={false};
+        while(android.os.SystemClock.uptimeMillis()<deadline){
+            instrumentation.waitForIdleSync();
+            instrumentation.runOnMainSync(()->focused[0]=screen.getActivity().hasWindowFocus());
+            if(focused[0])return;
+            Thread.sleep(80);
+        }
+        fail("Preview window never received input focus before system Back");
+    }
     private void awaitArchiveScroll(int expected)throws Exception{
         long deadline=android.os.SystemClock.uptimeMillis()+4000;final int[] current={-1};
         while(android.os.SystemClock.uptimeMillis()<deadline){
@@ -210,7 +220,7 @@ public class AttachmentPreviewScreenTest {
                 assertTrue(clickText(screen.getActivity().findViewById(android.R.id.content),"Документы/Учёба/Работа.docx"));
             }catch(Exception e){throw new AssertionError(e);}});
             awaitText("Учебный документ офлайн");
-            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+            awaitWindowFocus();instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
             awaitText("Вложений: 26");awaitArchiveScroll(position[0]);
             instrumentation.runOnMainSync(()->{try{
                 assertFalse("System Back must keep archive preview open",screen.getActivity().isFinishing());
@@ -292,7 +302,7 @@ public class AttachmentPreviewScreenTest {
             screen.launchActivity(intent);awaitText("Документы/Учёба/Работа.docx");
             instrumentation.runOnMainSync(()->assertTrue(clickText(
                 screen.getActivity().findViewById(android.R.id.content),"Документы/Учёба/Работа.docx")));
-            awaitText("Документ внутри 7z");instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+            awaitText("Документ внутри 7z");awaitWindowFocus();instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
             awaitText("Вложений: 1");assertFalse(screen.getActivity().isFinishing());
         }finally{archive.delete();doc.delete();}
     }
