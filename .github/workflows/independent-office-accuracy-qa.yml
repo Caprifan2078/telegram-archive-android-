@@ -1,0 +1,55 @@
+name: Independent Office content accuracy QA
+on:
+  push:
+    branches:
+      - qa/independent-office-accuracy-20261027
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: independent-office-accuracy-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  office-tests:
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Compile APK and run JVM regression suite
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
+          gradle --no-daemon --max-workers=2 testCompactQaUnitTest assembleCompactQa assembleCompactQaAndroidTest
+      - name: Enable emulator KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: |
+            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.IndependentOfficeAccuracyAndroidTest'
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: independent-office-accuracy-synthetic
+          retention-days: 3
+          path: |
+            app/build/outputs/androidTest-results/
+            app/build/reports/androidTests/
+            app/build/reports/tests/

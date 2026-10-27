@@ -195,7 +195,7 @@ final class OfficePreviewText {
         final StringBuilder output=new StringBuilder();
         final List<String> shared;final boolean spreadsheet;
         final StringBuilder cell=new StringBuilder();
-        boolean inText,inValue,cellShared,truncated;int nextColumn;
+        boolean inText,inValue,cellShared,truncated;int nextColumn,lastRow;
         TextCollector(List<String> items,boolean sheets){shared=items;spreadsheet=sheets;}
         private static int columnIndex(String reference)throws org.xml.sax.SAXException{
             if(reference==null||reference.isEmpty())return -1;
@@ -219,7 +219,24 @@ final class OfficePreviewText {
         @Override public void startElement(String uri,String local,String qName,Attributes attributes)throws org.xml.sax.SAXException{
             String t=tag(local,qName);
             if(spreadsheet){
-                if(t.equals("row"))nextColumn=0;
+                if(t.equals("row")){
+                    nextColumn=0;
+                    String reference=attributes.getValue("r");
+                    if(reference!=null&&!reference.isEmpty()){
+                        int row;
+                        try{row=Integer.parseInt(reference);}
+                        catch(NumberFormatException invalid){throw new org.xml.sax.SAXException("Некорректный номер строки XLSX");}
+                        if(row<1||row>1048576||row<=lastRow)
+                            throw new org.xml.sax.SAXException("Неверный порядок или номер строки XLSX");
+                        if(row>lastRow+1)
+                            append("… пропущено строк: "+(row-lastRow-1)+" …\n");
+                        lastRow=row;
+                        append("Строка "+row+": ");
+                    }else{
+                        if(lastRow==1048576)throw new org.xml.sax.SAXException("Превышено число строк XLSX");
+                        lastRow++;
+                    }
+                }
                 if(t.equals("c")){
                     int column=columnIndex(attributes.getValue("r"));
                     if(column>=0){
@@ -238,16 +255,21 @@ final class OfficePreviewText {
                 else cell.append(ch,start,length);
             } else if(inText)append(new String(ch,start,length));
         }
-        @Override public void endElement(String uri,String local,String qName){
+        @Override public void endElement(String uri,String local,String qName)throws org.xml.sax.SAXException{
             String t=tag(local,qName);
             if(spreadsheet){
                 if(t.equals("v")||t.equals("t"))inValue=false;
                 if(t.equals("c")){
                     String text=cell.toString();
                     if(cellShared){
-                        try{int index=Integer.parseInt(text.trim());
-                            if(index>=0&&index<shared.size())text=shared.get(index);
-                        }catch(Exception ignored){}
+                        int index;
+                        try{index=Integer.parseInt(text.trim());}
+                        catch(NumberFormatException invalid){
+                            throw new org.xml.sax.SAXException("Некорректная ссылка на общий текст XLSX");
+                        }
+                        if(index<0||index>=shared.size())
+                            throw new org.xml.sax.SAXException("Отсутствует общий текст XLSX: "+index);
+                        text=shared.get(index);
                     }
                     append(text.replace('\t',' ').replace('\n',' '));append("\t");nextColumn++;
                 }
