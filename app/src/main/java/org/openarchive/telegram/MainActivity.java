@@ -148,7 +148,7 @@ public class MainActivity extends Activity {
     private EditText searchInput,authorInput;private CheckBox mediaOnly;
     private Button backPage,nextPage,quickButton,deepButton,folderButton,backButton,headerActions;
     private String screen="chat",mediaKind="all",q="",byAuthor="",mine="",returnScreen="";
-    private boolean deep=false,onlyMedia=false,importing=false;
+    private boolean deep=false,onlyMedia=false,importing=false,searchReturnsToAnalytics=false;
     private int chatOffset=0,searchOffset=0,mediaOffset=0,favOffset=0,total=0,loadToken=0;
     private int searchReturnScroll=-1,pendingSearchScroll=-1;
     private int analyticsReturnScroll=-1,pendingAnalyticsScroll=-1;
@@ -1551,7 +1551,7 @@ public class MainActivity extends Activity {
         if(choice==null)return;closeFloatingRound();stopPlayback();++loadToken;clearMediaSelection();activeKey=key;activeName=choice.optString("name","Архив");analyticsSelectedAuthor="";analyticsCalendarYear=0;analyticsCompareFirst="";analyticsCompareSecond="";lastAnalytics=null;saveRegistry();
         if(db!=null)db.close();db=new MessageDb(this,activeKey);
         String path=choice.optString("tree","");folder=path.isEmpty()?null:path.startsWith("local:")?new DocumentFolder(getContentResolver(),new java.io.File(path.substring(6))):new DocumentFolder(getContentResolver(),Uri.parse(path));
-        chatOffset=searchOffset=mediaOffset=favOffset=0;autoLoaded=PAGE;home=false;screen="chat";returnScreen="";chatOffset=getPreferences(MODE_PRIVATE).getInt("read_offset_"+activeKey,0);
+        chatOffset=searchOffset=mediaOffset=favOffset=0;autoLoaded=PAGE;home=false;screen="chat";returnScreen="";searchReturnsToAnalytics=false;chatOffset=getPreferences(MODE_PRIVATE).getInt("read_offset_"+activeKey,0);
         pendingRestoreId=getPreferences(MODE_PRIVATE).getLong("read_id_"+activeKey,-1);
         pendingRestoreTop=getPreferences(MODE_PRIVATE).getInt("read_top_"+activeKey,0);
         if(pendingRestoreId>0){
@@ -1703,7 +1703,7 @@ public class MainActivity extends Activity {
         navBack=btn("‹");navBack.setTextSize(25);navBack.setGravity(Gravity.CENTER);
         head.addView(navBack,p(42,42));
         navBack.setOnClickListener(v->{if("help".equals(screen)){leaveHelp();return;}
-            if(!home){saveReadingProgress();home=true;screen="chat";returnScreen="";showPage();}});
+            if(!home){saveReadingProgress();home=true;screen="chat";returnScreen="";searchReturnsToAnalytics=false;showPage();}});
         TextView logo=text("◇",29,ACCENT);logo.setGravity(Gravity.CENTER);logo.setContentDescription("Локальный архив");head.addView(logo,p(34,42));
         LinearLayout headings=column();headings.setGravity(Gravity.CENTER_VERTICAL);
         head.addView(headings,new LinearLayout.LayoutParams(0,px(50),1));
@@ -1758,7 +1758,7 @@ public class MainActivity extends Activity {
         t.setContentDescription(label);t.setBackground(shape(Color.TRANSPARENT,14));
         LinearLayout.LayoutParams tabBounds=new LinearLayout.LayoutParams(0,px(44),1);
         tabBounds.leftMargin=px(2);tabBounds.rightMargin=px(2);bottomNav.addView(t,tabBounds);
-        t.setOnClickListener(v->{if(floatingPanel==null)stopPlayback();screen=key;returnScreen="";highlightId=-1;showPage();});
+        t.setOnClickListener(v->{if(floatingPanel==null)stopPlayback();screen=key;returnScreen="";searchReturnsToAnalytics=false;highlightId=-1;showPage();});
     }
     private void refreshTabs(){
         for(int i=0;i<bottomNav.getChildCount();i++){
@@ -1822,6 +1822,11 @@ public class MainActivity extends Activity {
             filterBar.addView(actions,p(-1,46));
         }
         if("search".equals(screen)){
+            if(searchReturnsToAnalytics&&"analytics".equals(returnScreen)){
+                Button backToAnalytics=btn("↩ Назад к анализу");
+                backToAnalytics.setContentDescription("Вернуться к анализу");
+                searchArea.addView(backToAnalytics,p(-1,44));backToAnalytics.setOnClickListener(v->restoreReturn());
+            }
             // Discard detached controls when the quick mode hides deep filters.
             authorInput=null;mediaOnly=null;
             searchInput=new EditText(this);searchInput.setText(q);searchInput.setTextSize(16);searchInput.setSingleLine(true);
@@ -1851,6 +1856,8 @@ public class MainActivity extends Activity {
                 authorInput.setPadding(px(12),px(4),px(12),px(4));searchArea.addView(authorInput,p(-1,39));
                 mediaOnly=new CheckBox(this);mediaOnly.setText("Только сообщения с медиа");mediaOnly.setTextColor(FG);mediaOnly.setTextSize(12);
                 mediaOnly.setChecked(onlyMedia);searchArea.addView(mediaOnly,p(-1,39));
+                Button resetFilters=btn("Сбросить фильтры");resetFilters.setContentDescription("Сбросить фильтры поиска");
+                searchArea.addView(resetFilters,p(-1,48));resetFilters.setOnClickListener(v->resetSearchFilters());
                 TextView hint=text("Глубокий поиск ищет точное сочетание букв, даже внутри слова; может работать медленнее.",11,SUB);
                 hint.setPadding(px(7),0,0,px(6));searchArea.addView(hint,p(-1,-2));
             }else{
@@ -1860,14 +1867,25 @@ public class MainActivity extends Activity {
                     TextView filterNotice=text(applied,11,SUB);filterNotice.setPadding(px(7),px(4),px(7),px(4));
                     searchArea.addView(filterNotice,p(-1,-2));
                     Button reset=btn("Сбросить фильтры");reset.setContentDescription("Сбросить фильтры поиска");
-                    searchArea.addView(reset,p(-1,-2));
-                    reset.setOnClickListener(v->{byAuthor="";onlyMedia=false;applySearch();});
+                    searchArea.addView(reset,p(-1,48));
+                    reset.setOnClickListener(v->resetSearchFilters());
                 }
                 TextView hint=text("Быстрый поиск по словам и их началам. Нажми на результат, чтобы перейти в чат.",11,SUB);
                 hint.setPadding(px(7),0,0,px(4));searchArea.addView(hint,p(-1,-2));
             }
             searchInput.setOnEditorActionListener((v,action,event)->{applySearch();return true;});
         }
+    }
+    private void openWordSearchFromAnalytics(String word){
+        analyticsReturnScroll=scroll.getScrollY();searchReturnsToAnalytics=true;
+        q=word;byAuthor="";onlyMedia=false;deep=true;searchOffset=0;searchLoaded=PAGE;
+        returnScreen="analytics";screen="search";showPage();
+    }
+    private void resetSearchFilters(){
+        byAuthor="";onlyMedia=false;
+        if(authorInput!=null)authorInput.setText("");
+        if(mediaOnly!=null)mediaOnly.setChecked(false);
+        applySearch();
     }
     private void switchSearchMode(boolean nextDeep){
         // Persist visible filters before hiding their controls.
@@ -1904,7 +1922,7 @@ public class MainActivity extends Activity {
                 MessageDb.DateMatch found=db.nearestDate(y,m+1,d);
                 runOnUiThread(()->{
                     if(found.position<0){toast("В переписке нет сообщений с распознанной датой");return;}
-                    screen="chat";chatOffset=Math.max(0,found.position-5);highlightId=-1;returnScreen="";
+                    screen="chat";chatOffset=Math.max(0,found.position-5);highlightId=-1;returnScreen="";searchReturnsToAnalytics=false;
                     showPage();
                     if(!requested.equals(found.day))toast("Ближайшая дата переписки: "+found.day);
                 });
@@ -1942,7 +1960,7 @@ public class MainActivity extends Activity {
     @Override public void onBackPressed(){
         if("help".equals(screen)){leaveHelp();return;}
         if(floatingPanel!=null){closeFloatingRound();return;}
-        if(screen.equals("saved")||(!home&&returnScreen.isEmpty())){saveReadingProgress();home=true;screen="chat";bottomNav.setVisibility(View.VISIBLE);showPage();return;}if(!returnScreen.isEmpty()){restoreReturn();return;}super.onBackPressed();}
+        if(screen.equals("saved")||(!home&&returnScreen.isEmpty())){saveReadingProgress();home=true;screen="chat";searchReturnsToAnalytics=false;bottomNav.setVisibility(View.VISIBLE);showPage();return;}if(!returnScreen.isEmpty()){restoreReturn();return;}super.onBackPressed();}
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
         if(request==PICK_FONT){
@@ -2254,7 +2272,7 @@ public class MainActivity extends Activity {
         for(ChatAnalytics.WordCount word:words){
             TextView entry=text("«"+word.word+"»  ·  "+word.count+" раз",14,FG);
             entry.setPadding(px(6),px(6),px(4),px(6));terms.addView(entry);
-            entry.setOnClickListener(v->{q=word.word;deep=true;searchOffset=0;screen="search";showPage();});
+            entry.setOnClickListener(v->openWordSearchFromAnalytics(word.word));
         }
         if(words.isEmpty())analyticsText(terms,"Пока нет текстовых сообщений.",SUB,13);
         if(!r.days.isEmpty()){
@@ -2459,6 +2477,7 @@ public class MainActivity extends Activity {
     /** Six four-hour columns, all seven weekdays: every cell shows message counts, not only colours. */
     private void analyticsHeatmap(LinearLayout parent,ChatTrends.Activity activity){
         analyticsText(parent,"Столбцы обозначают ВРЕМЯ: 00–03 означает от 00:00 до 03:59. " +
+            "Время — как в экспорте, без пересчёта пояса. " +
             "В каждой клетке указано ЧИСЛО сообщений, а не цветовой балл. " +
             "Для отдельных часов используй график «Когда пишут» выше.",SUB,12);
         long[][] counts=new long[7][6];long max=0;
@@ -4222,8 +4241,13 @@ public class MainActivity extends Activity {
         String target=returnScreen;
         closeFloatingRound();stopPlayback();
         returnScreen="";highlightId=-1;screen=target;home=false;
-        if("search".equals(target)){pendingSearchScroll=searchReturnScroll;searchReturnScroll=-1;}
-        if("analytics".equals(target)){pendingAnalyticsScroll=analyticsReturnScroll;analyticsReturnScroll=-1;}
+        if("search".equals(target)){
+            pendingSearchScroll=searchReturnScroll;searchReturnScroll=-1;
+            if(searchReturnsToAnalytics)returnScreen="analytics";
+        }
+        if("analytics".equals(target)){
+            pendingAnalyticsScroll=analyticsReturnScroll;analyticsReturnScroll=-1;searchReturnsToAnalytics=false;
+        }
         autoFloating=false;showPage();
     }
 

@@ -52,8 +52,10 @@ jobs:
             adb shell wm density 320
             adb shell settings put system font_scale 1.3
             mkdir -p qa-output
-            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.PinnedFocusNavigationRegressionTest#searchButtonsSubmitAndClearText,org.openarchive.telegram.RelationshipAnalyticsExplanationUiTest#analyticsUsesDpOnceAndCapturesSyntheticScreen'
+            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.PinnedFocusNavigationRegressionTest#searchButtonsSubmitAndClearText,org.openarchive.telegram.PinnedFocusNavigationRegressionTest#deepSearchResetClearsFiltersWithoutClearingQuery,org.openarchive.telegram.RelationshipAnalyticsExplanationUiTest#analyticsUsesDpOnceAndCapturesSyntheticScreen'
             adb pull /sdcard/Download/ta_synthetic_search.png qa-output/search-narrow-large-font.png
+            adb pull /sdcard/Download/ta_synthetic_deep_search.png qa-output/deep-search-narrow-large-font.png
+            test -s qa-output/deep-search-narrow-large-font.png
             adb pull /sdcard/Download/ta_synthetic_analytics.png qa-output/analytics-narrow-large-font.png
             test -s qa-output/search-narrow-large-font.png
             test -s qa-output/analytics-narrow-large-font.png

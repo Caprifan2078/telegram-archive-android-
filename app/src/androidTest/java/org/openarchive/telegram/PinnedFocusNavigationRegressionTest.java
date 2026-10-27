@@ -264,6 +264,89 @@ public class PinnedFocusNavigationRegressionTest {
         }
     }
 
+    @Test public void analyticsWordSearchReturnsThroughMessageToAnalytics()throws Exception{
+        Instrumentation inst=InstrumentationRegistry.getInstrumentation();MainActivity a=activity.getActivity();
+        Context ctx=inst.getTargetContext();ExecutorService worker=(ExecutorService)get(a,"worker");barrier(worker);inst.waitForIdleSync();
+        String key="wordroundtrip_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb fresh=new MessageDb(ctx,key),previous=(MessageDb)get(a,"db");
+        String oldKey=(String)get(a,"activeKey"),oldScreen=(String)get(a,"screen"),oldAuthor=(String)get(a,"byAuthor");
+        String oldQuery=(String)get(a,"q"),oldReturn=(String)get(a,"returnScreen");
+        boolean oldHome=(boolean)get(a,"home"),oldDeep=(boolean)get(a,"deep"),oldMedia=(boolean)get(a,"onlyMedia");
+        boolean oldParent=(boolean)get(a,"searchReturnsToAnalytics");
+        try{
+            SQLiteDatabase sql=fresh.getWritableDatabase();long id=fresh.stage(sql,"Alice","2024-01-01","magicword synthetic",null,"");fresh.publishStaged(sql);
+            inst.runOnMainSync(()->{try{
+                set(a,"db",fresh);set(a,"activeKey",key);set(a,"home",false);set(a,"screen","analytics");
+                set(a,"byAuthor","Bob");set(a,"onlyMedia",true);
+                Method show=MainActivity.class.getDeclaredMethod("showPage");show.setAccessible(true);show.invoke(a);
+            }catch(Exception e){throw new AssertionError(e);}});
+            barrier(worker);inst.waitForIdleSync();
+            inst.runOnMainSync(()->{try{
+                Method open=MainActivity.class.getDeclaredMethod("openWordSearchFromAnalytics",String.class);
+                open.setAccessible(true);open.invoke(a,"magicword");
+            }catch(Exception e){throw new AssertionError(e);}});
+            barrier(worker);inst.waitForIdleSync();
+            assertEquals("search",get(a,"screen"));assertEquals("",get(a,"byAuthor"));assertEquals(false,get(a,"onlyMedia"));
+            assertEquals("analytics",get(a,"returnScreen"));
+            inst.runOnMainSync(()->{try{
+                assertNotNull(described((android.view.View)get(a,"searchArea"),"Вернуться к анализу"));
+                Method jump=MainActivity.class.getDeclaredMethod("jump",long.class,String.class);jump.setAccessible(true);jump.invoke(a,id,"search");
+            }catch(Exception e){throw new AssertionError(e);}});
+            barrier(worker);inst.waitForIdleSync();barrier(worker);inst.waitForIdleSync();
+            assertEquals("chat",get(a,"screen"));
+            inst.runOnMainSync(()->{try{
+                Method back=MainActivity.class.getDeclaredMethod("restoreReturn");back.setAccessible(true);back.invoke(a);
+            }catch(Exception e){throw new AssertionError(e);}});
+            barrier(worker);inst.waitForIdleSync();
+            assertEquals("search",get(a,"screen"));assertEquals("analytics",get(a,"returnScreen"));assertEquals("magicword",get(a,"q"));
+            inst.runOnMainSync(()->{try{
+                Method back=MainActivity.class.getDeclaredMethod("restoreReturn");back.setAccessible(true);back.invoke(a);
+            }catch(Exception e){throw new AssertionError(e);}});
+            barrier(worker);inst.waitForIdleSync();assertEquals("analytics",get(a,"screen"));
+        }finally{
+            barrier(worker);inst.runOnMainSync(()->{try{
+                set(a,"db",previous);set(a,"activeKey",oldKey);set(a,"screen",oldScreen);set(a,"home",oldHome);
+                set(a,"deep",oldDeep);set(a,"onlyMedia",oldMedia);set(a,"byAuthor",oldAuthor);set(a,"q",oldQuery);
+                set(a,"returnScreen",oldReturn);set(a,"searchReturnsToAnalytics",oldParent);
+            }catch(Exception e){throw new AssertionError(e);}});
+            fresh.close();ctx.deleteDatabase("telegram_"+key+".db");
+        }
+    }
+
+    @Test public void deepSearchResetClearsFiltersWithoutClearingQuery()throws Exception{
+        Instrumentation inst=InstrumentationRegistry.getInstrumentation();MainActivity a=activity.getActivity();
+        Context ctx=inst.getTargetContext();ExecutorService worker=(ExecutorService)get(a,"worker");barrier(worker);inst.waitForIdleSync();
+        String key="deepreset_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb fresh=new MessageDb(ctx,key),previous=(MessageDb)get(a,"db");
+        String oldKey=(String)get(a,"activeKey"),oldScreen=(String)get(a,"screen"),oldAuthor=(String)get(a,"byAuthor"),oldQuery=(String)get(a,"q");
+        boolean oldHome=(boolean)get(a,"home"),oldDeep=(boolean)get(a,"deep"),oldMedia=(boolean)get(a,"onlyMedia");
+        try{
+            inst.runOnMainSync(()->{try{
+                set(a,"db",fresh);set(a,"activeKey",key);set(a,"home",false);set(a,"screen","search");
+                set(a,"deep",true);set(a,"byAuthor","Alice");set(a,"onlyMedia",true);set(a,"q","example");
+                Method show=MainActivity.class.getDeclaredMethod("showPage");show.setAccessible(true);show.invoke(a);
+            }catch(Exception e){throw new AssertionError(e);}});
+            barrier(worker);inst.waitForIdleSync();
+            try(android.os.ParcelFileDescriptor shell=inst.getUiAutomation().executeShellCommand(
+                    "screencap -p /sdcard/Download/ta_synthetic_deep_search.png");
+                java.io.FileInputStream output=new java.io.FileInputStream(shell.getFileDescriptor())){
+                byte[] drain=new byte[1024];while(output.read(drain)!=-1){}
+            }
+            inst.runOnMainSync(()->{try{
+                android.view.View reset=described((android.view.View)get(a,"searchArea"),"Сбросить фильтры поиска");
+                assertNotNull(reset);assertTrue(reset.performClick());
+            }catch(Exception e){throw new AssertionError(e);}});
+            barrier(worker);inst.waitForIdleSync();
+            assertEquals("",get(a,"byAuthor"));assertEquals(false,get(a,"onlyMedia"));assertEquals("example",get(a,"q"));
+        }finally{
+            barrier(worker);inst.runOnMainSync(()->{try{
+                set(a,"db",previous);set(a,"activeKey",oldKey);set(a,"screen",oldScreen);set(a,"home",oldHome);
+                set(a,"deep",oldDeep);set(a,"onlyMedia",oldMedia);set(a,"byAuthor",oldAuthor);set(a,"q",oldQuery);
+            }catch(Exception e){throw new AssertionError(e);}});
+            fresh.close();ctx.deleteDatabase("telegram_"+key+".db");
+        }
+    }
+
     @Test public void quickSearchShowsAndCanResetHiddenDeepFilters()throws Exception{
         Instrumentation inst=InstrumentationRegistry.getInstrumentation();MainActivity a=activity.getActivity();
         Context ctx=inst.getTargetContext();ExecutorService worker=(ExecutorService)get(a,"worker");barrier(worker);inst.waitForIdleSync();
