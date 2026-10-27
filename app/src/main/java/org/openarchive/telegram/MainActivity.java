@@ -946,7 +946,7 @@ public class MainActivity extends Activity {
         sideMenuItem(items,dialog,pane,"📝  Личные заметки","Заметки из разных переписок",()->{
             home=false;screen="saved";renderSaved();});
         sideMenuSection(items,"Архивы и резервные копии",false,group->{
-            sideMenuItem(group,dialog,pane,"＋  Импортировать чат","Папка Telegram, ZIP или RAR",this::chooseFolder);
+            sideMenuItem(group,dialog,pane,"＋  Импортировать чат","Папка Telegram, ZIP, 7z или RAR",this::chooseFolder);
             sideMenuItem(group,dialog,pane,"⇧  Создать резервную копию","Чаты, настройки и при выборе — медиа",this::backupPicker);
             sideMenuItem(group,dialog,pane,"✓  Проверить копию","Контроль целостности без изменений",this::verifyBackupPicker);
             sideMenuItem(group,dialog,pane,"◈  Пробное восстановление","Тест без изменения переписок",this::dryRunPicker);
@@ -1981,7 +1981,7 @@ public class MainActivity extends Activity {
     }
     private void chooseFolder(){
         new FontDialog.Builder(this).setTitle("Добавить переписку").setItems(
-            new String[]{"Выбрать папку Telegram","Импортировать Telegram ZIP / RAR","Просмотреть файл или архив · 7z / ZIP / RAR / Office"},
+            new String[]{"Выбрать папку Telegram","Импортировать Telegram ZIP / 7z / RAR","Просмотреть файл или архив · 7z / ZIP / RAR / Office"},
             (d,selected)->{if(selected==0)chooseExistingFolder();else if(selected==1)chooseCompressedArchive();else chooseReadOnlyPreview();}).show();
     }
     private void chooseReadOnlyPreview(){
@@ -2100,18 +2100,18 @@ public class MainActivity extends Activity {
                 if(c!=null&&c.moveToFirst())name=c.getString(0);
             }catch(Exception ignored){}
             String low=name==null?"":name.toLowerCase(Locale.ROOT);
-            String ext=low.endsWith(".rar")?"rar":low.endsWith(".zip")?"zip":"";
-            if(ext.isEmpty()){toast("Нужен ZIP или RAR");return;}
+            String ext=low.endsWith(".rar")?"rar":low.endsWith(".zip")?"zip":low.endsWith(".7z")?"7z":"";
+            if(ext.isEmpty()){toast("Нужен ZIP, 7z или RAR");return;}
             final String displayName=name;
             EditText archivePassword=new EditText(this);archivePassword.setSingleLine(true);
-            archivePassword.setHint("Пароль ZIP, если есть");
+            archivePassword.setHint("Пароль архива, если есть");
             archivePassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
             FontDialog.Builder confirm=new FontDialog.Builder(this);
             confirm.setTitle("Импорт "+displayName).setMessage("Архив распакуется во внутреннюю папку приложения. Для медиа потребуется свободное место."+
                     ("rar".equals(ext)?" Импорт RAR с паролем пока не поддерживается.":""));
-            if("zip".equals(ext))confirm.setView(archivePassword);
+            if("zip".equals(ext)||"7z".equals(ext))confirm.setView(archivePassword);
             confirm.setNegativeButton("Отмена",null).setPositiveButton("Импортировать",(d,w)->{
-                char[] password="zip".equals(ext)?archivePassword.getText().toString().toCharArray():null;
+                char[] password=("zip".equals(ext)||"7z".equals(ext))?archivePassword.getText().toString().toCharArray():null;
                 importCompressed(source,ext,displayName,password);
                 archivePassword.setText("");
             }).show();

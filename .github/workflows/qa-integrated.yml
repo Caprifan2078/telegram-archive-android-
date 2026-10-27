@@ -4,8 +4,11 @@ on:
   push:
     branches:
       - qa/v052-duplicate-id-safety-20261026
+      - qa/backup-android15-safety-20261027
     paths:
       - '.github/workflows/qa-integrated.yml'
+      - 'app/src/main/java/org/openarchive/telegram/ArchiveBackup.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/BackupIntegrityAndroid15RegressionTest.java'
 permissions:
   contents: read
 concurrency:

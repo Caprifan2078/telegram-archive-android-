@@ -41,11 +41,13 @@ final class ArchiveFileImport {
             if("zip".equalsIgnoreCase(suffix)){
                 if(password!=null&&password.length>0)extractZipWithPassword(ctx,uri,root,password,budget,progress);
                 else extractZip(ctx,uri,root,budget,progress);
+            }else if("7z".equalsIgnoreCase(suffix)){
+                extractSevenZ(ctx,uri,root,password,budget,progress);
             }else if("rar".equalsIgnoreCase(suffix)){
                 if(password!=null&&password.length>0)throw new IOException("Импорт RAR с паролем пока не поддерживается");
                 extractRar(ctx,uri,root,budget,progress);
             }
-            else throw new IOException("Ожидался ZIP или RAR");
+            else throw new IOException("Ожидался ZIP, 7z или RAR");
             File selected=findChatRoot(root,0);
             if(selected==null)throw new IOException("В архиве не обнаружены messages.html или messages2.html. Экспортируй чат Telegram в формате HTML");
             progress.update("Распаковано файлов: "+budget.count+"; найден экспорт Telegram");
@@ -118,6 +120,37 @@ final class ArchiveFileImport {
                         int count;while((count=zip.read(bytes))!=-1){
                             written+=count;budget.add(count,written);
                             out.write(bytes,0,count);
+                        }
+                    }
+                    emit(budget,progress);
+                }
+            }
+        }
+    }
+    private static void extractSevenZ(Context ctx,Uri uri,File root,char[] password,
+            Budget budget,Progress progress)throws Exception{
+        try(android.os.ParcelFileDescriptor descriptor=ctx.getContentResolver().openFileDescriptor(uri,"r")){
+            if(descriptor==null)throw new IOException("Нет доступа к 7z");
+            try(FileInputStream input=new FileInputStream(descriptor.getFileDescriptor());
+                org.apache.commons.compress.archivers.sevenz.SevenZFile archive=
+                    org.apache.commons.compress.archivers.sevenz.SevenZFile.builder()
+                        .setSeekableByteChannel(input.getChannel()).setPassword(password)
+                        .setMaxMemoryLimitKiB(131072).get()){
+                org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry entry;
+                byte[] bytes=new byte[128*1024];
+                while((entry=archive.getNextEntry())!=null){
+                    String name=entry.getName();budget.next(name==null?"":name);
+                    BackupEntryPolicy.requireSafe(name,entry.isDirectory());
+                    if(entry.isDirectory())continue;
+                    if(entry.getSize()>MAX_ENTRY)throw new IOException("7z содержит слишком большой файл");
+                    File target=safeFile(root,name);
+                    File parent=target.getParentFile();
+                    if(!parent.isDirectory()&&!parent.mkdirs())throw new IOException("Не создана папка 7z");
+                    if(target.exists())throw new IOException("Повторное имя в 7z");
+                    long written=0;
+                    try(OutputStream out=new BufferedOutputStream(new FileOutputStream(target))){
+                        int count;while((count=archive.read(bytes))!=-1){
+                            written+=count;budget.add(count,written);out.write(bytes,0,count);
                         }
                     }
                     emit(budget,progress);

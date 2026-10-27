@@ -100,14 +100,28 @@ final class ArchiveBackup {
         files.put(entry.getName(),temp);hashes.put(entry.getName(),hex(sha.digest()));
         return temp;
     }
-    private static void verifyDb(File path,String table) throws Exception{
-        SQLiteDatabase db=SQLiteDatabase.openDatabase(path.getAbsolutePath(),null,SQLiteDatabase.OPEN_READONLY);
+    static void verifyDb(File path,String table) throws Exception{
+        // Newer SQLite versions run the FTS integrity command as part of quick_check.
+        // That command needs write access even when it only validates an index.
+        // Never open the authenticated staged backup for writing: validate a private
+        // throwaway copy and restore the original bytes after verification.
+        File check=File.createTempFile("ta-db-check-", ".sqlite",path.getParentFile());
         try{
-            try(Cursor c=db.rawQuery("PRAGMA quick_check",null)){
-                if(!c.moveToFirst()||!"ok".equalsIgnoreCase(c.getString(0)))throw new IOException("Повреждена база в резервной копии");
+            try(InputStream in=new BufferedInputStream(new FileInputStream(path));
+                OutputStream out=new BufferedOutputStream(new FileOutputStream(check))){
+                copy(in,out,null,MAX_DB_BYTES);
             }
-            try(Cursor c=db.rawQuery("SELECT 1 FROM "+table+" LIMIT 1",null)){} // schema presence
-        }finally{db.close();}
+            SQLiteDatabase db=SQLiteDatabase.openDatabase(check.getAbsolutePath(),null,SQLiteDatabase.OPEN_READWRITE);
+            try{
+                try(Cursor c=db.rawQuery("PRAGMA quick_check",null)){
+                    if(!c.moveToFirst()||!"ok".equalsIgnoreCase(c.getString(0)))
+                        throw new IOException("Повреждена база в резервной копии");
+                }
+                try(Cursor c=db.rawQuery("SELECT 1 FROM "+table+" LIMIT 1",null)){}
+            }finally{db.close();}
+        }finally{
+            SQLiteDatabase.deleteDatabase(check);
+        }
     }
     private static void verifyRecord(JSONObject rec,Map<String,File> files,Map<String,String> sha) throws Exception{
         String name=rec.getString("file");File file=files.get(name);
