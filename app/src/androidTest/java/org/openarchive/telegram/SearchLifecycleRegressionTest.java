@@ -91,4 +91,52 @@ public class SearchLifecycleRegressionTest {
             assertTrue(edit.commit());
         }
     }
+    @Test public void recreationReturnsToVisibleMessageInLongChat()throws Exception{
+        Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key="chatrotation_"+UUID.randomUUID().toString().replace("-","");
+        String name=new android.content.ComponentName(ctx,MainActivity.class).getShortClassName();
+        if(name.startsWith("."))name=name.substring(1);
+        SharedPreferences prefs=ctx.getSharedPreferences(name,Context.MODE_PRIVATE);
+        boolean hadRegistry=prefs.contains("archive_registry"),hadActive=prefs.contains("active_archive");
+        String registry=prefs.getString("archive_registry","[]"),active=prefs.getString("active_archive","default");
+        MessageDb db=new MessageDb(ctx,key);
+        try{
+            SQLiteDatabase sql=db.getWritableDatabase();sql.beginTransaction();
+            try{
+                for(int i=0;i<80;i++)db.stage(sql,"Alice","2024-02-29 12:00","Synthetic chat message "+i,null,"");
+                sql.setTransactionSuccessful();
+            }finally{sql.endTransaction();}
+            db.publishStaged(sql);db.close();
+            JSONArray chats=new JSONArray().put(new JSONObject().put("key",key).put("name","Synthetic").put("tree",""));
+            assertTrue(prefs.edit().putString("archive_registry",chats.toString()).putString("active_archive",key).commit());
+            try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
+                scenario.onActivity(a->{try{
+                    set(a,"home",false);set(a,"screen","chat");set(a,"chatOffset",0);set(a,"autoLoaded",80);
+                    Method show=MainActivity.class.getDeclaredMethod("showPage");show.setAccessible(true);show.invoke(a);
+                }catch(Exception e){throw new AssertionError(e);}});
+                settle(scenario);settle(scenario);
+                final long[] messageId={-1};final int[] top={0};
+                scenario.onActivity(a->{try{
+                    ScrollView view=(ScrollView)get(a,"scroll");view.scrollTo(0,view.getChildAt(0).getHeight()/2);
+                    Method save=MainActivity.class.getDeclaredMethod("saveReadingProgress");save.setAccessible(true);save.invoke(a);
+                    messageId[0]=(long)get(a,"lastVisibleMessage");top[0]=(int)get(a,"lastVisibleTop");
+                    assertTrue("A synthetic message should be visible",messageId[0]>0);
+                }catch(Exception e){throw new AssertionError(e);}});
+                scenario.recreate();settle(scenario);settle(scenario);
+                scenario.onActivity(a->{try{
+                    @SuppressWarnings("unchecked") java.util.Map<Long,android.view.View> views=
+                        (java.util.Map<Long,android.view.View>)get(a,"renderedMessageViews");
+                    android.view.View restored=views.get(messageId[0]);assertNotNull("Visible message must remain loaded",restored);
+                    int actual=restored.getTop()-((ScrollView)get(a,"scroll")).getScrollY();
+                    assertTrue("Visible message position changed: "+top[0]+" -> "+actual,Math.abs(actual-top[0])<=8);
+                }catch(Exception e){throw new AssertionError(e);}});
+            }
+        }finally{
+            db.close();ctx.deleteDatabase("telegram_"+key+".db");
+            SharedPreferences.Editor edit=prefs.edit();
+            if(hadRegistry)edit.putString("archive_registry",registry);else edit.remove("archive_registry");
+            if(hadActive)edit.putString("active_archive",active);else edit.remove("active_archive");
+            assertTrue(edit.commit());
+        }
+    }
 }

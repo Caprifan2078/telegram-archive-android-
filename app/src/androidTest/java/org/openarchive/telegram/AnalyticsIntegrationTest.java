@@ -84,4 +84,19 @@ public class AnalyticsIntegrationTest {
             assertTrue(r.people.isEmpty());assertTrue(r.days.isEmpty());assertEquals(0,r.trends.all.validDate);
         }finally{db.close();ctx.deleteDatabase("telegram_"+key+".db");}
     }
+    @Test public void unicodeWordsTreatCombiningMarksAsPartOfWord(){
+        Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key=UUID.randomUUID().toString().replace("-","");MessageDb db=new MessageDb(ctx,key);
+        try{
+            SQLiteDatabase sql=db.getWritableDatabase();
+            db.stage(sql,"Synthetic","2024-01-01","ёж е\u0308ж किताब",null,"");
+            db.publishStaged(sql);ChatAnalytics.Snapshot r=db.analytics();
+            assertEquals(3,r.totalWords);
+            long hedgehog=0,hindi=0;for(ChatAnalytics.WordCount word:r.topWords){
+                if(word.word.equals("ёж"))hedgehog=word.count;
+                if(word.word.equals("किताब"))hindi=word.count;
+            }
+            assertEquals(2,hedgehog);assertEquals(1,hindi);
+        }finally{db.close();ctx.deleteDatabase("telegram_"+key+".db");}
+    }
 }

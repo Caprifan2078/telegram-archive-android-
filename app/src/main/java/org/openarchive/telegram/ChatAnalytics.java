@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
 
 /** Read-only, offline chat statistics. No Android dependencies, telemetry or persisted text. */
 final class ChatAnalytics {
-    private static final Pattern WORD=Pattern.compile("[\\p{L}\\p{N}]+(?:['’\\-][\\p{L}\\p{N}]+)*");
+    private static final Pattern WORD=Pattern.compile("[\\p{L}\\p{N}][\\p{L}\\p{N}\\p{M}]*(?:['’\\-][\\p{L}\\p{N}][\\p{L}\\p{N}\\p{M}]*)*");
     private static final Pattern ISO=Pattern.compile("^(\\d{4}-\\d{2}-\\d{2})");
     private static final Pattern RU_DATE=Pattern.compile("^(\\d{2})\\.(\\d{2})\\.(\\d{4})(?:\\D|$)");
     private static final int MAX_DICTIONARY=120_000;
@@ -98,7 +98,7 @@ final class ChatAnalytics {
             // Count Unicode code points rather than UTF-16 units (emoji count as one).
             long characters=text.codePointCount(0,text.length());
             charCount+=characters;person.characters+=characters;
-            Matcher matcher=WORD.matcher(text);
+            Matcher matcher=WORD.matcher(Normalizer.normalize(text,Normalizer.Form.NFKC));
             while(matcher.find()){
                 String token=Normalizer.normalize(matcher.group(),Normalizer.Form.NFKC).toLowerCase(Locale.ROOT);
                 if(token.isEmpty())continue;

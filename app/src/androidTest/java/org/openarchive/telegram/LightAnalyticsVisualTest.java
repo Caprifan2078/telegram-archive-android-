@@ -18,6 +18,17 @@ import static org.junit.Assert.*;
 @RunWith(AndroidJUnit4.class)
 public class LightAnalyticsVisualTest {
     @Rule public ActivityTestRule<MainActivity> activity=new ActivityTestRule<>(MainActivity.class,true,false);
+    private static android.widget.TextView findTextWithDescription(android.view.View root,String prefix){
+        if(root instanceof android.widget.TextView&&root.getContentDescription()!=null&&
+            root.getContentDescription().toString().startsWith(prefix))return (android.widget.TextView)root;
+        if(root instanceof android.view.ViewGroup){
+            android.view.ViewGroup group=(android.view.ViewGroup)root;
+            for(int i=0;i<group.getChildCount();i++){
+                android.widget.TextView found=findTextWithDescription(group.getChildAt(i),prefix);if(found!=null)return found;
+            }
+        }
+        return null;
+    }
     @Test public void lightThemeHeatmapRemainsReadable()throws Exception{
         Instrumentation inst=InstrumentationRegistry.getInstrumentation();
         Context ctx=inst.getTargetContext();
@@ -37,6 +48,23 @@ public class LightAnalyticsVisualTest {
                 LinearLayout card=new LinearLayout(a);card.setOrientation(LinearLayout.VERTICAL);list.addView(card);
                 Method heat=MainActivity.class.getDeclaredMethod("analyticsHeatmap",LinearLayout.class,ChatTrends.Activity.class);
                 heat.setAccessible(true);heat.invoke(a,card,data);
+                LinearLayout firstRow=(LinearLayout)card.getChildAt(2);
+                android.widget.TextView zero=(android.widget.TextView)firstRow.getChildAt(2);
+                android.widget.TextView high=(android.widget.TextView)firstRow.getChildAt(1);
+                assertTrue("Light-theme empty cell must have readable text",
+                    AnalyticsContrastPolicy.contrast(0xff293449,zero.getCurrentTextColor())>=4.5);
+                assertTrue("Light-theme active cell must have readable text",
+                    AnalyticsContrastPolicy.contrast(0xffed744b,high.getCurrentTextColor())>=4.5);
+                data.days.put(java.time.LocalDate.of(2024,2,29),1L);
+                Field year=MainActivity.class.getDeclaredField("analyticsCalendarYear");year.setAccessible(true);year.setInt(a,2024);
+                Method calendar=MainActivity.class.getDeclaredMethod("renderAnnualCalendar",ChatTrends.Activity.class);
+                calendar.setAccessible(true);calendar.invoke(a,data);
+                android.widget.TextView emptyDay=findTextWithDescription(list,"2024-02-01:");
+                assertNotNull("Empty calendar day must be accessible",emptyDay);
+                assertTrue("Light-theme empty calendar day must be readable",
+                    AnalyticsContrastPolicy.contrast(0xff293449,emptyDay.getCurrentTextColor())>=4.5);
+                assertTrue("Light status bar must request dark icons",
+                    (a.getWindow().getDecorView().getSystemUiVisibility()&android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR)!=0);
             }catch(Exception e){throw new AssertionError(e);}});
             inst.waitForIdleSync();
             try(android.os.ParcelFileDescriptor shell=inst.getUiAutomation().executeShellCommand(

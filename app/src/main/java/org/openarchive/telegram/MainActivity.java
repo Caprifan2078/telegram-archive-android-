@@ -218,7 +218,7 @@ public class MainActivity extends Activity {
         mine=getPreferences(MODE_PRIVATE).getString("mine","");
         String old=activeTree();
         if(old!=null)try{folder=old.startsWith("local:")?new DocumentFolder(getContentResolver(),new java.io.File(old.substring(6))):new DocumentFolder(getContentResolver(),Uri.parse(old));}catch(Exception ignored){}
-        createUi();
+        createUi();applySystemBarAppearance();
         // createUi builds bars once; restore unsent edits for the final showPage build.
         if(state!=null){
             restoredQueryDraft=state.getString("ta_search_draft");
@@ -281,8 +281,18 @@ public class MainActivity extends Activity {
         }
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
+        applySystemBarAppearance();
+    }
+    private void applySystemBarAppearance(){
         int flags=themeIndex==2?View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR:0;
         getWindow().getDecorView().setSystemUiVisibility(flags);
+        if(Build.VERSION.SDK_INT>=30){
+            WindowInsetsController controller=getWindow().getInsetsController();
+            if(controller!=null){
+                int mask=WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                controller.setSystemBarsAppearance(themeIndex==2?mask:0,mask);
+            }
+        }
     }
     private int memoryClassMb(){
         android.app.ActivityManager manager=(android.app.ActivityManager)getSystemService(Context.ACTIVITY_SERVICE);
@@ -2540,7 +2550,7 @@ public class MainActivity extends Activity {
                 final int d=day,b=block;final long amount=counts[day][block];
                 int heatBackground=analyticsHeatColor(max==0?0:(float)amount/max);
                 TextView square=text(analyticsShortCount(amount),11,
-                    AnalyticsContrastPolicy.readableTextColor(heatBackground,Color.BLACK,FG));
+                    AnalyticsContrastPolicy.readableTextColor(heatBackground,Color.BLACK,Color.WHITE));
                 square.setGravity(Gravity.CENTER);square.setSingleLine(true);
                 square.setBackground(shape(heatBackground,5));
                 LinearLayout.LayoutParams cell=new LinearLayout.LayoutParams(0,px(42),1f);
@@ -2594,7 +2604,7 @@ public class MainActivity extends Activity {
                     int dayBackground=amount==0?0xff293449:analyticsHeatColor(
                         Math.min(1f,(float)Math.sqrt(amount/Math.max(1.0,300.0))));
                     TextView cell=text(label,10,
-                        AnalyticsContrastPolicy.readableTextColor(dayBackground,Color.BLACK,FG));
+                        AnalyticsContrastPolicy.readableTextColor(dayBackground,Color.BLACK,Color.WHITE));
                     cell.setGravity(Gravity.CENTER);
                     if(valid)cell.setBackground(shape(dayBackground,5));
                     LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,px(42),1f);
