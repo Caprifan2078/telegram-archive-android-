@@ -7,6 +7,9 @@ on:
     paths:
       - '.github/workflows/android-expanded-features-qa.yml'
       - 'app/src/main/java/org/openarchive/telegram/MessageDb.java'
+      - 'app/src/main/java/org/openarchive/telegram/ChatAnalytics.java'
+      - 'app/src/main/java/org/openarchive/telegram/ChatTrends.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/AnalyticsIntegrationTest.java'
       - 'app/src/main/java/org/openarchive/telegram/ArchiveFileImport.java'
       - 'app/src/main/java/org/openarchive/telegram/ArchiveBackup.java'
       - 'app/src/main/java/org/openarchive/telegram/FullBackup.java'

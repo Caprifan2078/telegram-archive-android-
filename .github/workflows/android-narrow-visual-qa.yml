@@ -8,6 +8,7 @@ on:
       - 'app/src/main/java/org/openarchive/telegram/MainActivity.java'
       - 'app/src/androidTest/java/org/openarchive/telegram/RelationshipAnalyticsExplanationUiTest.java'
       - 'app/src/androidTest/java/org/openarchive/telegram/PinnedFocusNavigationRegressionTest.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/LightAnalyticsVisualTest.java'
   workflow_dispatch:
 permissions:
   contents: read
@@ -52,13 +53,15 @@ jobs:
             adb shell wm density 320
             adb shell settings put system font_scale 1.3
             mkdir -p qa-output
-            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.PinnedFocusNavigationRegressionTest#searchButtonsSubmitAndClearText,org.openarchive.telegram.PinnedFocusNavigationRegressionTest#deepSearchResetClearsFiltersWithoutClearingQuery,org.openarchive.telegram.RelationshipAnalyticsExplanationUiTest#analyticsUsesDpOnceAndCapturesSyntheticScreen'
+            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.PinnedFocusNavigationRegressionTest#searchButtonsSubmitAndClearText,org.openarchive.telegram.PinnedFocusNavigationRegressionTest#deepSearchResetClearsFiltersWithoutClearingQuery,org.openarchive.telegram.RelationshipAnalyticsExplanationUiTest#analyticsUsesDpOnceAndCapturesSyntheticScreen,org.openarchive.telegram.LightAnalyticsVisualTest#lightThemeHeatmapRemainsReadable'
             adb pull /sdcard/Download/ta_synthetic_search.png qa-output/search-narrow-large-font.png
             adb pull /sdcard/Download/ta_synthetic_deep_search.png qa-output/deep-search-narrow-large-font.png
             test -s qa-output/deep-search-narrow-large-font.png
             adb pull /sdcard/Download/ta_synthetic_analytics.png qa-output/analytics-narrow-large-font.png
             test -s qa-output/search-narrow-large-font.png
             test -s qa-output/analytics-narrow-large-font.png
+            adb pull /sdcard/Download/ta_synthetic_light_analytics.png qa-output/analytics-light-narrow-large-font.png
+            test -s qa-output/analytics-light-narrow-large-font.png
       - name: Save synthetic screen captures and reports
         if: always()
         uses: actions/upload-artifact@v4

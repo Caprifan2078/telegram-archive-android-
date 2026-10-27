@@ -2386,10 +2386,10 @@ public class MainActivity extends Activity {
             analyticsBarChart(controls,values.labels,values.details,values.values,
                 analyticsUnit.equals("day")?43:analyticsUnit.equals("week")?50:analyticsUnit.equals("month")?56:68,108);
             if(values.clipped)analyticsText(controls,"Показаны последние "+values.values.length+" периодов; более ранняя история скрыта только на графике.",SUB,11);
-            analyticsText(controls,"Сообщений на показанном участке: "+values.visibleCount+" · нажми на столбец для точного значения.",SUB,11);
+            analyticsText(controls,"Сообщений на показанном участке: "+values.visibleCount+" · точные значения указаны рядом с периодами.",SUB,11);
         }
         LinearLayout entire=analyticsCard("Вся история переписки · по годам");
-        analyticsText(entire,"От самого первого до последнего года экспорта. Это все годы, а не только последние 30. Нажми на столбец, чтобы узнать точное количество.",SUB,12);
+        analyticsText(entire,"От самого первого до последнего года экспорта. Это все годы, а не только последние 30. Точное количество указано рядом с каждым годом.",SUB,12);
         ChatTrends.Series fullHistory=ChatTrends.allTimeYears(activity);
         if(fullHistory.values.length>0){
             analyticsBarChart(entire,fullHistory.labels,fullHistory.details,fullHistory.values,38,120);
@@ -2407,7 +2407,7 @@ public class MainActivity extends Activity {
                     analyticsCalendarYear=latestYear-pos;refreshAnalyticsView();}).show();});
             ChatTrends.Series yearMonths=ChatTrends.twelveMonths(activity,year);
             analyticsBarChart(singleYear,yearMonths.labels,yearMonths.details,yearMonths.values,29,114);
-            analyticsText(singleYear,"Все месяцы с января по декабрь видны одновременно при масштабе 1×. Столбцы пропорциональны количеству сообщений.",SUB,11);
+            analyticsText(singleYear,"Перечислены все месяцы с января по декабрь; длина полосы показывает количество сообщений.",SUB,11);
         }
         LinearLayout hours=analyticsCard("Когда пишут · 00:00–24:00");
         analyticsText(hours,"Час отправки сообщения по исходной отметке времени, 00:00–23:59.",SUB,11);
