@@ -3,8 +3,11 @@ on:
   push:
     branches:
       - qa/v052-duplicate-id-safety-20261026
+      - qa/backup-android15-safety-20261027
     paths:
       - '.github/workflows/android-modern-compat-qa.yml'
+      - 'app/src/main/java/org/openarchive/telegram/ArchiveBackup.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/BackupIntegrityAndroid15RegressionTest.java'
       - 'app/src/main/java/org/openarchive/telegram/MessageDb.java'
       - 'app/src/main/java/org/openarchive/telegram/AttachmentPreviewActivity.java'
       - 'app/src/main/java/org/openarchive/telegram/ArchiveReadOnly.java'
@@ -58,7 +61,7 @@ jobs:
           emulator-boot-timeout: 420
           script: |
             mkdir -p qa-output
-            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.SearchLifecycleRegressionTest,org.openarchive.telegram.ImportRollbackRegressionTest,org.openarchive.telegram.EncryptedTelegramImportRegressionTest,org.openarchive.telegram.MissingMediaPlaybackRegressionTest,org.openarchive.telegram.TelegramReplyIntegrationTest,org.openarchive.telegram.ArchivePreviewIntegrationTest,org.openarchive.telegram.AttachmentPreviewScreenTest,org.openarchive.telegram.RarCompatibilityRegressionTest'
+            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.SearchLifecycleRegressionTest,org.openarchive.telegram.ImportRollbackRegressionTest,org.openarchive.telegram.EncryptedTelegramImportRegressionTest,org.openarchive.telegram.MissingMediaPlaybackRegressionTest,org.openarchive.telegram.TelegramReplyIntegrationTest,org.openarchive.telegram.ArchivePreviewIntegrationTest,org.openarchive.telegram.AttachmentPreviewScreenTest,org.openarchive.telegram.RarCompatibilityRegressionTest,org.openarchive.telegram.BackupIntegrityAndroid15RegressionTest,org.openarchive.telegram.ArchiveIntegrationTest,org.openarchive.telegram.PortableRestoreRegressionTest'
             adb logcat -d -t 400 > qa-output/emulator-log.txt || true
       - name: Save synthetic compatibility reports
         if: always()
