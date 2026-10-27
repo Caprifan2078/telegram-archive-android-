@@ -37,8 +37,10 @@ final class BackupVerifier {
         }finally{ArchiveFileImport.deleteTree(stage);}
     }
     private static void scanBackup(Context context,InputStream source,File stage,DryRun result,Progress progress)throws Exception {
-        boolean full=false;File inner=null;JSONObject manifest=null;
+        boolean full=false;File inner=null;JSONObject manifest=null,compactManifest=null;
         MediaIntegrity mediaHash=new MediaIntegrity();MediaIntegrity customHash=new MediaIntegrity();MediaIntegrity noteHash=new MediaIntegrity();long mediaBytes=0;int mediaFiles=0;
+        Map<String,Long> databaseLengths=new HashMap<>();
+        Map<String,String> databaseDigests=new HashMap<>();
         java.util.HashSet<String> entries=new java.util.HashSet<>();
         InputStream keep=new FilterInputStream(source){@Override public void close()throws IOException{}};
         try(ZipInputStream zip=new ZipInputStream(new BufferedInputStream(keep,128*1024))){
@@ -55,7 +57,9 @@ final class BackupVerifier {
                 if(media){mediaHash.begin(name);mediaFiles++;}
                 if(name.startsWith("note_files/"))noteHash.begin(name);
                 if(name.startsWith("custom/"))customHash.begin(name);
-                ByteArrayOutputStream fullManifestBytes=name.equals("full-manifest.json")?new ByteArrayOutputStream():null;
+                ByteArrayOutputStream fullManifestBytes=(name.equals("full-manifest.json")||name.equals("manifest.json"))?
+                    new ByteArrayOutputStream():null;
+                MessageDigest dbSha=database?MessageDigest.getInstance("SHA-256"):null;
                 if(innerMeta){full=true;inner=new File(stage,"metadata.zip");}
                 File extracted=database?new File(stage,name.replace('/','_')):innerMeta?inner:null;
                 if(extracted!=null){
@@ -63,11 +67,19 @@ final class BackupVerifier {
                         byte[] buf=new byte[65536];int n;long size=0;
                         while((n=zip.read(buf))!=-1){
                             size+=n;result.bytes+=n;
-                            if(size>3L*1024*1024*1024)throw new IOException("Временная база слишком велика");
+                            if(size>ArchiveBackup.MAX_DB_BYTES)throw new IOException("Временная база слишком велика");
+                            if(result.bytes>90L*1024*1024*1024)throw new IOException("Архив слишком велик");
+                            if(dbSha!=null)dbSha.update(buf,0,n);
                             out.write(buf,0,n);
                         }
                     }
-                    if(database)checkDatabase(extracted,name,result);
+                    if(database){
+                        databaseLengths.put(name,extracted.length());
+                        StringBuilder hex=new StringBuilder(64);
+                        for(byte b:dbSha.digest())hex.append(String.format(Locale.ROOT,"%02x",b&255));
+                        databaseDigests.put(name,hex.toString());
+                        checkDatabase(extracted,name,result);
+                    }
                 }else{
                     byte[] buf=new byte[65536];int n;
                     while((n=zip.read(buf))!=-1){
@@ -84,13 +96,34 @@ final class BackupVerifier {
                 if(media)mediaHash.end();
                 if(name.startsWith("custom/"))customHash.end();
                 if(name.startsWith("note_files/"))noteHash.end();
-                if(fullManifestBytes!=null)manifest=new JSONObject(fullManifestBytes.toString("UTF-8"));
+                if(fullManifestBytes!=null){
+                    JSONObject parsed=new JSONObject(fullManifestBytes.toString("UTF-8"));
+                    if(name.equals("manifest.json"))compactManifest=parsed;
+                    else manifest=parsed;
+                }
                 if(count%250==0)progress.onProgress("Пробное восстановление: "+count+" файлов");
             }
         }
         // ZIP parsing may stop before the encrypted stream's authenticated end marker.
         // Force an EOF read so tampered/truncated .tgar trailers cannot pass dry-run.
         byte[] trailer=new byte[128*1024];while(source.read(trailer)!=-1){}
+        if(!full){
+            // A valid SQLite file and ZIP CRC do not prove it is the DB listed in
+            // the authenticated compact manifest. Check its exact size and digest.
+            if(compactManifest==null||!"telegram-archive-metadata".equals(compactManifest.optString("format"))||
+                compactManifest.optInt("version")!=ArchiveBackup.VERSION)
+                throw new IOException("Некорректный манифест метаданных");
+            JSONArray chats=compactManifest.getJSONArray("chats");
+            if(chats.length()>1000)throw new IOException("Слишком много переписок");
+            Set<String> verified=new HashSet<>();
+            verifyCompactDb(compactManifest.getJSONObject("notes"),"db/notes.sqlite",
+                databaseLengths,databaseDigests,verified);
+            for(int i=0;i<chats.length();i++)
+                verifyCompactDb(chats.getJSONObject(i),"db/chat-"+i+".sqlite",
+                    databaseLengths,databaseDigests,verified);
+            if(verified.size()!=databaseLengths.size())
+                throw new IOException("Лишний файл базы данных вне манифеста");
+        }
         if(full){
             if(manifest==null||!"telegram-archive-full".equals(manifest.optString("format"))||manifest.optInt("version")!=2)throw new IOException("Некорректная полная резервная копия");
             if(manifest.getLong("files")!=mediaFiles||manifest.getLong("bytes")!=mediaBytes)throw new IOException("Неверные размеры или количество медиа");
@@ -103,7 +136,10 @@ final class BackupVerifier {
         if(result.chats==0)throw new IOException("Не найдены проверяемые переписки");
     }
     private static void checkDatabase(File file,String name,DryRun report)throws Exception{
-        SQLiteDatabase db=SQLiteDatabase.openDatabase(file.getAbsolutePath(),null,SQLiteDatabase.OPEN_READONLY);
+        // This file is an isolated throwaway cache copy, never the original backup
+        // or a user's live database. Android 15 FTS integrity_check can write to
+        // its index, so read-only handles incorrectly reject valid backups.
+        SQLiteDatabase db=SQLiteDatabase.openDatabase(file.getAbsolutePath(),null,SQLiteDatabase.OPEN_READWRITE);
         try{
             try(Cursor c=db.rawQuery("PRAGMA integrity_check",null)){
                 if(!c.moveToFirst()||!"ok".equalsIgnoreCase(c.getString(0)))throw new IOException("Повреждена база: "+name);
