@@ -73,8 +73,8 @@ final class OfficePreviewText {
                 if(++seen>MAX_PARTS)throw new IOException("В документе слишком много частей");
                 String name=entry.getName();
                 boolean keep=ext.equals("docx")&&name.equals("word/document.xml")
-                    ||ext.equals("xlsx")&&(name.equals("xl/sharedStrings.xml")||name.matches("xl/worksheets/sheet[0-9]+\\.xml"))
-                    ||ext.equals("pptx")&&name.matches("ppt/slides/slide[0-9]+\\.xml");
+                    ||ext.equals("xlsx")&&(name.equals("xl/sharedStrings.xml")||name.equals("xl/workbook.xml")||name.equals("xl/_rels/workbook.xml.rels")||name.matches("xl/worksheets/sheet[0-9]+\\.xml"))
+                    ||ext.equals("pptx")&&(name.equals("ppt/presentation.xml")||name.equals("ppt/_rels/presentation.xml.rels")||name.matches("ppt/slides/slide[0-9]+\\.xml"));
                 if(keep&&!entry.isDirectory()){
                     if(!partNames.add(name))throw new IOException("В документе повторяется часть: "+name);
                     byte[] bytes=limited(zip,ENTRY_LIMIT);
@@ -96,10 +96,11 @@ final class OfficePreviewText {
         if(parts.isEmpty())throw new IOException("Документ не содержит доступных для просмотра страниц");
         Collections.sort(parts,Comparator.comparingInt(OfficePreviewText::rankPart));
         if(ext.equals("xlsx"))return spreadsheets(parts);
+        if(ext.equals("pptx"))parts=ordered(parts,false);
         StringBuilder out=new StringBuilder();
         int count=0;
         for(Part part:parts){
-            if(ext.equals("pptx"))out.append("\n──── СЛАЙД ").append(++count).append(" ────\n");
+            if(ext.equals("pptx")){out.append("\n──── СЛАЙД ").append(++count);if(part.title!=null)out.append(" · ").append(part.title);out.append(" ────\n");}
             out.append(parse(part.data,null,false));
             if(out.length()>MAX_RESULT)throw new IOException("Слишком много текста для предпросмотра");
         }
@@ -119,15 +120,76 @@ final class OfficePreviewText {
             shared=handler.strings;break;
         }
         StringBuilder out=new StringBuilder();int number=0;
-        for(Part part:parts)if(part.name.contains("/worksheets/sheet")){
-            out.append("\n──── ЛИСТ ").append(++number).append(" ────\n");
+        for(Part part:ordered(parts,true)){
+            out.append("\n──── ЛИСТ ").append(++number);
+            if(part.title!=null&&!part.title.isEmpty())out.append(" · ").append(part.title);
+            out.append(" ────\n");
             out.append(parse(part.data,shared,true));
             if(out.length()>MAX_RESULT)throw new IOException("Слишком много ячеек для предпросмотра");
         }
         return out.length()==0?"Таблицы не найдены":out.toString().trim();
     }
+    /** Respect the document's relationship order, never numeric ZIP member order. */
+    private static List<Part> ordered(List<Part> parts,boolean workbook)throws Exception{
+        String root=workbook?"xl/workbook.xml":"ppt/presentation.xml";
+        String relpath=workbook?"xl/_rels/workbook.xml.rels":"ppt/_rels/presentation.xml.rels";
+        Part manifest=null,relationships=null;
+        for(Part p:parts){if(p.name.equals(root))manifest=p;if(p.name.equals(relpath))relationships=p;}
+        if(manifest==null&&relationships==null){
+            // Legacy/minimal fixtures: order is unknown, so make the limitation visible.
+            List<Part> fallback=new ArrayList<>();
+            for(Part p:parts)if(workbook?p.name.startsWith("xl/worksheets/"):p.name.startsWith("ppt/slides/"))fallback.add(p);
+            if(!fallback.isEmpty())fallback.get(0).title="Порядок не подтверждён";
+            return fallback;
+        }
+        if(manifest==null||relationships==null)throw new IOException("В документе отсутствует информация о порядке страниц");
+        final List<String> ids=new ArrayList<>(),titles=new ArrayList<>();
+        sax(manifest.data,new DefaultHandler(){
+            @Override public void startElement(String u,String l,String q,Attributes a){
+                String t=tag(l,q);
+                if(!(workbook?t.equals("sheet"):t.equals("sldId")))return;
+                String id=a.getValue("r:id");
+                if(id==null)for(int i=0;i<a.getLength();i++)if(a.getQName(i).endsWith(":id")){id=a.getValue(i);break;}
+                ids.add(id);titles.add(workbook?a.getValue("name"):null);
+            }
+        });
+        final java.util.Map<String,String> targets=new java.util.HashMap<>();
+        sax(relationships.data,new DefaultHandler(){
+            @Override public void startElement(String u,String l,String q,Attributes a)throws org.xml.sax.SAXException{
+                if(!tag(l,q).equals("Relationship"))return;
+                String id=a.getValue("Id"),target=a.getValue("Target"),mode=a.getValue("TargetMode");
+                if(id==null||target==null||"External".equalsIgnoreCase(mode))return;
+                if(targets.put(id,target)!=null)throw new org.xml.sax.SAXException("Повторная связь страницы");
+            }
+        });
+        List<Part> result=new ArrayList<>();java.util.Set<String> seen=new java.util.HashSet<>();
+        for(int i=0;i<ids.size();i++){
+            String id=ids.get(i),target=targets.get(id);
+            if(id==null||target==null||!seen.add(id))throw new IOException("Некорректная ссылка на страницу документа");
+            String path=resolvePart(root,target);
+            Part found=null;for(Part p:parts)if(p.name.equals(path)){found=p;break;}
+            if(found==null)throw new IOException("Страница документа отсутствует или не поддерживается: "+path);
+            found.title=titles.get(i);result.add(found);
+        }
+        return result;
+    }
+    private static String resolvePart(String root,String target)throws IOException{
+        if(target.indexOf('\\')>=0||target.indexOf(':')>=0||target.indexOf('?')>=0||target.indexOf('#')>=0)
+            throw new IOException("Недопустимый путь части документа");
+        String path=target.startsWith("/")?target.substring(1):root.substring(0,root.lastIndexOf('/')+1)+target;
+        List<String> components=new ArrayList<>();
+        for(String item:path.split("/")){
+            if(item.isEmpty()||item.equals("."))continue;
+            if(item.equals("..")){if(components.isEmpty())throw new IOException("Недопустимый путь части документа");components.remove(components.size()-1);}
+            else components.add(item);
+        }
+        StringBuilder normalized=new StringBuilder();for(String c:components){if(normalized.length()>0)normalized.append('/');normalized.append(c);}
+        String result=normalized.toString();
+        if(!(result.startsWith("xl/worksheets/")||result.startsWith("ppt/slides/")))throw new IOException("Неподдерживаемая часть документа");
+        return result;
+    }
     private static final class Part{
-        final String name;final byte[] data;
+        final String name;final byte[] data;String title;
         Part(String n,byte[] b){name=n;data=b;}
     }
     private static String tag(String local,String qualified){

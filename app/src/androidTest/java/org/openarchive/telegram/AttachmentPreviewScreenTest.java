@@ -314,4 +314,24 @@ public class AttachmentPreviewScreenTest {
             });
         }finally{archive.delete();}
     }
+    private File copyOfficeFixture(String asset,String suffix)throws Exception{
+        File file=File.createTempFile("office-real-synthetic-",suffix,app.getCacheDir());
+        try(InputStream in=instrumentation.getContext().getAssets().open(asset);OutputStream out=new FileOutputStream(file)){
+            byte[] buf=new byte[8192];int n;while((n=in.read(buf))!=-1)out.write(buf,0,n);
+        }return file;
+    }
+    @Test public void actualWorkbookRespectsDocumentOrderOnAndroid()throws Exception{
+        File file=copyOfficeFixture("ordered-workbook.xlsx",".xlsx");
+        try{Intent i=new Intent(app,AttachmentPreviewActivity.class);i.setData(Uri.fromFile(file));i.putExtra("display_name","Тест.xlsx");screen.launchActivity(i);
+            awaitText("Груши");awaitText("Яблоки");String text=visibleText(screen.getActivity().findViewById(android.R.id.content));
+            assertTrue(text.indexOf("Второй")<text.indexOf("Первый"));assertTrue(text.indexOf("Груши")<text.indexOf("Яблоки"));
+        }finally{file.delete();}
+    }
+    @Test public void actualPresentationRespectsDocumentOrderOnAndroid()throws Exception{
+        File file=copyOfficeFixture("ordered-slides.pptx",".pptx");
+        try{Intent i=new Intent(app,AttachmentPreviewActivity.class);i.setData(Uri.fromFile(file));i.putExtra("display_name","Тест.pptx");screen.launchActivity(i);
+            awaitText("Конец");awaitText("Начало");String text=visibleText(screen.getActivity().findViewById(android.R.id.content));
+            assertTrue(text.indexOf("Конец")<text.indexOf("Начало"));
+        }finally{file.delete();}
+    }
 }

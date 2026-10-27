@@ -98,4 +98,30 @@ public class OfficePreviewTextTest {
         try{OfficePreviewText.render(new ByteArrayInputStream(bytes),"x.xlsx");fail("Duplicate sheet part must not appear as two sheets");}
         catch(java.io.IOException expected){assertTrue(expected.getMessage().contains("повторяется часть"));}
     }
+    private byte[] packageParts(String... values)throws Exception{
+        ByteArrayOutputStream out=new ByteArrayOutputStream();
+        try(ZipOutputStream zip=new ZipOutputStream(out)){
+            for(int i=0;i<values.length;i+=2){zip.putNextEntry(new ZipEntry(values[i]));zip.write(values[i+1].getBytes(StandardCharsets.UTF_8));zip.closeEntry();}
+        }return out.toByteArray();
+    }
+    @Test public void sheetOrderAndTitlesFollowWorkbookRelationships()throws Exception{
+        byte[] x=packageParts("xl/workbook.xml","<workbook xmlns:r='urn:r'><sheets><sheet name='Второй' r:id='r2'/><sheet name='Первый' r:id='r1'/></sheets></workbook>",
+            "xl/_rels/workbook.xml.rels","<Relationships><Relationship Id='r1' Target='worksheets/sheet1.xml'/><Relationship Id='r2' Target='worksheets/sheet2.xml'/></Relationships>",
+            "xl/worksheets/sheet1.xml","<worksheet><row><c r='A1'><v>1</v></c></row></worksheet>",
+            "xl/worksheets/sheet2.xml","<worksheet><row><c r='A1'><v>2</v></c></row></worksheet>");
+        String out=OfficePreviewText.render(new ByteArrayInputStream(x),"book.xlsx");
+        assertTrue(out.indexOf("Второй")<out.indexOf("Первый"));assertTrue(out.indexOf("A1: 2")<out.indexOf("A1: 1"));
+    }
+    @Test public void slideOrderFollowsPresentationRelationships()throws Exception{
+        byte[] x=packageParts("ppt/presentation.xml","<p:presentation xmlns:p='urn:p' xmlns:r='urn:r'><p:sldIdLst><p:sldId r:id='r2'/><p:sldId r:id='r1'/></p:sldIdLst></p:presentation>",
+            "ppt/_rels/presentation.xml.rels","<Relationships><Relationship Id='r1' Target='slides/slide1.xml'/><Relationship Id='r2' Target='slides/slide2.xml'/></Relationships>",
+            "ppt/slides/slide1.xml","<s><p><t>first</t></p></s>","ppt/slides/slide2.xml","<s><p><t>second</t></p></s>");
+        String out=OfficePreviewText.render(new ByteArrayInputStream(x),"book.pptx");assertTrue(out.indexOf("second")<out.indexOf("first"));
+    }
+    @Test public void externalPageRelationshipIsNeverLoaded()throws Exception{
+        byte[] x=packageParts("xl/workbook.xml","<workbook xmlns:r='urn:r'><sheet name='bad' r:id='r1'/></workbook>",
+          "xl/_rels/workbook.xml.rels","<Relationships><Relationship Id='r1' Target='https://example.invalid/sheet1.xml' TargetMode='External'/></Relationships>",
+          "xl/worksheets/sheet1.xml","<worksheet/>");
+        try{OfficePreviewText.render(new ByteArrayInputStream(x),"book.xlsx");fail("External targets must fail closed");}catch(java.io.IOException expected){}
+    }
 }
