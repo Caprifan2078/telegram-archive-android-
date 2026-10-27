@@ -5,6 +5,9 @@ on:
       - qa/v052-duplicate-id-safety-20261026
     paths:
       - '.github/workflows/android-narrow-visual-qa.yml'
+      - 'app/src/main/java/org/openarchive/telegram/MainActivity.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/RelationshipAnalyticsExplanationUiTest.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/PinnedFocusNavigationRegressionTest.java'
   workflow_dispatch:
 permissions:
   contents: read

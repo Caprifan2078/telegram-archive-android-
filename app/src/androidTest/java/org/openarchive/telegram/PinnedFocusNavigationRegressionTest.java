@@ -264,6 +264,35 @@ public class PinnedFocusNavigationRegressionTest {
         }
     }
 
+    @Test public void quickSearchShowsAndCanResetHiddenDeepFilters()throws Exception{
+        Instrumentation inst=InstrumentationRegistry.getInstrumentation();MainActivity a=activity.getActivity();
+        Context ctx=inst.getTargetContext();ExecutorService worker=(ExecutorService)get(a,"worker");barrier(worker);inst.waitForIdleSync();
+        String key="filtervisibility_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb fresh=new MessageDb(ctx,key),previous=(MessageDb)get(a,"db");
+        String oldKey=(String)get(a,"activeKey"),oldScreen=(String)get(a,"screen"),oldAuthor=(String)get(a,"byAuthor");
+        boolean oldHome=(boolean)get(a,"home"),oldDeep=(boolean)get(a,"deep"),oldMedia=(boolean)get(a,"onlyMedia");
+        try{
+            inst.runOnMainSync(()->{try{
+                set(a,"db",fresh);set(a,"activeKey",key);set(a,"home",false);
+                set(a,"screen","search");set(a,"deep",false);set(a,"byAuthor","Alice");set(a,"onlyMedia",true);
+                Method show=MainActivity.class.getDeclaredMethod("showPage");show.setAccessible(true);show.invoke(a);
+            }catch(Exception e){throw new AssertionError(e);}});
+            barrier(worker);inst.waitForIdleSync();
+            inst.runOnMainSync(()->{try{
+                android.view.View reset=described((android.view.View)get(a,"searchArea"),"Сбросить фильтры поиска");
+                assertNotNull("Active filters need a visible reset",reset);assertTrue(reset.performClick());
+            }catch(Exception e){throw new AssertionError(e);}});
+            barrier(worker);inst.waitForIdleSync();
+            assertEquals("",get(a,"byAuthor"));assertEquals(false,get(a,"onlyMedia"));
+        }finally{
+            barrier(worker);inst.runOnMainSync(()->{try{
+                set(a,"db",previous);set(a,"activeKey",oldKey);set(a,"screen",oldScreen);
+                set(a,"home",oldHome);set(a,"deep",oldDeep);set(a,"onlyMedia",oldMedia);set(a,"byAuthor",oldAuthor);
+            }catch(Exception e){throw new AssertionError(e);}});
+            fresh.close();ctx.deleteDatabase("telegram_"+key+".db");
+        }
+    }
+
     @Test public void searchButtonsSubmitAndClearText()throws Exception{
         Instrumentation inst=InstrumentationRegistry.getInstrumentation();MainActivity a=activity.getActivity();
         Context ctx=inst.getTargetContext();ExecutorService worker=(ExecutorService)get(a,"worker");

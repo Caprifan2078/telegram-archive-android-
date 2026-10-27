@@ -125,7 +125,7 @@ public class RelationshipAnalyticsExplanationUiTest {
         assertNotNull(holder[0]);
         assertTrue("Real sum 7+5 must be shown",contains(holder[0],"12"));
         assertTrue("Next 4-hour interval must be 9",contains(holder[0],"9"));
-        assertTrue("Hour ranges must be labelled",contains(holder[0],"00–03"));
+        assertTrue("Hour ranges must be labelled",contains(holder[0],"00–\n03"));
         assertTrue("Actual count must be clearly described",contains(holder[0],"ЧИСЛО сообщений"));
     }
 
@@ -150,7 +150,7 @@ public class RelationshipAnalyticsExplanationUiTest {
             heights[2]=block.getChildAt(1).getLayoutParams().height;
         }catch(Exception e){throw new AssertionError(e);}});
         float density=a.getResources().getDisplayMetrics().density;
-        assertEquals(Math.round(29*density),heights[0]);
+        assertEquals(Math.round(40*density),heights[0]);
         assertEquals(Math.round(47*density),heights[1]);
         assertEquals(Math.round(8*density),heights[2]);
         inst.waitForIdleSync();

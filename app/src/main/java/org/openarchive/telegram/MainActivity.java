@@ -1854,6 +1854,15 @@ public class MainActivity extends Activity {
                 TextView hint=text("Глубокий поиск ищет точное сочетание букв, даже внутри слова; может работать медленнее.",11,SUB);
                 hint.setPadding(px(7),0,0,px(6));searchArea.addView(hint,p(-1,-2));
             }else{
+                if(!byAuthor.isEmpty()||onlyMedia){
+                    String applied="Активные фильтры: "+(byAuthor.isEmpty()?"":"автор «"+byAuthor+"»")+
+                        (!byAuthor.isEmpty()&&onlyMedia?", ":"")+(onlyMedia?"только с медиа":"");
+                    TextView filterNotice=text(applied,11,SUB);filterNotice.setPadding(px(7),px(4),px(7),px(4));
+                    searchArea.addView(filterNotice,p(-1,-2));
+                    Button reset=btn("Сбросить фильтры");reset.setContentDescription("Сбросить фильтры поиска");
+                    searchArea.addView(reset,p(-1,-2));
+                    reset.setOnClickListener(v->{byAuthor="";onlyMedia=false;applySearch();});
+                }
                 TextView hint=text("Быстрый поиск по словам и их началам. Нажми на результат, чтобы перейти в чат.",11,SUB);
                 hint.setPadding(px(7),0,0,px(4));searchArea.addView(hint,p(-1,-2));
             }
@@ -2457,11 +2466,12 @@ public class MainActivity extends Activity {
             for(int hour=block*4;hour<block*4+4;hour++)counts[day][block]+=activity.weekdayHours[day][hour];
             max=Math.max(max,counts[day][block]);
         }
-        LinearLayout header=row();parent.addView(header,p(-1,29));
+        LinearLayout header=row();parent.addView(header,p(-1,40));
         TextView corner=text("День",10,SUB);header.addView(corner,new LinearLayout.LayoutParams(0,-1,0.9f));
         for(int block=0;block<6;block++){
             int begin=block*4;
-            TextView hour=text(String.format(Locale.ROOT,"%02d–%02d",begin,begin+3),10,FG);
+            TextView hour=text(String.format(Locale.ROOT,"%02d–\n%02d",begin,begin+3),10,FG);
+            hour.setContentDescription(String.format(Locale.ROOT,"%02d:00–%02d:59",begin,begin+3));
             hour.setGravity(Gravity.CENTER);header.addView(hour,new LinearLayout.LayoutParams(0,-1,1f));
         }
         for(int day=0;day<7;day++){
