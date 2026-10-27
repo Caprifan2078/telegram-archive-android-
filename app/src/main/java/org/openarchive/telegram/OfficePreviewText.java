@@ -196,7 +196,7 @@ final class OfficePreviewText {
         final StringBuilder output=new StringBuilder();
         final List<String> shared;final boolean spreadsheet;
         final StringBuilder cell=new StringBuilder();
-        boolean inText,inValue,cellShared,truncated;int nextColumn;String cellReference;
+        boolean inText,inValue,cellShared,truncated;int nextColumn,lastRow;String cellReference;
         TextCollector(List<String> items,boolean sheets){shared=items;spreadsheet=sheets;}
         private static int columnIndex(String reference)throws org.xml.sax.SAXException{
             if(reference==null||reference.isEmpty())return -1;
@@ -220,7 +220,27 @@ final class OfficePreviewText {
         @Override public void startElement(String uri,String local,String qName,Attributes attributes)throws org.xml.sax.SAXException{
             String t=tag(local,qName);
             if(spreadsheet){
-                if(t.equals("row"))nextColumn=0;
+                if(t.equals("row")){
+                    nextColumn=0;
+                    String reference=attributes.getValue("r");
+                    if(reference!=null&&!reference.isEmpty()){
+                        final int row;
+                        try{row=Integer.parseInt(reference);}
+                        catch(NumberFormatException invalid){
+                            throw new org.xml.sax.SAXException("Некорректный номер строки XLSX");
+                        }
+                        if(row<1||row>1048576||row<=lastRow)
+                            throw new org.xml.sax.SAXException("Неверный порядок или номер строки XLSX");
+                        if(row>lastRow+1)
+                            append("… пропущено строк: "+(row-lastRow-1)+" …\n");
+                        lastRow=row;
+                    }else{
+                        if(lastRow>=1048576)
+                            throw new org.xml.sax.SAXException("Превышено число строк XLSX");
+                        lastRow++;
+                    }
+                    append("Строка "+lastRow+": ");
+                }
                 if(t.equals("c")){
                     cellReference=attributes.getValue("r");
                     int column=columnIndex(cellReference);

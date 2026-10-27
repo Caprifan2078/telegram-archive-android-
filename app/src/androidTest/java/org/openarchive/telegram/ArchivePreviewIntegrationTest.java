@@ -251,4 +251,45 @@ public class ArchivePreviewIntegrationTest {
         }finally{archive.delete();}
     }
 
+    @Test public void sparseXlsxRowNumbersArePreservedInsteadOfAppearingAdjacent()throws Exception{
+        String xml="<worksheet><sheetData><row r='1'><c r='A1'><v>11</v></c></row>"+
+            "<row r='100'><c r='A100'><v>99</v></c></row></sheetData></worksheet>";
+        File file=temp("xlsx");
+        try{
+            try(ZipOutputStream zip=new ZipOutputStream(new FileOutputStream(file))){
+                zip.putNextEntry(new ZipEntry("xl/worksheets/sheet1.xml"));
+                zip.write(xml.getBytes(StandardCharsets.UTF_8));zip.closeEntry();
+            }
+            String actual;
+            try(FileInputStream input=new FileInputStream(file)){
+                actual=OfficePreviewText.render(input,"document.xlsx");
+            }
+            assertTrue(actual,actual.contains("Строка 1:"));
+            assertTrue(actual,actual.contains("A1: 11"));
+            assertTrue(actual,actual.contains("пропущено строк: 98"));
+            assertTrue(actual,actual.contains("Строка 100:"));
+            assertTrue(actual,actual.contains("A100: 99"));
+        }finally{file.delete();}
+    }
+    @Test public void duplicateAndDescendingXlsxRowNumbersAreRejected()throws Exception{
+        for(String numbers:new String[]{"1,1","9,2","1048577,1048578"}){
+            String[] parts=numbers.split(",");
+            String xml="<worksheet><sheetData><row r='"+parts[0]+"'><c><v>A</v></c></row>"+
+                "<row r='"+parts[1]+"'><c><v>B</v></c></row></sheetData></worksheet>";
+            File file=temp("xlsx");
+            try{
+                try(ZipOutputStream zip=new ZipOutputStream(new FileOutputStream(file))){
+                    zip.putNextEntry(new ZipEntry("xl/worksheets/sheet1.xml"));
+                    zip.write(xml.getBytes(StandardCharsets.UTF_8));zip.closeEntry();
+                }
+                try(FileInputStream input=new FileInputStream(file)){
+                    OfficePreviewText.render(input,"sheet.xlsx");
+                    fail("Invalid XLSX row ordering accepted: "+numbers);
+                }catch(org.xml.sax.SAXException expected){
+                    assertTrue(expected.getMessage(),expected.getMessage().contains("строки"));
+                }
+            }finally{file.delete();}
+        }
+    }
+
 }
