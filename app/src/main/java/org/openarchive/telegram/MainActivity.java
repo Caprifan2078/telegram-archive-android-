@@ -146,6 +146,7 @@ public class MainActivity extends Activity {
     private LinearLayout base,list,filterBar,bottomNav,searchArea,toolArea,savedComposer;
     private ScrollView scroll;private TextView title,subtitle,status,pageLabel;private Button navBack,menuButton;private String lastRenderedDay="";
     private EditText searchInput,authorInput;private CheckBox mediaOnly;
+    private String restoredQueryDraft=null,restoredAuthorDraft=null;private Boolean restoredMediaDraft=null;
     private Button backPage,nextPage,quickButton,deepButton,folderButton,backButton,headerActions;
     private String screen="chat",mediaKind="all",q="",byAuthor="",mine="",returnScreen="";
     private boolean deep=false,onlyMedia=false,importing=false,searchReturnsToAnalytics=false;
@@ -188,6 +189,19 @@ public class MainActivity extends Activity {
         loadAppearance();
         if(state!=null){
             home=state.getBoolean("ta_home",true);screen=state.getString("ta_screen","chat");
+            q=state.getString("ta_search_query","");byAuthor=state.getString("ta_search_author","");
+            deep=state.getBoolean("ta_search_deep",false);onlyMedia=state.getBoolean("ta_search_media",false);
+            chatOffset=Math.max(0,state.getInt("ta_chat_offset",0));autoLoaded=Math.max(PAGE,state.getInt("ta_chat_loaded",PAGE));
+            searchOffset=Math.max(0,state.getInt("ta_search_offset",0));searchLoaded=Math.max(PAGE,state.getInt("ta_search_loaded",PAGE));
+            mediaOffset=Math.max(0,state.getInt("ta_media_offset",0));favOffset=Math.max(0,state.getInt("ta_fav_offset",0));
+            mediaKind=state.getString("ta_media_kind","all");
+            returnScreen=state.getString("ta_return_screen","");searchReturnsToAnalytics=state.getBoolean("ta_search_parent_analytics",false);
+            searchReturnScroll=state.getInt("ta_search_return_scroll",-1);analyticsReturnScroll=state.getInt("ta_analytics_return_scroll",-1);
+            pendingSearchScroll=state.getInt("ta_search_scroll",-1);pendingAnalyticsScroll=state.getInt("ta_analytics_scroll",-1);
+            highlightId=state.getLong("ta_highlight_id",-1);
+            if(!home&&"chat".equals(screen)){
+                pendingRestoreId=state.getLong("ta_visible_id",-1);pendingRestoreTop=state.getInt("ta_visible_top",0);
+            }
             analyticsUnit=state.getString("ta_analytics_unit","month");
             analyticsSelectedAuthor=state.getString("ta_analytics_author","");
             analyticsCalendarYear=state.getInt("ta_analytics_year",0);
@@ -204,10 +218,35 @@ public class MainActivity extends Activity {
         mine=getPreferences(MODE_PRIVATE).getString("mine","");
         String old=activeTree();
         if(old!=null)try{folder=old.startsWith("local:")?new DocumentFolder(getContentResolver(),new java.io.File(old.substring(6))):new DocumentFolder(getContentResolver(),Uri.parse(old));}catch(Exception ignored){}
-        createUi();showPage();
+        createUi();
+        // createUi builds bars once; restore unsent edits for the final showPage build.
+        if(state!=null){
+            restoredQueryDraft=state.getString("ta_search_draft");
+            restoredAuthorDraft=state.getString("ta_search_author_draft");
+            if(state.containsKey("ta_search_media_draft"))restoredMediaDraft=state.getBoolean("ta_search_media_draft");
+        }
+        showPage();
     }
     @Override protected void onSaveInstanceState(Bundle state){
+        if(!home&&"chat".equals(screen))saveReadingProgress();
         state.putBoolean("ta_home",home);state.putString("ta_screen",screen);
+        state.putString("ta_search_query",q);state.putString("ta_search_author",byAuthor);
+        state.putBoolean("ta_search_deep",deep);state.putBoolean("ta_search_media",onlyMedia);
+        if("search".equals(screen)){
+            if(searchInput!=null)state.putString("ta_search_draft",searchInput.getText().toString());
+            if(deep&&authorInput!=null)state.putString("ta_search_author_draft",authorInput.getText().toString());
+            if(deep&&mediaOnly!=null)state.putBoolean("ta_search_media_draft",mediaOnly.isChecked());
+        }
+        state.putInt("ta_chat_offset",chatOffset);state.putInt("ta_chat_loaded",autoLoaded);
+        state.putInt("ta_search_offset",searchOffset);state.putInt("ta_search_loaded",searchLoaded);
+        state.putInt("ta_media_offset",mediaOffset);state.putInt("ta_fav_offset",favOffset);state.putString("ta_media_kind",mediaKind);
+        state.putString("ta_return_screen",returnScreen);state.putBoolean("ta_search_parent_analytics",searchReturnsToAnalytics);
+        state.putInt("ta_search_return_scroll",searchReturnScroll);state.putInt("ta_analytics_return_scroll",analyticsReturnScroll);
+        if(!home&&scroll!=null){
+            if("search".equals(screen))state.putInt("ta_search_scroll",scroll.getScrollY());
+            if("analytics".equals(screen))state.putInt("ta_analytics_scroll",scroll.getScrollY());
+        }
+        state.putLong("ta_highlight_id",highlightId);state.putLong("ta_visible_id",lastVisibleMessage);state.putInt("ta_visible_top",lastVisibleTop);
         state.putString("ta_analytics_unit",analyticsUnit);
         state.putString("ta_analytics_author",analyticsSelectedAuthor);
         state.putInt("ta_analytics_year",analyticsCalendarYear);
@@ -1829,7 +1868,7 @@ public class MainActivity extends Activity {
             }
             // Discard detached controls when the quick mode hides deep filters.
             authorInput=null;mediaOnly=null;
-            searchInput=new EditText(this);searchInput.setText(q);searchInput.setTextSize(16);searchInput.setSingleLine(true);
+            searchInput=new EditText(this);searchInput.setText(restoredQueryDraft!=null?restoredQueryDraft:q);restoredQueryDraft=null;searchInput.setTextSize(16);searchInput.setSingleLine(true);
             searchInput.setTextColor(FG);searchInput.setHintTextColor(SUB);searchInput.setHint("Слово, фраза или часть слова");
             searchInput.setPadding(px(14),px(3),px(14),px(3));searchInput.setBackground(shape(PANEL,12));
             searchInput.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
@@ -1850,21 +1889,21 @@ public class MainActivity extends Activity {
             quickButton.setOnClickListener(v->switchSearchMode(false));
             deepButton.setOnClickListener(v->switchSearchMode(true));
             if(deep){
-                authorInput=new EditText(this);authorInput.setText(byAuthor);authorInput.setSingleLine(true);
+                authorInput=new EditText(this);authorInput.setText(restoredAuthorDraft!=null?restoredAuthorDraft:byAuthor);restoredAuthorDraft=null;authorInput.setSingleLine(true);
                 authorInput.setTextColor(FG);authorInput.setHintTextColor(SUB);authorInput.setTextSize(13);
                 authorInput.setHint("Отправитель (необязательно)");authorInput.setBackground(shape(PANEL,10));
                 authorInput.setPadding(px(12),px(4),px(12),px(4));searchArea.addView(authorInput,p(-1,39));
                 mediaOnly=new CheckBox(this);mediaOnly.setText("Только сообщения с медиа");mediaOnly.setTextColor(FG);mediaOnly.setTextSize(12);
-                mediaOnly.setChecked(onlyMedia);searchArea.addView(mediaOnly,p(-1,39));
+                mediaOnly.setChecked(restoredMediaDraft!=null?restoredMediaDraft:onlyMedia);restoredMediaDraft=null;searchArea.addView(mediaOnly,p(-1,39));
                 Button resetFilters=btn("Сбросить фильтры");resetFilters.setContentDescription("Сбросить фильтры поиска");
                 searchArea.addView(resetFilters,p(-1,48));resetFilters.setOnClickListener(v->resetSearchFilters());
                 TextView hint=text("Глубокий поиск ищет точное сочетание букв, даже внутри слова; может работать медленнее.",11,SUB);
                 hint.setPadding(px(7),0,0,px(6));searchArea.addView(hint,p(-1,-2));
             }else{
                 if(!byAuthor.isEmpty()||onlyMedia){
-                    String applied="Активные фильтры: "+(byAuthor.isEmpty()?"":"автор «"+byAuthor+"»")+
+                    String applied="Фильтры глубокого поиска (в быстром режиме не применяются): "+(byAuthor.isEmpty()?"":"автор «"+byAuthor+"»")+
                         (!byAuthor.isEmpty()&&onlyMedia?", ":"")+(onlyMedia?"только с медиа":"");
-                    TextView filterNotice=text(applied,11,SUB);filterNotice.setPadding(px(7),px(4),px(7),px(4));
+                    TextView filterNotice=text(applied,11,SUB);filterNotice.setContentDescription(applied);filterNotice.setPadding(px(7),px(4),px(7),px(4));
                     searchArea.addView(filterNotice,p(-1,-2));
                     Button reset=btn("Сбросить фильтры");reset.setContentDescription("Сбросить фильтры поиска");
                     searchArea.addView(reset,p(-1,48));

@@ -362,8 +362,10 @@ public class PinnedFocusNavigationRegressionTest {
             }catch(Exception e){throw new AssertionError(e);}});
             barrier(worker);inst.waitForIdleSync();
             inst.runOnMainSync(()->{try{
+                assertNotNull("Saved deep filters must be explained in quick mode",
+                    described((android.view.View)get(a,"searchArea"),"Фильтры глубокого поиска (в быстром режиме не применяются)"));
                 android.view.View reset=described((android.view.View)get(a,"searchArea"),"Сбросить фильтры поиска");
-                assertNotNull("Active filters need a visible reset",reset);assertTrue(reset.performClick());
+                assertNotNull("Saved filters need a visible reset",reset);assertTrue(reset.performClick());
             }catch(Exception e){throw new AssertionError(e);}});
             barrier(worker);inst.waitForIdleSync();
             assertEquals("",get(a,"byAuthor"));assertEquals(false,get(a,"onlyMedia"));

@@ -21,7 +21,9 @@ public class LightAnalyticsVisualTest {
     @Test public void lightThemeHeatmapRemainsReadable()throws Exception{
         Instrumentation inst=InstrumentationRegistry.getInstrumentation();
         Context ctx=inst.getTargetContext();
-        SharedPreferences prefs=ctx.getSharedPreferences("MainActivity",Context.MODE_PRIVATE);
+        String preferencesName=new android.content.ComponentName(ctx,MainActivity.class).getShortClassName();
+        if(preferencesName.startsWith("."))preferencesName=preferencesName.substring(1);
+        SharedPreferences prefs=ctx.getSharedPreferences(preferencesName,Context.MODE_PRIVATE);
         boolean had=prefs.contains("appearance_theme");int previous=prefs.getInt("appearance_theme",0);
         assertTrue(prefs.edit().putInt("appearance_theme",2).commit());
         try{

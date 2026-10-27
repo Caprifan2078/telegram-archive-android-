@@ -96,4 +96,37 @@ public class PerformanceRegressionTest {
                 "; java_heap_used_bytes="+heapBytes);
         }finally{db.close();ctx.deleteDatabase("telegram_"+id+".db");}
     }
+    @Test public void importsTenThousandActualHtmlMessagesAndSearchesBoundaryRecords()throws Exception {
+        Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key=UUID.randomUUID().toString().replace("-","");final int count=10000;
+        java.io.File folder=new java.io.File(ctx.getCacheDir(),"synthetic-html-"+key);
+        assertTrue(folder.mkdirs());java.io.File html=new java.io.File(folder,"messages.html");
+        MessageDb db=new MessageDb(ctx,key);
+        try{
+            try(java.io.Writer out=new java.io.BufferedWriter(new java.io.OutputStreamWriter(
+                    new java.io.FileOutputStream(html),java.nio.charset.StandardCharsets.UTF_8))){
+                out.write("<div class='history'>");
+                for(int i=1;i<=count;i++){
+                    out.write("<div class='message default' id='message"+i+"'><div class='body'>");
+                    out.write("<div class='from_name'>Synthetic Alice</div>");
+                    out.write("<div class='date details' title='2024-02-29 12:00:00'></div>");
+                    out.write("<div class='text'>syntheticmessage"+i+"</div></div></div>");
+                }
+                out.write("</div>");
+            }
+            long started=now();
+            int imported=TelegramImporter.importFiles(ctx.getContentResolver(),
+                new DocumentFolder(ctx.getContentResolver(),folder),db,ignored->{});
+            long elapsed=now()-started;
+            assertEquals(count,imported);assertEquals(count,db.totalMessages());
+            assertEquals("syntheticmessage1",db.page(0,1,"",false,"",false,false).get(0).body);
+            assertEquals("syntheticmessage10000",db.page(count-1,1,"",false,"",false,false).get(0).body);
+            assertEquals(1,db.count("syntheticmessage10000",false,"",false,false));
+            assertEquals(count,db.analytics().totalMessages);
+            Log.i("TG_ARCHIVE_BENCH","fixture=synthetic_real_html_10000; bytes="+html.length()+
+                "; import_ms="+ms(elapsed)+"; java_heap_used_bytes="+(Runtime.getRuntime().totalMemory()-Runtime.getRuntime().freeMemory()));
+        }finally{
+            db.close();ctx.deleteDatabase("telegram_"+key+".db");ArchiveFileImport.deleteTree(folder);
+        }
+    }
 }
