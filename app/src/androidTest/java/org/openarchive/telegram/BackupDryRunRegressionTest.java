@@ -79,7 +79,7 @@ public class BackupDryRunRegressionTest {
             File changed=replaceManifestDigest(f.zip);
             try{
                 try{BackupVerifier.simulate(ctx,Uri.fromFile(changed),null,ignored->{});fail("Wrong DB digest must not pass dry-run");}
-                catch(IOException expected){}
+                catch(IOException expected){assertTrue("Must identify a manifest/hash mismatch",expected.getMessage().contains("Метаданные ZIP"));}
                 f.assertUnchanged(registry);assertArrayEquals(before,sha(f.zip));
             }finally{changed.delete();}
         }

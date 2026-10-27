@@ -12,7 +12,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: backup-dryrun-${{ github.ref }}-${{ matrix.api }}
+  group: backup-dryrun-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   dry-run:
