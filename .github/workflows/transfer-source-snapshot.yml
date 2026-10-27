@@ -1,0 +1,66 @@
+name: Handoff source snapshot (public code only)
+on:
+  push:
+    branches:
+      - qa/transfer-pack-snapshot-20261027
+    paths:
+      - '.github/workflows/transfer-source-snapshot.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  collect-source:
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Package tracked public project only
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import subprocess, pathlib, zipfile, hashlib, json
+          root=pathlib.Path('.').resolve()
+          destination=pathlib.Path('transfer-artifacts')
+          destination.mkdir(exist_ok=True)
+          output=destination/'GITHUB_INTEGRATED_SOURCE_SNAPSHOT.zip'
+          prefix='CURRENT_GITHUB_SOURCE/'
+          tracked=subprocess.check_output(['git','ls-files','-z']).split(b'\0')
+          safe=[]
+          deny_extensions={'.jks','.keystore','.p12','.pem','.env','.db','.sqlite','.apk','.aab','.har','.key'}
+          deny_fragments={'personal_backup','private_user_feedback','user_archive','credentials','auth_token','session_file'}
+          for raw in tracked:
+              if not raw:continue
+              path=pathlib.Path(raw.decode('utf-8'))
+              name=path.as_posix()
+              if path.is_absolute() or '..' in path.parts or path.is_symlink():continue
+              if not (name.startswith(('app/','docs/','.github/workflows/','gradle/')) or
+                    name in {'README.md','settings.gradle','build.gradle','gradle.properties','.gitignore','gradlew','gradlew.bat'}):
+                  continue
+              if path.suffix.lower() in deny_extensions or any(p in name.lower() for p in deny_fragments):continue
+              if not path.is_file():continue
+              safe.append(path)
+          with zipfile.ZipFile(output,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=7) as z:
+              for path in sorted(safe):
+                  z.write(path,prefix+path.as_posix())
+              log=subprocess.check_output(['git','log','--all','--date=iso','--pretty=format:%H | %ad | %s'],text=True)
+              z.writestr(prefix+'GITHUB_COMMIT_HISTORY.txt',log+'\n')
+              refs=subprocess.check_output(['git','show-ref'],text=True)
+              z.writestr(prefix+'GITHUB_FETCHED_REFS.txt',refs)
+              sha=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+              z.writestr(prefix+'SNAPSHOT_METADATA.json',json.dumps({'sha':sha,'files':len(safe),
+                'scope':'tracked public source, docs and test resources; no .git objects, no personal archive'},ensure_ascii=False,indent=2))
+          with zipfile.ZipFile(output) as z:
+              bad=z.testzip()
+              if bad:raise RuntimeError('CRC failure '+bad)
+          print('source_sha',sha,'files',len(safe),'size',output.stat().st_size,'sha256',hashlib.sha256(output.read_bytes()).hexdigest())
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: telegram-archive-transfer-source-snapshot
+          retention-days: 2
+          if-no-files-found: error
+          path: transfer-artifacts/GITHUB_INTEGRATED_SOURCE_SNAPSHOT.zip
