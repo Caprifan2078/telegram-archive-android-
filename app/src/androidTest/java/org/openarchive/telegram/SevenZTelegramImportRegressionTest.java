@@ -25,14 +25,18 @@ public class SevenZTelegramImportRegressionTest {
         File archive=File.createTempFile("7z-import-", ".7z",ctx.getCacheDir());
         try{
             try(FileOutputStream out=new FileOutputStream(plain)){out.write(HTML.getBytes(StandardCharsets.UTF_8));}
-            try(SevenZOutputFile writer=password==null?new SevenZOutputFile(archive):new SevenZOutputFile(archive,password)){
+            try(SevenZOutputFile writer=password==null||password.length==0?new SevenZOutputFile(archive):new SevenZOutputFile(archive,password)){
                 SevenZArchiveEntry e=writer.createArchiveEntry(plain,name);
                 writer.putArchiveEntry(e);writer.write(HTML.getBytes(StandardCharsets.UTF_8));writer.closeArchiveEntry();
                 if(name.equals("Export/messages.html")){
+                    byte[] secondBytes=HTML.replace("message1","message2").replace("Synthetic 7z chat","Second synthetic message").getBytes(StandardCharsets.UTF_8);
+                    try(FileOutputStream out=new FileOutputStream(plain)){out.write(secondBytes);}
                     SevenZArchiveEntry second=writer.createArchiveEntry(plain,"Export/messages2.html");
-                    writer.putArchiveEntry(second);writer.write(HTML.replace("message1","message2").replace("Synthetic 7z chat","Second synthetic message").getBytes(StandardCharsets.UTF_8));writer.closeArchiveEntry();
+                    writer.putArchiveEntry(second);writer.write(secondBytes);writer.closeArchiveEntry();
+                    byte[] mediaBytes="Synthetic media".getBytes(StandardCharsets.UTF_8);
+                    try(FileOutputStream out=new FileOutputStream(plain)){out.write(mediaBytes);}
                     SevenZArchiveEntry media=writer.createArchiveEntry(plain,"Export/photos/example.txt");
-                    writer.putArchiveEntry(media);writer.write("Synthetic media".getBytes(StandardCharsets.UTF_8));writer.closeArchiveEntry();
+                    writer.putArchiveEntry(media);writer.write(mediaBytes);writer.closeArchiveEntry();
                 }
                 writer.finish();
             }
@@ -66,6 +70,10 @@ public class SevenZTelegramImportRegressionTest {
     @Test public void wrongAndMissingPasswordRollbackWithoutTouchingPreviousImport()throws Exception{
         char[] password="synthetic-7z-import".toCharArray();
         File archive=fixture("messages.html",password);String old=key();File existing=directory(old);
+        MessageDb prior=new MessageDb(ctx,old);
+        android.database.sqlite.SQLiteDatabase sql=prior.getWritableDatabase();prior.clearStage(sql);
+        long priorId=prior.stage(sql,"Synthetic","2024-02-29 12:00","preserve old chat",null,"");
+        prior.publishStaged(sql);prior.toggleFavorite(priorId);
         assertTrue(existing.mkdirs());File marker=new File(existing,"preserve.txt");
         try(FileOutputStream out=new FileOutputStream(marker)){out.write(42);}
         try{
@@ -75,8 +83,10 @@ public class SevenZTelegramImportRegressionTest {
                 catch(Exception expected){assertFalse("Failed staging must be removed",directory(next).exists());}
             }
             assertTrue("Previous archive must not be removed",marker.isFile());
+            assertEquals(1,prior.totalMessages());assertTrue(prior.isFavorite(priorId));
+            assertEquals("preserve old chat",prior.page(0,1,"",false,"",false,false).get(0).body);
             assertTrue("Original must remain present",archive.isFile());
-        }finally{java.util.Arrays.fill(password,'\0');archive.delete();ArchiveFileImport.deleteTree(existing);}
+        }finally{prior.close();ctx.deleteDatabase("telegram_"+old+".db");java.util.Arrays.fill(password,'\0');archive.delete();ArchiveFileImport.deleteTree(existing);}
     }
     @Test public void parentTraversalFailsAndRollsBackStaging()throws Exception{
         File archive=fixture("../messages.html",null);String next=key();
