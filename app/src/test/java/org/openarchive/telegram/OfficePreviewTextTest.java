@@ -124,4 +124,9 @@ public class OfficePreviewTextTest {
           "xl/worksheets/sheet1.xml","<worksheet/>");
         try{OfficePreviewText.render(new ByteArrayInputStream(x),"book.xlsx");fail("External targets must fail closed");}catch(java.io.IOException expected){}
     }
+    @Test public void cellReferenceCannotPointToAnotherRow()throws Exception{
+        String bad="<worksheet><sheetData><row r='1'><c r='A100'><v>99</v></c></row></sheetData></worksheet>";
+        try{OfficePreviewText.render(new ByteArrayInputStream(doc("xl/worksheets/sheet1.xml",bad)),"x.xlsx");fail("Mismatched row must not render as valid data");}
+        catch(org.xml.sax.SAXException expected){}
+    }
 }

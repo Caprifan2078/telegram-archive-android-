@@ -334,4 +334,17 @@ public class AttachmentPreviewScreenTest {
             assertTrue(text.indexOf("Конец")<text.indexOf("Начало"));
         }finally{file.delete();}
     }
+    @Test public void actualWordDocumentParagraphsAndTableAppearOnAndroid()throws Exception{
+        File file=copyOfficeFixture("synthetic-word.docx",".docx");
+        try{Intent i=new Intent(app,AttachmentPreviewActivity.class);i.setData(Uri.fromFile(file));i.putExtra("display_name","Синтетический.docx");screen.launchActivity(i);
+            awaitText("Синтетический документ");awaitText("Первый абзац");awaitText("Второй пункт");awaitText("Ячейка А");awaitText("Ячейка Б");
+        }finally{file.delete();}
+    }
+    @Test public void corruptSpreadsheetDoesNotDisplayCellUnderWrongRow()throws Exception{
+        String xml="<worksheet><sheetData><row r='1'><c r='A100'><v>99</v></c></row></sheetData></worksheet>";
+        File file=generate(".xlsx","xl/worksheets/sheet1.xml",xml);
+        try{Intent i=new Intent(app,AttachmentPreviewActivity.class);i.setData(Uri.fromFile(file));i.putExtra("display_name","Тест.xlsx");screen.launchActivity(i);
+            awaitText("Номер ячейки не соответствует строке XLSX");
+        }finally{file.delete();}
+    }
 }

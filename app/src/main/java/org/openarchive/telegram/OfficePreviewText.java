@@ -306,7 +306,13 @@ final class OfficePreviewText {
                 if(t.equals("c")){
                     cellReference=attributes.getValue("r");
                     int column=columnIndex(cellReference);
+                    if(lastRow<1)throw new org.xml.sax.SAXException("Ячейка находится вне строки XLSX");
                     if(column>=0){
+                        int index=0;while(index<cellReference.length()&&Character.isLetter(cellReference.charAt(index)))index++;
+                        final int referenceRow;
+                        try{referenceRow=Integer.parseInt(cellReference.substring(index));}
+                        catch(NumberFormatException invalid){throw new org.xml.sax.SAXException("Некорректная ссылка на строку XLSX",invalid);}
+                        if(referenceRow!=lastRow)throw new org.xml.sax.SAXException("Номер ячейки не соответствует строке XLSX");
                         if(column<nextColumn)throw new org.xml.sax.SAXException("Ячейки таблицы расположены не по порядку");
                         while(nextColumn<column){append("\t");nextColumn++;}
                     }
