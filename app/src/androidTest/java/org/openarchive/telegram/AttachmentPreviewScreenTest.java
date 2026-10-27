@@ -54,6 +54,17 @@ public class AttachmentPreviewScreenTest {
         }
         return result.toString();
     }
+    private android.widget.Button findButton(View view,String label){
+        if(view instanceof android.widget.Button&&((android.widget.Button)view).getText().toString().contains(label))
+            return (android.widget.Button)view;
+        if(view instanceof ViewGroup){
+            ViewGroup group=(ViewGroup)view;
+            for(int i=0;i<group.getChildCount();i++){
+                android.widget.Button found=findButton(group.getChildAt(i),label);if(found!=null)return found;
+            }
+        }
+        return null;
+    }
     private boolean clickText(View view,String label){
         if(view instanceof android.widget.Button &&
             ((android.widget.Button)view).getText().toString().contains(label)){
@@ -231,7 +242,7 @@ public class AttachmentPreviewScreenTest {
         try{
             Intent intent=new Intent(app,AttachmentPreviewActivity.class);
             intent.setData(Uri.fromFile(file));intent.putExtra("display_name","Синтетическая таблица.xlsx");
-            screen.launchActivity(intent);awaitText("10\t\t20");awaitText("Формулы не пересчитываются");
+            screen.launchActivity(intent);awaitText("A1: 10\t\tC1: 20");awaitText("Формулы не пересчитываются");
             try(ParcelFileDescriptor p=instrumentation.getUiAutomation().executeShellCommand(
                 "screencap -p /sdcard/Download/ta_office_xlsx_gap.png");
                 FileInputStream stream=new FileInputStream(p.getFileDescriptor())){
@@ -261,5 +272,46 @@ public class AttachmentPreviewScreenTest {
             intent.setData(Uri.fromFile(file));intent.putExtra("display_name","Повреждённая таблица.xlsx");
             screen.launchActivity(intent);awaitText("Не удалось открыть");awaitText("Общая строка таблицы отсутствует");
         }finally{file.delete();}
+    }
+    @Test public void sevenZOpensNestedDocxAndSystemBackReturnsToArchive()throws Exception{
+        String document="<w:document xmlns:w='urn:w'><w:body><w:p><w:r><w:t>Документ внутри 7z</w:t></w:r></w:p></w:body></w:document>";
+        File doc=generate(".docx","word/document.xml",document);
+        File archive=File.createTempFile("synthetic-docx-", ".7z",app.getCacheDir());
+        try{
+            try(org.apache.commons.compress.archivers.sevenz.SevenZOutputFile out=
+                    new org.apache.commons.compress.archivers.sevenz.SevenZOutputFile(archive);
+                InputStream in=new FileInputStream(doc)){
+                org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry entry=
+                    out.createArchiveEntry(doc,"Документы/Учёба/Работа.docx");
+                out.putArchiveEntry(entry);byte[] buffer=new byte[8192];int n;
+                while((n=in.read(buffer))!=-1)out.write(buffer,0,n);
+                out.closeArchiveEntry();out.finish();
+            }
+            Intent intent=new Intent(app,AttachmentPreviewActivity.class);
+            intent.setData(Uri.fromFile(archive));intent.putExtra("display_name","Учёба.7z");
+            screen.launchActivity(intent);awaitText("Документы/Учёба/Работа.docx");
+            instrumentation.runOnMainSync(()->assertTrue(clickText(
+                screen.getActivity().findViewById(android.R.id.content),"Документы/Учёба/Работа.docx")));
+            awaitText("Документ внутри 7z");instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+            awaitText("Вложений: 1");assertFalse(screen.getActivity().isFinishing());
+        }finally{archive.delete();doc.delete();}
+    }
+    @Test public void longArchiveMemberNameWrapsWithoutClipping()throws Exception{
+        String name="Документы/Очень длинное название учебного материала с важными сведениями "+
+            "и подробными пояснениями для просмотра на мобильном телефоне.txt";
+        File archive=generate(".zip",name,"Synthetic");
+        try{
+            Intent intent=new Intent(app,AttachmentPreviewActivity.class);
+            intent.setData(Uri.fromFile(archive));intent.putExtra("display_name","Длинные имена.zip");
+            screen.launchActivity(intent);awaitText("подробными пояснениями");
+            instrumentation.runOnMainSync(()->{
+                android.widget.Button button=findButton(screen.getActivity().findViewById(android.R.id.content),"подробными пояснениями");
+                assertNotNull(button);android.text.Layout layout=button.getLayout();assertNotNull(layout);
+                assertTrue("Long name must wrap",layout.getLineCount()>1);
+                for(int line=0;line<layout.getLineCount();line++)assertEquals("No ellipsis",0,layout.getEllipsisCount(line));
+                assertTrue("All text lines must fit inside the button",
+                    layout.getLineBottom(layout.getLineCount()-1)<=button.getHeight()-button.getCompoundPaddingTop()-button.getCompoundPaddingBottom());
+            });
+        }finally{archive.delete();}
     }
 }

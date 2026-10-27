@@ -190,7 +190,7 @@ final class ArchiveReadOnly {
                 if(++count>MAX_ENTRIES)throw new IOException("Слишком много элементов RAR");
                 String path=e.getFileName();
                 if(e.getRedirection()!=null)continue; // Never follow archive links.
-                if(found!=null)add(found,path,e.getFullUnpackSize(),e.isDirectory(),false);
+                if(found!=null)add(found,path,e.getFullUnpackSize(),e.isDirectory(),e.isEncrypted());
                 if(requested!=null&&requested.equals(path)&&!e.isDirectory()){
                     if(!safeName(path))throw new IOException("Небезопасное имя файла");
                     if(e.getFullUnpackSize()>limit)throw new IOException("Вложение слишком велико");

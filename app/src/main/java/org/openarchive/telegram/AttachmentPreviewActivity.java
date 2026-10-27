@@ -60,7 +60,8 @@ public final class AttachmentPreviewActivity extends Activity {
     }
     private Button button(String label,Runnable action){
         Button b=new Button(this);b.setAllCaps(false);b.setText(label);
-        panel.addView(b,new LinearLayout.LayoutParams(-1,dp(53)));
+        b.setSingleLine(false);b.setMinHeight(dp(53));b.setPadding(dp(12),dp(8),dp(12),dp(8));
+        panel.addView(b,new LinearLayout.LayoutParams(-1,ViewGroup.LayoutParams.WRAP_CONTENT));
         b.setOnClickListener(v->action.run());return b;
     }
     private void showHeader(){

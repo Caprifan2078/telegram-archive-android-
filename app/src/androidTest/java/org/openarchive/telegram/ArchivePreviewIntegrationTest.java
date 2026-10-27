@@ -58,6 +58,8 @@ public class ArchivePreviewIntegrationTest {
             assertEquals(1,files.size());assertTrue(files.get(0).encrypted);
             try{ArchiveReadOnly.read(ctx,uri,"secure.zip",null,files.get(0).name);fail();}
             catch(IOException expected){assertTrue(expected.getMessage().contains("пароль"));}
+            try{ArchiveReadOnly.read(ctx,uri,"secure.zip","wrong-password".toCharArray(),files.get(0).name);fail("Wrong AES password accepted");}
+            catch(Exception expected){}
             assertEquals("encrypted offline",new String(
                 ArchiveReadOnly.read(ctx,uri,"secure.zip",password,files.get(0).name),StandardCharsets.UTF_8));
         }finally{raw.delete();zip.delete();}
@@ -156,4 +158,57 @@ public class ArchivePreviewIntegrationTest {
             }
         }finally{archive.delete();}
     }
+    @Test public void zipCryptoRequiresCorrectPassword()throws Exception{
+        // Generated independently with Info-ZIP -X -P on synthetic note.txt.
+        String encoded="UEsDBAoACQAAAKoJb1dbmriWKAAAABwAAAAIAAAAbm90ZS50eHQyObYxWCZq+1ImtchjblT2Cnl7TUSIxZRjMAEtHNfhOkofC4bmSdhcUEsHCFuauJYoAAAAHAAAAFBLAQIeAwoACQAAAKoJb1dbmriWKAAAABwAAAAIAAAAAAAAAAEAAACkgQAAAABub3RlLnR4dFBLBQYAAAAAAQABADYAAABeAAAAAAA=";
+        File zip=temp("zip");char[] password="test-fixture".toCharArray();
+        try{
+            try(FileOutputStream out=new FileOutputStream(zip)){out.write(android.util.Base64.decode(encoded,android.util.Base64.DEFAULT));}
+            Uri uri=Uri.fromFile(zip);List<ArchiveReadOnly.Entry> files=ArchiveReadOnly.list(ctx,uri,"legacy.zip",null);
+            assertEquals(1,files.size());assertEquals("note.txt",files.get(0).name);assertTrue(files.get(0).encrypted);
+            try{ArchiveReadOnly.read(ctx,uri,"legacy.zip",null,files.get(0).name);fail("Missing password accepted");}catch(Exception expected){}
+            try{ArchiveReadOnly.read(ctx,uri,"legacy.zip","wrong".toCharArray(),files.get(0).name);fail("Wrong password accepted");}catch(Exception expected){}
+            assertEquals("Synthetic ZipCrypto example\n",new String(ArchiveReadOnly.read(ctx,uri,"legacy.zip",password,files.get(0).name),StandardCharsets.UTF_8));
+        }finally{java.util.Arrays.fill(password,'\0');zip.delete();}
+    }
+    @Test public void sevenZEncryptedHeadersRequireCorrectPassword()throws Exception{
+        // Apache Commons Compress 1.28.0 synthetic test fixture, Apache License 2.0:
+        // https://github.com/apache/commons-compress/blob/rel/commons-compress-1.28.0/src/test/resources/bla.encrypted.7z
+        String encoded="N3q8ryccAAPOr6vM4AEAAAAAAAA2AAAAAAAAAMPV/c15gWF4/yjZnVseP50CUVynWCTYmSp6Ke098yYgF/M6rarfE3VIk5F/VKhRnpC3g8FD942gEXEDLnd12CRgkhC4qrpznDYACE9oBNV+7PMngR+vT6qzXjm/S08zuAzS7kP6aINNqGgZl3g9JTwGgqDCfkC35h3sjatUkdayb13cMgUiSA0sB7tR2E2lxhH/Hm30QeqD4dRDXT6l81+9PEOeQSNNZkrZfSy8lRJT5MKMAQtwUajG+BlU19/tUokPbvptGnP5PjZAHGEQrlK/avb4U0GKB12F4KU4v0zskuJwfX84UYn8fymldsL2Bn9pKrRQWx9b2AxZ97CUxdydqSv8Cc2U8gw1gJBMqOy7Af8JFTjOleTEou4N+ZdZw29Sf2QM1jKMJPSjGoVkwe2T8BmB4jM1PV+Hn8PAsrwN1K7vIMhOZEQyvSmXQFDSfDudsK6kFCdyZmqJjREA5baUovT+CsnOtEOy65EqnQmHtOh0ZYHPNn2UMuvzje+LVpw5OQaHXLyqSgA9PYSEuy9fqr+exsGfYZ6FE+K7UKPc5XLI60V7z6+4Z7em7vD6qG8IQYWNdQVJDXZbTmpDw/7nk+tXITiSCnowCfCNmLHbVSAubMECBTPUE2kDx01w49txxyIXBoFgAQmAgAAHCwEAAiQG8QcBClMHznmlTwXNceUjAwEBBV0AEAAAAQAMd4CRCgFx7ooQAAA=";
+        File archive=temp("7z");try(FileOutputStream out=new FileOutputStream(archive)){
+            out.write(android.util.Base64.decode(encoded,android.util.Base64.DEFAULT));
+        }
+        try{
+            Uri uri=Uri.fromFile(archive);
+            try{ArchiveReadOnly.list(ctx,uri,"header.7z",null);fail("Missing password accepted");}catch(Exception expected){}
+            try{ArchiveReadOnly.list(ctx,uri,"header.7z","wrong".toCharArray());fail("Wrong password accepted");}catch(Exception expected){}
+            List<ArchiveReadOnly.Entry> entries=ArchiveReadOnly.list(ctx,uri,"header.7z","foo".toCharArray());
+            assertEquals(2,entries.size());assertEquals("test1.xml",entries.get(0).name);assertEquals("test2.xml",entries.get(1).name);
+            String body=new String(ArchiveReadOnly.read(ctx,uri,"header.7z","foo".toCharArray(),"test2.xml"),StandardCharsets.UTF_8);
+            assertTrue(body.contains("<meinxml>"));assertTrue(body.contains("<leer />"));
+        }finally{archive.delete();}
+    }
+    @Test public void encryptedSevenZRejectsMissingAndWrongPassword()throws Exception{
+        File plain=temp("txt"),archive=temp("7z");
+        char[] password="synthetic-7z-AES-test-123".toCharArray();
+        try{
+            byte[] body="Зашифрованный файл 7z AES256".getBytes(StandardCharsets.UTF_8);
+            try(FileOutputStream out=new FileOutputStream(plain)){out.write(body);}
+            // Supported public Commons Compress API (1.28); writes AES256 content.
+            try(SevenZOutputFile writer=new SevenZOutputFile(archive,password)){
+                SevenZArchiveEntry entry=writer.createArchiveEntry(plain,"private.txt");
+                writer.putArchiveEntry(entry);writer.write(body);
+                writer.closeArchiveEntry();writer.finish();
+            }
+            Uri uri=Uri.fromFile(archive);
+            try{ArchiveReadOnly.read(ctx,uri,"encrypted.7z",null,"private.txt");fail("Missing password accepted");}catch(Exception expected){}
+            try{ArchiveReadOnly.read(ctx,uri,"encrypted.7z","wrong-pass-123".toCharArray(),"private.txt");fail("Wrong password accepted");}catch(Exception expected){}
+            byte[] decoded=ArchiveReadOnly.read(ctx,uri,"encrypted.7z",password,"private.txt");
+            assertArrayEquals("Correct 7z AES password must decrypt the exact original",body,decoded);
+        }finally{
+            java.util.Arrays.fill(password,'\0');
+            plain.delete();archive.delete();
+        }
+    }
+
 }

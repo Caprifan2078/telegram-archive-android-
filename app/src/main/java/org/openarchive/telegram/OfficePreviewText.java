@@ -196,7 +196,7 @@ final class OfficePreviewText {
         final StringBuilder output=new StringBuilder();
         final List<String> shared;final boolean spreadsheet;
         final StringBuilder cell=new StringBuilder();
-        boolean inText,inValue,cellShared,truncated;int nextColumn;
+        boolean inText,inValue,cellShared,truncated;int nextColumn;String cellReference;
         TextCollector(List<String> items,boolean sheets){shared=items;spreadsheet=sheets;}
         private static int columnIndex(String reference)throws org.xml.sax.SAXException{
             if(reference==null||reference.isEmpty())return -1;
@@ -222,7 +222,8 @@ final class OfficePreviewText {
             if(spreadsheet){
                 if(t.equals("row"))nextColumn=0;
                 if(t.equals("c")){
-                    int column=columnIndex(attributes.getValue("r"));
+                    cellReference=attributes.getValue("r");
+                    int column=columnIndex(cellReference);
                     if(column>=0){
                         if(column<nextColumn)throw new org.xml.sax.SAXException("Ячейки таблицы расположены не по порядку");
                         while(nextColumn<column){append("\t");nextColumn++;}
@@ -253,6 +254,7 @@ final class OfficePreviewText {
                             throw new org.xml.sax.SAXException("Общая строка таблицы отсутствует");
                         text=shared.get(index);
                     }
+                    if(cellReference!=null&&!cellReference.isEmpty())append(cellReference+": ");
                     append(text.replace('\t',' ').replace('\n',' '));append("\t");nextColumn++;
                 }
                 if(t.equals("row"))append("\n");

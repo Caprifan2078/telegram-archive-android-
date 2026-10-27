@@ -44,7 +44,7 @@ public class OfficePreviewTextTest {
     @Test public void spreadsheetPreservesEmptyColumnsAndRejectsMisorderedCells()throws Exception{
         String xml="<worksheet><sheetData><row><c r='A1'><v>10</v></c><c r='C1'><v>20</v></c></row></sheetData></worksheet>";
         String rendered=OfficePreviewText.render(new ByteArrayInputStream(doc("xl/worksheets/sheet1.xml",xml)),"x.xlsx");
-        assertTrue("Missing B must remain an empty column",rendered.contains("10\t\t20"));
+        assertTrue("Missing B must remain an empty column",rendered.contains("A1: 10\t\tC1: 20"));
         String bad="<worksheet><sheetData><row><c r='C1'><v>20</v></c><c r='A1'><v>10</v></c></row></sheetData></worksheet>";
         try{OfficePreviewText.render(new ByteArrayInputStream(doc("xl/worksheets/sheet1.xml",bad)),"x.xlsx");fail("Out-of-order cells must not be shifted");}
         catch(org.xml.sax.SAXException expected){}
