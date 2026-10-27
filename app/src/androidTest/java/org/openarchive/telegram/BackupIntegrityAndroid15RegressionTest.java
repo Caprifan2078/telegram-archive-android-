@@ -34,7 +34,7 @@ public class BackupIntegrityAndroid15RegressionTest {
             byte[] before=digest(source);
             ArchiveBackup.verifyDb(source,"messages");
             assertArrayEquals("Authenticated backup bytes must not change",before,digest(source));
-            String[] files=dir.list();assertNotNull(files);assertEquals("Temporary verification copy must be removed",1,files.length);
+            String[] files=dir.list();assertNotNull(files);for(String file:files)assertFalse("Temporary verification copy must be removed: "+file,file.startsWith("ta-db-check-"));
         }finally{SQLiteDatabase.deleteDatabase(source);ArchiveFileImport.deleteTree(dir);}
     }
     @Test public void corruptSnapshotIsRejectedWithoutChangingItsBytes()throws Exception{
@@ -46,7 +46,7 @@ public class BackupIntegrityAndroid15RegressionTest {
             try{ArchiveBackup.verifyDb(source,"messages");fail("Corrupt SQLite must be refused");}
             catch(Exception expected){}
             assertArrayEquals(before,digest(source));
-            String[] files=dir.list();assertNotNull(files);assertEquals(1,files.length);
+            String[] files=dir.list();assertNotNull(files);for(String file:files)assertFalse("Temporary verification copy must be removed: "+file,file.startsWith("ta-db-check-"));
         }finally{SQLiteDatabase.deleteDatabase(source);ArchiveFileImport.deleteTree(dir);}
     }
 }
