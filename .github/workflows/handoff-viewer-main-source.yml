@@ -1,0 +1,36 @@
+name: Public source snapshots for handoff transfer
+on:
+  push:
+    branches: [qa/handoff-export-viewer-main-20261027]
+permissions:
+  contents: read
+jobs:
+  capture-only-tracked-public-code:
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Export tracked repository snapshots without any user files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p handoff
+          git archive --format=zip --prefix=CURRENT_VIEWER_BRANCH_SOURCE/ HEAD -o handoff/viewer_branch_source.zip
+          git archive --format=zip --prefix=MAIN_047_BASELINE_SOURCE/ origin/main -o handoff/main_baseline_source.zip
+          git rev-parse HEAD > handoff/HANDOFF_EXPORT_BRANCH_SHA.txt
+          git rev-parse origin/main > handoff/MAIN_SOURCE_SHA.txt
+          printf '%s\n' 'a9889f0d6a52cd653b2fddfbced81f835e8d5817' > handoff/VIEWER_ORIGINAL_SHA.txt
+          git log --no-show-signature --format='%H | %aI | %s' -n 400 > handoff/PUBLIC_COMMIT_HISTORY.txt
+          git branch -r > handoff/AVAILABLE_REMOTE_BRANCHES.txt
+          (cd handoff && sha256sum *.zip > SOURCE_SNAPSHOT_SHA256.txt)
+          echo 'Snapshots contain only public tracked code/docs. No .git history objects, personal chats or secrets.' > handoff/README.txt
+      - name: Export snapshots as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-archive-handoff-viewer-main-source
+          path: handoff/
+          retention-days: 7
