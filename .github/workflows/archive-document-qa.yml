@@ -55,6 +55,8 @@ jobs:
             mkdir -p qa-output
             adb pull /sdcard/Download/ta_office_preview_synthetic.png qa-output/office-preview-synthetic.png
             test -s qa-output/office-preview-synthetic.png
+            adb pull /sdcard/Download/ta_office_xlsx_gap.png qa-output/office-xlsx-gap.png
+            test -s qa-output/office-xlsx-gap.png
       - name: Preserve synthetic reports
         if: always()
         uses: actions/upload-artifact@v4

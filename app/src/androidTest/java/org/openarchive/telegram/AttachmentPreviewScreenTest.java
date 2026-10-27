@@ -157,4 +157,73 @@ public class AttachmentPreviewScreenTest {
         }finally{file.delete();}
     }
 
+    @Test public void nestedDocxHardwareBackRestoresSameArchiveListPosition()throws Exception{
+        File archive=File.createTempFile("synthetic-nested-", ".zip",app.getCacheDir());
+        ByteArrayOutputStream docBytes=new ByteArrayOutputStream();
+        try(ZipOutputStream doc=new ZipOutputStream(docBytes)){
+            doc.putNextEntry(new ZipEntry("word/document.xml"));
+            doc.write("<w:document xmlns:w='urn:w'><w:body><w:p><w:r><w:t>Учебный документ офлайн</w:t></w:r></w:p></w:body></w:document>".getBytes(StandardCharsets.UTF_8));
+            doc.closeEntry();
+        }
+        try(ZipOutputStream zip=new ZipOutputStream(new FileOutputStream(archive))){
+            for(int n=0;n<25;n++){
+                zip.putNextEntry(new ZipEntry("other/file"+n+".txt"));
+                zip.write(("Synthetic "+n).getBytes(StandardCharsets.UTF_8));zip.closeEntry();
+            }
+            zip.putNextEntry(new ZipEntry("Документы/Учёба/Работа.docx"));
+            zip.write(docBytes.toByteArray());zip.closeEntry();
+        }
+        try{
+            Intent intent=new Intent(app,AttachmentPreviewActivity.class);
+            intent.setData(Uri.fromFile(archive));intent.putExtra("display_name","Учебный архив.zip");
+            screen.launchActivity(intent);awaitText("Документы/Учёба/Работа.docx");
+            final int[] position={0};
+            instrumentation.runOnMainSync(()->{try{
+                java.lang.reflect.Field field=AttachmentPreviewActivity.class.getDeclaredField("scroll");field.setAccessible(true);
+                android.widget.ScrollView scroller=(android.widget.ScrollView)field.get(screen.getActivity());
+                scroller.scrollTo(0,Math.max(0,scroller.getChildAt(0).getHeight()-scroller.getHeight()));position[0]=scroller.getScrollY();
+                assertTrue("The synthetic index must scroll",position[0]>0);
+                assertTrue(clickText(screen.getActivity().findViewById(android.R.id.content),"Документы/Учёба/Работа.docx"));
+            }catch(Exception e){throw new AssertionError(e);}});
+            awaitText("Учебный документ офлайн");
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+            awaitText("Вложений: 26");
+            instrumentation.runOnMainSync(()->{try{
+                assertFalse("System Back must keep archive preview open",screen.getActivity().isFinishing());
+                java.lang.reflect.Field field=AttachmentPreviewActivity.class.getDeclaredField("scroll");field.setAccessible(true);
+                android.widget.ScrollView scroller=(android.widget.ScrollView)field.get(screen.getActivity());
+                assertEquals("Archive list scroll should be restored",position[0],scroller.getScrollY());
+            }catch(Exception e){throw new AssertionError(e);}});
+        }finally{archive.delete();}
+    }
+    @Test public void systemBackDuringNestedLoadDoesNotReopenStaleResult()throws Exception{
+        File file=generate(".zip","nested/readme.txt","Synthetic stale callback");
+        try{
+            Intent intent=new Intent(app,AttachmentPreviewActivity.class);
+            intent.setData(Uri.fromFile(file));intent.putExtra("display_name","Тест.zip");screen.launchActivity(intent);
+            awaitText("nested/readme.txt");
+            instrumentation.runOnMainSync(()->{
+                assertTrue(clickText(screen.getActivity().findViewById(android.R.id.content),"nested/readme.txt"));
+                screen.getActivity().onBackPressed();
+            });
+            awaitText("Вложений: 1");
+            Thread.sleep(500);instrumentation.waitForIdleSync();
+            assertTrue(contains(screen.getActivity().findViewById(android.R.id.content),"Вложений: 1"));
+            assertFalse(contains(screen.getActivity().findViewById(android.R.id.content),"Synthetic stale callback"));
+        }finally{file.delete();}
+    }
+    @Test public void excelKeepsEmptyColumnAndExplainsFormulaResults()throws Exception{
+        String sheet="<worksheet><sheetData><row><c r='A1'><v>10</v></c><c r='C1'><f>SUM(A1:A2)</f><v>20</v></c></row></sheetData></worksheet>";
+        File file=generate(".xlsx","xl/worksheets/sheet1.xml",sheet);
+        try{
+            Intent intent=new Intent(app,AttachmentPreviewActivity.class);
+            intent.setData(Uri.fromFile(file));intent.putExtra("display_name","Синтетическая таблица.xlsx");
+            screen.launchActivity(intent);awaitText("10\t\t20");awaitText("Формулы не пересчитываются");
+            try(ParcelFileDescriptor p=instrumentation.getUiAutomation().executeShellCommand(
+                "screencap -p /sdcard/Download/ta_office_xlsx_gap.png");
+                FileInputStream stream=new FileInputStream(p.getFileDescriptor())){
+                byte[] buffer=new byte[256];while(stream.read(buffer)!=-1){}
+            }
+        }finally{file.delete();}
+    }
 }

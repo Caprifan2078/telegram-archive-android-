@@ -26,6 +26,7 @@ final class OfficePreviewText {
     private static final int ENTRY_LIMIT=5*1024*1024;
     private static final int MAX_RESULT=140000;
     private static final int MAX_PARTS=200;
+    private static final int MAX_SKIPPED_BYTES=64*1024*1024;
     private OfficePreviewText(){}
 
     static boolean supported(String name){
@@ -65,7 +66,7 @@ final class OfficePreviewText {
         if(!ext.equals("docx")&&!ext.equals("xlsx")&&!ext.equals("pptx"))
             throw new IOException("Этот формат пока не имеет безопасного внутреннего просмотрщика");
         List<Part> parts=new ArrayList<>();
-        int seen=0,total=0;
+        int seen=0,total=0,skipped=0;byte[] discard=new byte[8192];
         try(ZipInputStream zip=new ZipInputStream(stream)){
             ZipEntry entry;
             while((entry=zip.getNextEntry())!=null){
@@ -79,6 +80,14 @@ final class OfficePreviewText {
                     total+=bytes.length;
                     if(total>20*1024*1024)throw new IOException("Превышен лимит просмотра документа");
                     parts.add(new Part(name,bytes));
+                }else{
+                    // closeEntry() otherwise decompresses an unbounded ignored member.
+                    int n;while((n=zip.read(discard))!=-1){
+                        if(n==0)continue;
+                        if(n>MAX_SKIPPED_BYTES-skipped)
+                            throw new IOException("В документе слишком много данных для безопасного предпросмотра");
+                        skipped+=n;
+                    }
                 }
                 zip.closeEntry();
             }
@@ -104,7 +113,9 @@ final class OfficePreviewText {
         List<String> shared=new ArrayList<>();
         for(Part part:parts)if(part.name.equals("xl/sharedStrings.xml")){
             SharedStrings handler=new SharedStrings();
-            sax(part.data,handler);shared=handler.strings;break;
+            sax(part.data,handler);
+            if(handler.truncated)throw new IOException("Слишком длинная строка в таблице для предпросмотра");
+            shared=handler.strings;break;
         }
         StringBuilder out=new StringBuilder();int number=0;
         for(Part part:parts)if(part.name.contains("/worksheets/sheet")){
@@ -157,18 +168,22 @@ final class OfficePreviewText {
     private static String parse(byte[] data,List<String> shared,boolean spreadsheet)throws Exception{
         TextCollector collector=new TextCollector(shared,spreadsheet);
         sax(data,collector);
+        if(collector.truncated)throw new IOException("Слишком много текста для безопасного предпросмотра");
         return collector.output.toString();
     }
     private static final class SharedStrings extends DefaultHandler{
         final ArrayList<String> strings=new ArrayList<>();
-        StringBuilder item=new StringBuilder();boolean inItem,inText;
+        StringBuilder item=new StringBuilder();boolean inItem,inText,truncated;
         @Override public void startElement(String uri,String local,String qName,Attributes attributes){
             String tag=tag(local,qName);
             if(tag.equals("si")){inItem=true;item=new StringBuilder();}
             if(tag.equals("t")&&inItem)inText=true;
         }
         @Override public void characters(char[] ch,int start,int length){
-            if(inText&&item.length()<MAX_RESULT)item.append(ch,start,length);
+            if(inText){
+                if(length>MAX_RESULT-item.length())truncated=true;
+                else item.append(ch,start,length);
+            }
         }
         @Override public void endElement(String uri,String local,String qName){
             String t=tag(local,qName);
@@ -180,22 +195,48 @@ final class OfficePreviewText {
         final StringBuilder output=new StringBuilder();
         final List<String> shared;final boolean spreadsheet;
         final StringBuilder cell=new StringBuilder();
-        boolean inText,inValue,cellShared;
+        boolean inText,inValue,cellShared,truncated;int nextColumn;
         TextCollector(List<String> items,boolean sheets){shared=items;spreadsheet=sheets;}
-        private void append(String value){
-            if(output.length()<MAX_RESULT)output.append(value);
+        private static int columnIndex(String reference)throws org.xml.sax.SAXException{
+            if(reference==null||reference.isEmpty())return -1;
+            int column=0,i=0;
+            while(i<reference.length()){
+                char c=Character.toUpperCase(reference.charAt(i));
+                if(c<'A'||c>'Z')break;
+                column=column*26+(c-'A'+1);
+                if(column>16384)throw new org.xml.sax.SAXException("Неверный столбец таблицы");
+                i++;
+            }
+            if(i==0||i>=reference.length())throw new org.xml.sax.SAXException("Неверная ссылка на ячейку");
+            for(int j=i;j<reference.length();j++)if(!Character.isDigit(reference.charAt(j)))
+                throw new org.xml.sax.SAXException("Неверная ссылка на ячейку");
+            return column-1;
         }
-        @Override public void startElement(String uri,String local,String qName,Attributes attributes){
+        private void append(String value){
+            if(value.length()>MAX_RESULT-output.length())truncated=true;
+            else output.append(value);
+        }
+        @Override public void startElement(String uri,String local,String qName,Attributes attributes)throws org.xml.sax.SAXException{
             String t=tag(local,qName);
             if(spreadsheet){
-                if(t.equals("c")){cell.setLength(0);cellShared="s".equals(attributes.getValue("t"));}
+                if(t.equals("row"))nextColumn=0;
+                if(t.equals("c")){
+                    int column=columnIndex(attributes.getValue("r"));
+                    if(column>=0){
+                        if(column<nextColumn)throw new org.xml.sax.SAXException("Ячейки таблицы расположены не по порядку");
+                        while(nextColumn<column){append("\t");nextColumn++;}
+                    }
+                    cell.setLength(0);cellShared="s".equals(attributes.getValue("t"));
+                }
                 inValue=t.equals("v")||t.equals("t");
             } else if(t.equals("t"))inText=true;
             if(!spreadsheet&&(t.equals("br")||t.equals("tab")))append(t.equals("tab")?"\t":"\n");
         }
         @Override public void characters(char[] ch,int start,int length){
-            if(spreadsheet&&inValue&&cell.length()<MAX_RESULT)cell.append(ch,start,length);
-            else if(inText&&output.length()<MAX_RESULT)append(new String(ch,start,length));
+            if(spreadsheet&&inValue){
+                if(length>MAX_RESULT-cell.length())truncated=true;
+                else cell.append(ch,start,length);
+            } else if(inText)append(new String(ch,start,length));
         }
         @Override public void endElement(String uri,String local,String qName){
             String t=tag(local,qName);
@@ -208,7 +249,7 @@ final class OfficePreviewText {
                             if(index>=0&&index<shared.size())text=shared.get(index);
                         }catch(Exception ignored){}
                     }
-                    append(text.replace('\t',' ').replace('\n',' '));append("\t");
+                    append(text.replace('\t',' ').replace('\n',' '));append("\t");nextColumn++;
                 }
                 if(t.equals("row"))append("\n");
             }else{

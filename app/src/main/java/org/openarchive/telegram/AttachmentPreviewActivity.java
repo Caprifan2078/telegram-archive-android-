@@ -36,7 +36,8 @@ public final class AttachmentPreviewActivity extends Activity {
     private Uri source;
     private String fileName;
     private char[] password;
-    private int page=0,requestId;
+    private int page=0,requestId,indexScrollY;
+    private boolean nestedOpen;
     private static final int PAGE_SIZE=100;
     private static final int BACKGROUND=0xff101827,FG=0xffeef2f7,SUB=0xffa7b7cc,ACCENT=0xff6ddbc9;
     @Override public void onCreate(Bundle saved){
@@ -102,7 +103,7 @@ public final class AttachmentPreviewActivity extends Activity {
                 List<ArchiveReadOnly.Entry> found=ArchiveReadOnly.list(this,source,fileName,pass);
                 runOnUiThread(()->{
                     if(current!=requestId||isFinishing()||isDestroyed())return;
-                    entries.clear();entries.addAll(found);page=0;renderIndex();
+                    entries.clear();entries.addAll(found);page=0;indexScrollY=0;renderIndex();
                 });
             }catch(Exception error){
                 runOnUiThread(()->{if(current==requestId&&!isFinishing())fail(error.getMessage(),true);});
@@ -112,7 +113,7 @@ public final class AttachmentPreviewActivity extends Activity {
     private void renderIndex(){
         // Returning while a selected file is still decoding must invalidate
         // its callback; otherwise that old result replaces the archive list.
-        ++requestId;
+        ++requestId;nestedOpen=false;
         showHeader();
         panel.addView(text("Вложений: "+entries.size()+" · показаны не более "+PAGE_SIZE+" на странице",13,ACCENT));
         int from=page*PAGE_SIZE,to=Math.min(entries.size(),from+PAGE_SIZE);
@@ -123,11 +124,21 @@ public final class AttachmentPreviewActivity extends Activity {
             if(entry.directory){panel.addView(text(label,13,SUB));continue;}
             button(label,()->previewDocument(entry.name));
         }
-        if(page>0)button("‹ Предыдущая сотня",()->{page--;renderIndex();});
-        if(to<entries.size())button("Следующая сотня ›",()->{page++;renderIndex();});
+        if(page>0)button("‹ Предыдущая сотня",()->{page--;indexScrollY=0;renderIndex();});
+        if(to<entries.size())button("Следующая сотня ›",()->{page++;indexScrollY=0;renderIndex();});
         if(entries.isEmpty())panel.addView(text("Архив пуст или содержит только неподдерживаемые ссылки.",13,SUB));
+        final int restoreY=indexScrollY,renderToken=requestId;
+        panel.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener(){
+            @Override public boolean onPreDraw(){
+                if(panel.getViewTreeObserver().isAlive())panel.getViewTreeObserver().removeOnPreDrawListener(this);
+                if(renderToken==requestId&&!nestedOpen)scroll.scrollTo(0,restoreY);
+                return true;
+            }
+        });
     }
     private void previewDocument(String nested){
+        if(nested!=null&&!nestedOpen)indexScrollY=scroll.getScrollY();
+        nestedOpen=nested!=null;
         final int current=++requestId;
         showHeader();
         if(nested!=null)button("‹ Вернуться к списку",this::renderIndex);
@@ -172,6 +183,8 @@ public final class AttachmentPreviewActivity extends Activity {
                         viewer.setTextIsSelectable(true);panel.addView(viewer);
                         if(ext.equals("docx")||ext.equals("xlsx")||ext.equals("pptx"))
                             panel.addView(text("Предпросмотр текста и данных. Сложная разметка, рисунки, диаграммы и анимация Office здесь не воспроизводятся.",12,SUB));
+                        if(ext.equals("xlsx"))
+                            panel.addView(text("Формулы не пересчитываются: показаны сохранённые значения. Даты могут отображаться числами.",12,SUB));
                     });
                 }
             }catch(Exception ex){
@@ -191,6 +204,10 @@ public final class AttachmentPreviewActivity extends Activity {
         while(pixels/(sample*sample)>4_000_000L)sample*=2;
         BitmapFactory.Options opt=new BitmapFactory.Options();opt.inSampleSize=sample;
         return BitmapFactory.decodeByteArray(data,0,data.length,opt);
+    }
+    @Override public void onBackPressed(){
+        if(nestedOpen){renderIndex();return;}
+        super.onBackPressed();
     }
     @Override protected void onDestroy(){
         requestId++;background.shutdownNow();
