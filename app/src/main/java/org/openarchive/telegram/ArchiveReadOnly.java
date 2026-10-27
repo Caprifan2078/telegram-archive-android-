@@ -150,7 +150,20 @@ final class ArchiveReadOnly {
                         if(e.getMethod()==93||e.getMethod()==20)
                             throw new IOException("ZIP Zstandard пока не поддерживается");
                         if(!archive.canReadEntryData(e))throw new IOException("Сжатие вложения не поддерживается");
-                        try(InputStream input=archive.getInputStream(e)){return copyLimited(input,limit);}
+                        try(InputStream input=archive.getInputStream(e)){
+                            byte[] content=copyLimited(input,limit);
+                            // Seekable ZIP readers may not verify CRC on getInputStream.
+                            // Never display silently corrupted text or Office data.
+                            if(e.getSize()>=0&&content.length!=e.getSize())
+                                throw new IOException("Размер ZIP-вложения не совпадает с заголовком");
+                            if(e.getCrc()>=0){
+                                java.util.zip.CRC32 sum=new java.util.zip.CRC32();
+                                sum.update(content);
+                                if(sum.getValue()!=e.getCrc())
+                                    throw new IOException("Повреждённый ZIP: контрольная сумма CRC не совпала");
+                            }
+                            return content;
+                        }
                     }
                 }
             }

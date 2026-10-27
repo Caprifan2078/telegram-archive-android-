@@ -211,4 +211,44 @@ public class ArchivePreviewIntegrationTest {
         }
     }
 
+    @Test public void zipWithTamperedStoredDataIsRejectedInsteadOfShowingWrongText()throws Exception{
+        File archive=temp("zip");
+        byte[] original="ORIGINAL_VIEW_ONLY_PAYLOAD_987".getBytes(StandardCharsets.UTF_8);
+        java.io.ByteArrayOutputStream buffer=new java.io.ByteArrayOutputStream();
+        try(ZipOutputStream writer=new ZipOutputStream(buffer)){
+            ZipEntry entry=new ZipEntry("safe/note.txt");
+            java.util.zip.CRC32 crc=new java.util.zip.CRC32();
+            crc.update(original);
+            entry.setMethod(ZipEntry.STORED);
+            entry.setSize(original.length);
+            entry.setCompressedSize(original.length);
+            entry.setCrc(crc.getValue());
+            writer.putNextEntry(entry);writer.write(original);writer.closeEntry();
+        }
+        byte[] bytes=buffer.toByteArray();
+        try{
+            try(FileOutputStream out=new FileOutputStream(archive)){out.write(bytes);}
+            Uri uri=Uri.fromFile(archive);
+            List<ArchiveReadOnly.Entry> entries=ArchiveReadOnly.list(ctx,uri,"legit.zip",null);
+            assertEquals(1,entries.size());
+            assertEquals(new String(original,StandardCharsets.UTF_8),new String(
+                ArchiveReadOnly.read(ctx,uri,"legit.zip",null,entries.get(0).name),StandardCharsets.UTF_8));
+            int position=-1;
+            outer:for(int i=0;i<=bytes.length-original.length;i++){
+                for(int j=0;j<original.length;j++)if(bytes[i+j]!=original[j])continue outer;
+                position=i;break;
+            }
+            assertTrue("Fixture stored bytes absent",position>=0);
+            bytes[position+4]^=1; // same byte count, wrong CRC, still valid ZIP structure
+            try(FileOutputStream out=new FileOutputStream(archive)){out.write(bytes);}
+            assertEquals(1,ArchiveReadOnly.list(ctx,uri,"damaged.zip",null).size());
+            try{
+                ArchiveReadOnly.read(ctx,uri,"damaged.zip",null,"safe/note.txt");
+                fail("Corrupted ZIP content was silently presented as a valid document");
+            }catch(IOException error){
+                assertTrue("Expected a clear integrity error, got: "+error,error.getMessage().contains("CRC"));
+            }
+        }finally{archive.delete();}
+    }
+
 }
