@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - qa/v052-duplicate-id-safety-20261026
+      - qa/telegram-7z-import-20261027
     paths:
       - '.github/workflows/android-modern-compat-qa.yml'
       - 'app/src/main/java/org/openarchive/telegram/MessageDb.java'
@@ -58,7 +59,7 @@ jobs:
           emulator-boot-timeout: 420
           script: |
             mkdir -p qa-output
-            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.SearchLifecycleRegressionTest,org.openarchive.telegram.ImportRollbackRegressionTest,org.openarchive.telegram.EncryptedTelegramImportRegressionTest,org.openarchive.telegram.MissingMediaPlaybackRegressionTest,org.openarchive.telegram.TelegramReplyIntegrationTest,org.openarchive.telegram.ArchivePreviewIntegrationTest,org.openarchive.telegram.AttachmentPreviewScreenTest,org.openarchive.telegram.RarCompatibilityRegressionTest'
+            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.SearchLifecycleRegressionTest,org.openarchive.telegram.ImportRollbackRegressionTest,org.openarchive.telegram.EncryptedTelegramImportRegressionTest,org.openarchive.telegram.MissingMediaPlaybackRegressionTest,org.openarchive.telegram.TelegramReplyIntegrationTest,org.openarchive.telegram.ArchivePreviewIntegrationTest,org.openarchive.telegram.AttachmentPreviewScreenTest,org.openarchive.telegram.RarCompatibilityRegressionTest,org.openarchive.telegram.SevenZTelegramImportRegressionTest'
             adb logcat -d -t 400 > qa-output/emulator-log.txt || true
       - name: Save synthetic compatibility reports
         if: always()
