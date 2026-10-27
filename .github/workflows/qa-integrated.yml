@@ -1,6 +1,11 @@
 name: Integrated archive QA
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - qa/v052-duplicate-id-safety-20261026
+    paths:
+      - '.github/workflows/qa-integrated.yml'
 permissions:
   contents: read
 concurrency:

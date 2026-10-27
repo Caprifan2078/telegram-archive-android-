@@ -300,3 +300,10 @@
 ### Проверка ссылок ячеек XLSX
 
 Для повреждённых таблиц предпросмотр сверяет номер строки в ссылке ячейки с её фактической строкой и показывает ошибку при несовпадении. Это не восстановление повреждённых файлов. Добавлены регрессионные JVM и Android проверки и Android-проверка синтетического DOCX от python-docx. Результаты Android см. в Actions конкретного коммита.
+
+
+### Результат Office и Android 11/14 на b9c55e7
+
+[Android 11: 36/36](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/40481707218), [Android 14: 49/49](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/40481707217), [JVM и сборка](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/40481707155), [offline host](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/40481707086). Проверены синтетические DOCX, XLSX и PPTX, включая порядок страниц и ошибочную ссылку XLSX. Скриншот синтетической таблицы: [office-xlsx-gap.png](qa/synthetic/office-xlsx-gap.png). Точное форматирование Office, физическое устройство и все виды архивов не проверены.
+
+На предшествующем коммите одна попытка Android 14 завершилась двумя ошибками кнопки «Назад»; повтор этого же коммита прошёл 47/47. У следующего прогона тесты ожидали фокус окна и прошли. Причина исходного непостоянного сбоя окончательно не доказана.
