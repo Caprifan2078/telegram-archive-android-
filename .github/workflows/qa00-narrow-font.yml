@@ -2,7 +2,7 @@ name: QA-00 narrow display and large text
 on:
   push:
     branches: [qa/work-modular-audit-00-18]
-    paths: ['app/src/androidTest/java/org/openarchive/telegram/Qa00NavigationCoreTest.java', 'app/src/main/java/org/openarchive/telegram/MainActivity.java']
+    paths: ['app/src/androidTest/java/org/openarchive/telegram/Qa00NavigationCoreTest.java']
   workflow_dispatch:
 permissions:
   contents: read

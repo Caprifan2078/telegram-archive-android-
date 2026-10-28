@@ -2294,6 +2294,7 @@ public class MainActivity extends Activity {
                     pageLabel.setText(count==0?"Нет данных":(pos+1)+"–"+(pos+shown)+" / "+count);
                     backPage.setEnabled(pos>0);nextPage.setEnabled(pos+shown<count);
                     if(count==0)status.setText(gallery?"Таких медиа пока нет. Попробуй повторный импорт исходных HTML.":
+                            "chat".equals(tab)?"В этой переписке пока нет сообщений.":
                             "Ничего не найдено — попробуй другой запрос или выбери папку.");
                     else status.setText("media".equals(tab)?"Нажми — воспроизвести · удерживай — действия":
                             "search".equals(tab)?(search.isEmpty()?"Введите слово или фразу":("Сообщений: "+count+"  ·  Точных вхождений «"+clip(search,28)+"»: "+stats.literalOccurrences+(deepMode?"":"  ·  Быстрый поиск учитывает начала слов"))):

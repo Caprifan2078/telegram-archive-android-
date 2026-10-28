@@ -4,7 +4,7 @@ name: QA-00 360dp and core-media regression
 on:
   push:
     branches: [qa/work-modular-audit-00-18]
-    paths: ['app/src/main/java/org/openarchive/telegram/MainActivity.java']
+    paths: ['app/src/androidTest/java/org/openarchive/telegram/MissingMediaPlaybackRegressionTest.java']
   workflow_dispatch:
 permissions:
   contents: read

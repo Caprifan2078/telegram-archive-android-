@@ -2,7 +2,7 @@ name: QA-01 chat-list sizes
 on:
   push:
     branches: [qa/work-modular-audit-00-18]
-    paths: ['.github/workflows/qa01-chat-list-sizes.yml', 'app/src/androidTest/java/org/openarchive/telegram/Qa01ChatListSizeTest.java']
+    paths: ['.github/workflows/qa01-chat-list-sizes.yml', 'app/src/androidTest/java/org/openarchive/telegram/Qa01ChatListSizeTest.java', 'app/src/main/java/org/openarchive/telegram/MainActivity.java']
   workflow_dispatch:
 permissions:
   contents: read
