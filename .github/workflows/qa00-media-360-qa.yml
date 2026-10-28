@@ -4,7 +4,7 @@ name: QA-00 360dp and core-media regression
 on:
   push:
     branches: [qa/work-modular-audit-00-18]
-    paths: ['.github/workflows/qa00-media-360-qa.yml']
+    paths: ['app/src/main/java/org/openarchive/telegram/MainActivity.java']
   workflow_dispatch:
 permissions:
   contents: read
@@ -47,10 +47,11 @@ jobs:
           emulator-boot-timeout: 420
           script: |
             mkdir -p qa-output/core-results qa-output/ui-results qa-output/ui-shots
+            touch qa-output/core-not-completed.marker qa-output/ui-not-completed.marker
             if ! gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.MediaAssetsRegressionTest,org.openarchive.telegram.MediaPlaybackTest,org.openarchive.telegram.RoundPlayerActivityTest,org.openarchive.telegram.PlaybackLifecycleTest,org.openarchive.telegram.ImportRollbackRegressionTest,org.openarchive.telegram.MissingMediaPlaybackRegressionTest,org.openarchive.telegram.ArchiveIntegrationTest,org.openarchive.telegram.TelegramReplyIntegrationTest,org.openarchive.telegram.MediaClassifierTest,org.openarchive.telegram.MediaTabsIsolationTest,org.openarchive.telegram.MediaGridResponsiveAndroidTest,org.openarchive.telegram.UiSmokeTest,org.openarchive.telegram.ReadableUiTest,org.openarchive.telegram.ExportMediaFilenameRegressionTest,org.openarchive.telegram.PinnedFocusNavigationRegressionTest,org.openarchive.telegram.RelationshipAnalyticsExplanationUiTest,org.openarchive.telegram.SearchLifecycleRegressionTest'; then touch qa-output/core-failed.marker; fi
+            rm -f qa-output/core-not-completed.marker
             cp -r app/build/outputs/androidTest-results/. qa-output/core-results/ || true
             for shot in relationships analytics search; do adb pull "/sdcard/Download/ta_synthetic_${shot}.png" "qa-output/${shot}.png" || true; done
-            adb shell pm clear org.openarchive.telegram.qa.preview51
             adb shell wm size 360x720
             adb shell wm density 160
             adb shell settings put system font_scale 1.3
@@ -58,13 +59,14 @@ jobs:
             adb shell wm density >> qa-output/display-config.txt
             adb shell settings get system font_scale >> qa-output/display-config.txt
             if ! gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.UiMenuTourRegressionTest,org.openarchive.telegram.Qa00NavigationCoreTest,org.openarchive.telegram.UiSmokeTest'; then touch qa-output/ui-failed.marker; fi
+            rm -f qa-output/ui-not-completed.marker
             cp -r app/build/outputs/androidTest-results/. qa-output/ui-results/ || true
             for shot in drawer-home drawer-group-0 drawer-group-1 drawer-group-2 drawer-group-3 help settings-applied font-choices theme-graphite performance-dialog performance-action-visibility backup-confirm failure; do adb pull "/sdcard/Download/ta_ui_tour_${shot}.png" "qa-output/ui-shots/${shot}.png" || true; done
             for name in performance failure; do adb pull "/sdcard/Download/ta_ui_tour_${name}.xml" "qa-output/ui-shots/${name}.xml" || true; done
             adb logcat -d -t 400 > qa-output/emulator-log.txt || true
       - name: Require both regressions to pass
         if: always()
-        run: test ! -f qa-output/core-failed.marker && test ! -f qa-output/ui-failed.marker
+        run: test ! -f qa-output/core-failed.marker && test ! -f qa-output/ui-failed.marker && test ! -f qa-output/core-not-completed.marker && test ! -f qa-output/ui-not-completed.marker
       - name: Save synthetic instrumentation results
         if: always()
         uses: actions/upload-artifact@v4
