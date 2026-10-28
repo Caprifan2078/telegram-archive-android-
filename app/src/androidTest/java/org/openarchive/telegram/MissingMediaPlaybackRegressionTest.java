@@ -172,4 +172,57 @@ public class MissingMediaPlaybackRegressionTest {
         }finally{ArchiveFileImport.deleteTree(folder);}
     }
 
+    @Test public void floatingRoundResumesAfterDelayedMediaResolution()throws Exception{
+        MainActivity a=activity.getActivity();String key=UUID.randomUUID().toString();
+        File folder=new File(a.getCacheDir(),"floating-resume-"+key);assertTrue(folder.mkdirs());
+        File file=new File(folder,"round.mp4");copyAsset("short-round.mp4",file);
+        java.util.concurrent.CountDownLatch started=new java.util.concurrent.CountDownLatch(2);
+        java.util.concurrent.CountDownLatch release=new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.ExecutorService pool=(java.util.concurrent.ExecutorService)get(a,"mediaWorker");
+        for(int i=0;i<2;i++)pool.execute(()->{
+            started.countDown();try{release.await();}catch(InterruptedException e){Thread.currentThread().interrupt();}
+        });
+        try{
+            assertTrue("Media workers were not blocked",started.await(5,java.util.concurrent.TimeUnit.SECONDS));
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{
+                try{
+                    set(a,"folder",new DocumentFolder(a.getContentResolver(),folder));
+                    set(a,"activeKey","synthetic-floating-"+key);set(a,"floatingStart",2000);
+                    MessageDb.Attachment note=new MessageDb.Attachment();note.kind="round";note.path="round.mp4";note.author="Synthetic";
+                    Method show=MainActivity.class.getDeclaredMethod("showFloatingRound",MessageDb.Attachment.class);
+                    show.setAccessible(true);show.invoke(a,note);
+                }catch(Exception ex){throw new AssertionError(ex);}
+            });
+            // Force the old 650 ms resume timer to expire while no player exists.
+            SystemClock.sleep(900);release.countDown();
+            java.util.concurrent.atomic.AtomicBoolean playing=new java.util.concurrent.atomic.AtomicBoolean();
+            long readyDeadline=SystemClock.uptimeMillis()+10000;
+            while(!playing.get()&&SystemClock.uptimeMillis()<readyDeadline){
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{
+                    try{android.media.MediaPlayer p=(android.media.MediaPlayer)get(a,"player");playing.set(p!=null&&p.isPlaying());}
+                    catch(Exception ignored){}
+                });
+                SystemClock.sleep(40);
+            }
+            assertTrue("Floating video never started",playing.get());
+            java.util.concurrent.atomic.AtomicInteger position=new java.util.concurrent.atomic.AtomicInteger(-1);
+            long seekDeadline=SystemClock.uptimeMillis()+1100;
+            while(position.get()<1500&&SystemClock.uptimeMillis()<seekDeadline){
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{
+                    try{android.media.MediaPlayer p=(android.media.MediaPlayer)get(a,"player");if(p!=null)position.set(p.getCurrentPosition());}
+                    catch(Exception ignored){}
+                });
+                if(position.get()<1500)SystemClock.sleep(40);
+            }
+            assertTrue("Floating video restarted instead of resuming: "+position.get(),position.get()>=1500);
+        }finally{
+            release.countDown();
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{
+                try{Method close=MainActivity.class.getDeclaredMethod("closeFloatingRound");close.setAccessible(true);close.invoke(a);}
+                catch(Exception e){throw new AssertionError(e);}
+            });
+            ArchiveFileImport.deleteTree(folder);
+        }
+    }
+
 }
