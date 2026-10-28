@@ -64,6 +64,16 @@ public class Qa00NavigationCoreTest {
     private void shown(String label) {
         assertNotNull("Expected UI text missing: "+label,visible(label));
     }
+    private void shownAfterDrawerScroll(String label) {
+        for(int i=0;i<10;i++){
+            if(visible(label)!=null)return;
+            int x=device.getDisplayWidth()/3;
+            device.swipe(x,device.getDisplayHeight()*76/100,
+                x,device.getDisplayHeight()*32/100,20);
+            device.waitForIdle();
+        }
+        assertNotNull("Drawer item unreachable after scrolling: "+label,visible(label));
+    }
 
     @Test public void emptyHomeOpensImportDialogAndClosesDrawerByTouchOutside() {
         shown("Мои переписки");
@@ -198,8 +208,8 @@ public class Qa00NavigationCoreTest {
             tap("Все инструменты");
             shown("TELEGRAM ARCHIVE");
             tap("Инструменты переписки");
-            shown("Навигатор пауз");
-            shown("В этот день");
+            shownAfterDrawerScroll("В этот день");
+            shownAfterDrawerScroll("Навигатор пауз");
             device.pressBack();device.waitForIdle();
         }finally{
             CountDownLatch idle=new CountDownLatch(1);
