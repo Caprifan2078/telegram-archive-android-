@@ -1,13 +1,15 @@
-name: Synthetic UI Menu Tour QA
+name: QA-00 Navigation and Menu Interaction
 on:
   push:
     branches:
       - qa/ui-menu-tour-20261028
+      - qa/qa00-main-interface-20261028
     paths:
       - '.github/workflows/ui-menu-tour-qa.yml'
       - 'app/build.gradle'
       - 'app/src/main/java/org/openarchive/telegram/MainActivity.java'
       - 'app/src/androidTest/java/org/openarchive/telegram/UiMenuTourRegressionTest.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/Qa00NavigationCoreTest.java'
   workflow_dispatch:
 permissions:
   contents: read
@@ -47,7 +49,7 @@ jobs:
           emulator-boot-timeout: 420
           script: |
             mkdir -p qa-output
-            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.UiMenuTourRegressionTest' || touch qa-output/ui-test-failed.marker
+            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.UiMenuTourRegressionTest,org.openarchive.telegram.Qa00NavigationCoreTest,org.openarchive.telegram.UiSmokeTest' || touch qa-output/ui-test-failed.marker
             for shot in drawer-home drawer-group-0 drawer-group-1 drawer-group-2 drawer-group-3 help settings-applied font-choices theme-graphite performance-dialog failure; do adb pull "/sdcard/Download/ta_ui_tour_${shot}.png" "qa-output/${shot}.png" || true; done
             for name in performance failure; do adb pull "/sdcard/Download/ta_ui_tour_${name}.xml" "qa-output/${name}.xml" || true; done
             adb logcat -d -t 400 > qa-output/logcat.txt || true
