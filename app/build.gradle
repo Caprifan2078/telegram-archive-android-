@@ -37,6 +37,14 @@ android {
             signingConfig signingConfigs.debug
         }
     }
+    // Isolated Work QA install; its ephemeral debug certificate is not an update key.
+    buildTypes {
+        workQa {
+            initWith compactQa
+            applicationIdSuffix '.workqa20261028'
+            signingConfig signingConfigs.debug
+        }
+    }
     // Separate application ID protects existing preview51 data when its key differs.
     buildTypes {
         stableQa {

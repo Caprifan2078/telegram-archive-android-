@@ -38,6 +38,7 @@ final class BackupVerifier {
     }
     private static void scanBackup(Context context,InputStream source,File stage,DryRun result,Progress progress)throws Exception {
         boolean full=false;File inner=null;JSONObject manifest=null,compactManifest=null;
+        boolean permitsFull=true,permitsCompact=true,hasCompactManifest=false,hasFullManifest=false,hasNotesDb=false;
         MediaIntegrity mediaHash=new MediaIntegrity();MediaIntegrity customHash=new MediaIntegrity();MediaIntegrity noteHash=new MediaIntegrity();long mediaBytes=0;int mediaFiles=0;
         Map<String,Long> databaseLengths=new HashMap<>();
         Map<String,String> databaseDigests=new HashMap<>();
@@ -49,6 +50,11 @@ final class BackupVerifier {
                 if(++count>BackupEntryPolicy.MAX_ENTRIES)throw new IOException("Превышен лимит элементов ZIP");
                 String name=entry.getName();
                 BackupEntryPolicy.requireSafe(name,entry.isDirectory());
+                permitsFull &= BackupEnvelopePolicy.isFullEntry(name,entry.isDirectory());
+                permitsCompact &= BackupEnvelopePolicy.isCompactEntry(name,entry.isDirectory());
+                if("manifest.json".equals(name))hasCompactManifest=true;
+                if("full-manifest.json".equals(name))hasFullManifest=true;
+                if("db/notes.sqlite".equals(name))hasNotesDb=true;
                 if(entry.isDirectory()){zip.closeEntry();continue;}
                 if(!entries.add(name))throw new IOException("Повторяющийся файл");
                 boolean database=name.matches("db/(?:chat-[0-9]{1,5}|notes)\\.sqlite");
@@ -107,6 +113,8 @@ final class BackupVerifier {
         // ZIP parsing may stop before the encrypted stream's authenticated end marker.
         // Force an EOF read so tampered/truncated .tgar trailers cannot pass dry-run.
         byte[] trailer=new byte[128*1024];while(source.read(trailer)!=-1){}
+        BackupEnvelopePolicy.requireValid(full,permitsFull,permitsCompact,
+            inner!=null,hasFullManifest,hasCompactManifest,hasNotesDb);
         if(!full){
             // A valid SQLite file and ZIP CRC do not prove it is the DB listed in
             // the authenticated compact manifest. Check its exact size and digest.

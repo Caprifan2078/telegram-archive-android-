@@ -84,4 +84,33 @@ public class BackupDryRunRegressionTest {
             }finally{changed.delete();}
         }
     }
+
+    @Test public void dryRunRejectsUnexpectedFileWithoutChangingData()throws Exception{
+        try(Fixture f=new Fixture()){
+            String registry=f.prefs.getString("archive_registry","");
+            byte[] before=sha(f.zip);
+            File changed=File.createTempFile("dryrun-unexpected-", ".zip",ctx.getCacheDir());
+            try{
+                try(ZipInputStream in=new ZipInputStream(new FileInputStream(f.zip));
+                    ZipOutputStream out=new ZipOutputStream(new FileOutputStream(changed))){
+                    ZipEntry e; byte[] buffer=new byte[8192]; int n;
+                    while((e=in.getNextEntry())!=null){
+                        out.putNextEntry(new ZipEntry(e.getName()));
+                        while((n=in.read(buffer))!=-1)out.write(buffer,0,n);
+                        out.closeEntry();
+                    }
+                    out.putNextEntry(new ZipEntry("unexpected.txt"));
+                    out.write("synthetic".getBytes(StandardCharsets.UTF_8));out.closeEntry();
+                }
+                try{
+                    BackupVerifier.simulate(ctx,Uri.fromFile(changed),null,ignored->{});
+                    fail("Unexpected file must not pass dry-run");
+                }catch(IOException expected){
+                    assertTrue(expected.getMessage().contains("резервная копия"));
+                }
+                f.assertUnchanged(registry);assertArrayEquals(before,sha(f.zip));
+            }finally{changed.delete();}
+        }
+    }
+
 }
