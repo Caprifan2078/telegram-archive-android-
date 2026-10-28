@@ -4776,16 +4776,26 @@ public class MainActivity extends Activity {
     }
     private String formatTime(int s){return String.format(Locale.ROOT,"%d:%02d",s/60,s%60);}
     private void loadDuration(String path,TextView target){
-        String cached=durations.get(path);if(cached!=null){target.setText(cached);return;}
-        if(folder==null)return;DocumentFolder current=folder;int token=loadToken;
+        if(folder==null)return;
+        DocumentFolder current=folder;int token=loadToken;
+        String requestedArchive=activeKey;
+        String root=current.rootId();
+        String cacheKey=requestedArchive.length()+":"+requestedArchive+root.length()+":"+root+path;
+        String cached=durations.get(cacheKey);if(cached!=null){target.setText(cached);return;}
         mediaWorker.execute(()->{
-            String time="00:00";
+            String time=null;
             try{Uri uri=current.resolve(path);if(uri!=null){MediaMetadataRetriever reader=new MediaMetadataRetriever();
                 try{reader.setDataSource(this,uri);String raw=reader.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
                     if(raw!=null)time=formatTime((int)(Long.parseLong(raw)/1000));}finally{reader.release();}
             }}catch(Exception ignored){}
-            String result=time;durations.put(path,result);
-            runOnUiThread(()->{if(token==loadToken)target.setText(result);});
+            String result=time;
+            runOnUiThread(()->{
+                if(!isFinishing()&&token==loadToken&&current==folder&&requestedArchive.equals(activeKey)){
+                    // A missing or temporarily inaccessible original must not poison the cache.
+                    if(result!=null)durations.put(cacheKey,result);
+                    target.setText(result==null?"00:00":result);
+                }
+            });
         });
     }
     /** Low-priority, two-item prefetch for the *next* media page; never reads video bytes. */

@@ -113,4 +113,63 @@ public class MissingMediaPlaybackRegressionTest {
             assertStripClears();
         }finally{empty.delete();}
     }
+    private void copyAsset(String asset,File target)throws Exception{
+        try(java.io.InputStream in=InstrumentationRegistry.getInstrumentation().getContext().getAssets().open(asset);
+            java.io.OutputStream out=new java.io.FileOutputStream(target)){
+            byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);
+        }
+    }
+    private String expectedDuration(File file)throws Exception{
+        android.media.MediaMetadataRetriever r=new android.media.MediaMetadataRetriever();
+        try{
+            r.setDataSource(file.getAbsolutePath());
+            int seconds=(int)(Long.parseLong(r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION))/1000);
+            return String.format(java.util.Locale.ROOT,"%d:%02d",seconds/60,seconds%60);
+        }finally{r.release();}
+    }
+    private TextView requestDuration(MainActivity a,File folder,String archive,String path)throws Exception{
+        final TextView[] result=new TextView[1];
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{
+            try{
+                set(a,"folder",new DocumentFolder(a.getContentResolver(),folder));set(a,"activeKey",archive);
+                result[0]=new TextView(a);result[0].setText("pending");
+                Method load=MainActivity.class.getDeclaredMethod("loadDuration",String.class,TextView.class);
+                load.setAccessible(true);load.invoke(a,path,result[0]);
+            }catch(Exception ex){throw new AssertionError(ex);}
+        });
+        return result[0];
+    }
+    private void awaitDuration(TextView target,String expected)throws Exception{
+        java.util.concurrent.atomic.AtomicReference<String> value=new java.util.concurrent.atomic.AtomicReference<>("");
+        long until=SystemClock.uptimeMillis()+7000;
+        while(SystemClock.uptimeMillis()<until){
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(()->value.set(target.getText().toString()));
+            if(expected.equals(value.get()))return;
+            SystemClock.sleep(50);
+        }
+        assertEquals(expected,value.get());
+    }
+    @Test public void sameMediaPathInDifferentChatsHasItsOwnDuration()throws Exception{
+        MainActivity a=activity.getActivity();String key=UUID.randomUUID().toString();
+        File first=new File(a.getCacheDir(),"duration-a-"+key),second=new File(a.getCacheDir(),"duration-b-"+key);
+        assertTrue(first.mkdirs());assertTrue(second.mkdirs());
+        try{
+            File one=new File(first,"same.mp4"),two=new File(second,"same.mp4");
+            copyAsset("short-round.mp4",one);copyAsset("regular-video.mp4",two);
+            String aDuration=expectedDuration(one),bDuration=expectedDuration(two);
+            assertNotEquals("Synthetic files must have distinct durations",aDuration,bDuration);
+            awaitDuration(requestDuration(a,first,"synthetic-a-"+key,"same.mp4"),aDuration);
+            awaitDuration(requestDuration(a,second,"synthetic-b-"+key,"same.mp4"),bDuration);
+        }finally{ArchiveFileImport.deleteTree(first);ArchiveFileImport.deleteTree(second);}
+    }
+    @Test public void durationIsRetriedWhenMissingFileAppears()throws Exception{
+        MainActivity a=activity.getActivity();String key=UUID.randomUUID().toString();
+        File folder=new File(a.getCacheDir(),"duration-missing-"+key);assertTrue(folder.mkdirs());
+        try{
+            awaitDuration(requestDuration(a,folder,"synthetic-"+key,"later.mp4"),"00:00");
+            File media=new File(folder,"later.mp4");copyAsset("short-round.mp4",media);
+            awaitDuration(requestDuration(a,folder,"synthetic-"+key,"later.mp4"),expectedDuration(media));
+        }finally{ArchiveFileImport.deleteTree(folder);}
+    }
+
 }

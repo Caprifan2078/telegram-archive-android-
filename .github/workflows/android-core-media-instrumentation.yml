@@ -11,6 +11,7 @@ on:
       - 'app/src/main/java/org/openarchive/telegram/MainActivity.java'
       - 'app/src/main/java/org/openarchive/telegram/MessageDb.java'
       - 'app/src/androidTest/java/org/openarchive/telegram/ImportRollbackRegressionTest.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/MissingMediaPlaybackRegressionTest.java'
       - 'app/src/androidTest/java/org/openarchive/telegram/SearchLifecycleRegressionTest.java'
       - 'app/src/androidTest/java/org/openarchive/telegram/PinnedFocusNavigationRegressionTest.java'
   workflow_dispatch:
@@ -39,7 +40,7 @@ jobs:
       - name: Install Android SDK and build instrumentation packages
         run: |
           "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
-          gradle --no-daemon --max-workers=2 assembleCompactQa assembleCompactQaAndroidTest
+          gradle --no-daemon --max-workers=2 assembleCompactQa assembleCompactQaAndroidTest assembleWorkQa
       - name: Enable Linux KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -74,3 +75,11 @@ jobs:
             app/build/outputs/androidTest-results/
             app/build/reports/androidTests/
             qa-output/
+      - name: Save isolated test APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-archive-workqa-apk
+          retention-days: 3
+          path: app/build/outputs/apk/workQa/*.apk
+          if-no-files-found: error
