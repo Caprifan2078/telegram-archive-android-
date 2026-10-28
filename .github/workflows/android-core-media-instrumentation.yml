@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - qa/v052-duplicate-id-safety-20261026
+      - qa/work-backup-envelope-20261028
     paths:
       - '.github/workflows/android-core-media-instrumentation.yml'
       - 'app/src/main/java/org/openarchive/telegram/MainActivity.java'
