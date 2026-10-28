@@ -161,6 +161,42 @@ public class BackupDryRunRegressionTest {
         checkFullBackup(2,null,false);
     }
 
+    @Test public void fastVerifyRejectsWrongChatRootPrefixWithoutChangingData()throws Exception{
+        try(Fixture f=new Fixture()){
+            String registry=f.prefs.getString("archive_registry","");
+            byte[] before=sha(f.zip);
+            File valid=syntheticFullBackup(f.zip,1,null);
+            File altered=File.createTempFile("dryrun-bad-root-", ".zip",ctx.getCacheDir());
+            try{
+                // The ordinary archive verifies successfully before altering only
+                // the outer chat root, retaining valid ZIP checksums.
+                BackupVerifier.verify(ctx,Uri.fromFile(valid),null,ignored->{});
+                try(ZipInputStream in=new ZipInputStream(new FileInputStream(valid));
+                    ZipOutputStream out=new ZipOutputStream(new FileOutputStream(altered))){
+                    ZipEntry entry;byte[] buf=new byte[8192];int n;
+                    while((entry=in.getNextEntry())!=null){
+                        out.putNextEntry(new ZipEntry(entry.getName()));
+                        if("full-manifest.json".equals(entry.getName())){
+                            ByteArrayOutputStream payload=new ByteArrayOutputStream();
+                            while((n=in.read(buf))!=-1)payload.write(buf,0,n);
+                            JSONObject manifest=new JSONObject(payload.toString("UTF-8"));
+                            manifest.getJSONArray("chats").getJSONObject(0).put("prefix","media/chat-999/");
+                            out.write(manifest.toString().getBytes(StandardCharsets.UTF_8));
+                        }else while((n=in.read(buf))!=-1)out.write(buf,0,n);
+                        out.closeEntry();in.closeEntry();
+                    }
+                }
+                try{
+                    BackupVerifier.verify(ctx,Uri.fromFile(altered),null,ignored->{});
+                    fail("Fast verification accepted a full backup with a wrong chat root");
+                }catch(IOException expected){
+                    assertTrue(expected.getMessage().contains("порядок каталогов"));
+                }
+                f.assertUnchanged(registry);assertArrayEquals(before,sha(f.zip));
+            }finally{valid.delete();altered.delete();}
+        }
+    }
+
     private File fullBackupWithNotes(File metadata,long[] files,JSONArray listed,boolean includeHash)throws Exception{
         File full=File.createTempFile("dryrun-notes-", ".zip",ctx.getCacheDir());
         JSONArray chats=new JSONArray().put(new JSONObject().put("chatIndex",0).put("prefix","media/chat-0/"));
