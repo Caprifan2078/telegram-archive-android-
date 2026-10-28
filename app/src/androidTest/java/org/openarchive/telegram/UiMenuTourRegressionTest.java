@@ -47,13 +47,27 @@ public class UiMenuTourRegressionTest {
         return null;
     }
     private UiObject2 scrollFind(String value) {
-        for(int n=0;n<12;n++){
-            UiObject2 item=findVisible(value);
-            if(item!=null)return item;
-            int x=Math.min(device.getDisplayWidth()/3,210);
-            device.swipe(x,device.getDisplayHeight()*78/100,x,device.getDisplayHeight()*26/100,18);
+        // A preceding lookup can leave the drawer or dialog at the bottom.
+        // Search both directions within the actual scrollable bounds; swiping
+        // at a fixed screen coordinate can hit a narrow dialog's scrim.
+        for(int direction=0;direction<2;direction++){
+            for(int n=0;n<12;n++){
+                UiObject2 item=findVisible(value);
+                if(item!=null)return item;
+                Rect area=null;
+                for(UiObject2 scrollable:device.findObjects(By.scrollable(true))){
+                    Rect candidate=scrollable.getVisibleBounds();
+                    if(candidate.width()>40&&candidate.height()>80){area=candidate;break;}
+                }
+                if(area==null)break;
+                int x=area.centerX();
+                int high=area.top+area.height()/4;
+                int low=area.bottom-area.height()/4;
+                device.swipe(x,direction==0?low:high,x,direction==0?high:low,18);
+                device.waitForIdle();
+            }
         }
-        return null;
+        return findVisible(value);
     }
     private void tap(String label)throws Exception {
         UiObject2 item=scrollFind(label);
@@ -216,3 +230,4 @@ public class UiMenuTourRegressionTest {
         screenshot("theme-graphite");
     }
 }
+
