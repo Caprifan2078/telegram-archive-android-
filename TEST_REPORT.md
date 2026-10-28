@@ -5,3 +5,5 @@
 APK из 40774441821: 3 613 916 байт, SHA-256 4512915414d7914fc7daaff4e43c4c38f336b7a088c637b81dd4fe0d60890171; SHA-256 сертификата fa754ba80f241cbb40b541053af673cfd6c7cb0498f9b38178cd62f92512af70; локально проверены v2 подпись и digest содержимого, ZIP CRC. Установка на устройстве не проверена.
 
 Итоговый UI-регресс: [40776453369](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/40776453369) — 11/11 PASS, 0 skipped, Android 11, 320×640 dp/fontScale 1.5, тестовый код 27fcb4e; код приложения соответствует a4db7ce. Полный core/media regression после a4db7ce не запускался.
+
+29.10.2026: пустой чат, [RED 40783188564](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/40783188564) 4 FAIL и [GREEN 40784890623](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/40784890623) 4 PASS Android 11. Предыдущая core/media проверка 55 PASS относится к коду до изменения текста; повтор после этого изменения не выполнялся.
