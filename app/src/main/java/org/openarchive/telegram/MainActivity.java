@@ -994,7 +994,7 @@ public class MainActivity extends Activity {
         sideMenuItem(items,dialog,pane,"▶  Учебная переписка","Практика без изменений настоящих данных",
             ()->startActivity(new Intent(this,DemoChatActivity.class)));
         sideMenuItem(items,dialog,pane,"⌁  Диагностика","Создать обезличенный технический отчёт",this::shareDiagnostic);
-        TextView label=text("Telegram Archive · 0.42 QA\nЛокально · Без аккаунта · Без серверов",11,SUB);
+        TextView label=text("Telegram Archive · "+installedVersionName()+" QA\nЛокально · Без аккаунта · Без серверов",11,SUB);
         label.setPadding(px(5),px(12),0,px(5));pane.addView(label);
         overlay.setOnClickListener(v->closeDrawer(dialog,pane,null));pane.setOnClickListener(v->{});
         dialog.setContentView(overlay);dialog.show();Window w=dialog.getWindow();if(w!=null)w.setLayout(-1,-1);
@@ -1041,10 +1041,16 @@ public class MainActivity extends Activity {
                     .putBoolean("appearance_glass",glassStyle).apply();d.dismiss();showPage();})
             .setNegativeButton("Закрыть",null).show();
     }
+    private String installedVersionName(){
+        try {
+            String version=getPackageManager().getPackageInfo(getPackageName(),0).versionName;
+            return version==null||version.trim().isEmpty()?"unknown":version;
+        }catch(android.content.pm.PackageManager.NameNotFoundException ignored){return "unknown";}
+    }
     private void shareDiagnostic(){
         // Privacy boundary: only app/build, SDK and coarse memory/performance
         // fields. Never include chat names, paths, IDs, messages or stack traces.
-        String report=DiagnosticReport.render("0.36-premium-rc",Build.VERSION.SDK_INT,
+        String report=DiagnosticReport.render(installedVersionName(),Build.VERSION.SDK_INT,
             memoryClassMb(),effectivePerformanceMode(),reduceMotion,glassStyle);
         Intent send=new Intent(Intent.ACTION_SEND);
         send.setType("text/plain");send.putExtra(Intent.EXTRA_SUBJECT,"Telegram Archive — диагностика");
