@@ -248,8 +248,12 @@ final class FullBackup {
                     throw new IOException("Изменены вложения заметок");
                 JSONArray saved=manifest.getJSONArray("noteFiles");
                 if(saved.length()!=noteReferences.size())throw new IOException("Неполный набор вложений заметок");
-                for(int i=0;i<saved.length();i++)if(!noteReferences.containsKey(saved.getLong(i)))
-                    throw new IOException("Не найдено вложение заметки "+saved.getLong(i));
+                Set<Long> seenNoteIds=new HashSet<>();
+                for(int i=0;i<saved.length();i++){
+                    long noteId=saved.getLong(i);
+                    if(!seenNoteIds.add(noteId))throw new IOException("Идентификатор вложения заметки повторяется");
+                    if(!noteReferences.containsKey(noteId))throw new IOException("Не найдено вложение заметки "+noteId);
+                }
             }else if(!noteReferences.isEmpty())throw new IOException("Неизвестные вложения заметок в архиве");
             // Validate the media structure and the metadata *before* any database is registered.
             ArrayList<File> mediaRoots=new ArrayList<>();

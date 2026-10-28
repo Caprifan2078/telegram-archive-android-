@@ -225,4 +225,68 @@ public class BackupDryRunRegressionTest {
         checkNoteInventory(new long[]{1},new JSONArray().put(1),false,false);
     }
 
+    @Test public void restoreRejectsDuplicateNoteIdsBeforeChangingExistingData()throws Exception{
+        try(Fixture f=new Fixture()){
+            String registry=f.prefs.getString("archive_registry","");byte[] before=sha(f.zip);
+            long first=900000000000001L,second=900000000000002L;
+            File full=fullBackupWithNotes(f.zip,new long[]{first,second},new JSONArray().put(first).put(first),true);
+            try{
+                try(InputStream in=new FileInputStream(full)){
+                    FullBackup.restore(ctx,f.prefs,in,ignored->{});
+                    fail("Duplicate note identifier must be rejected during restore");
+                }catch(IOException expected){
+                    assertTrue("Must reject duplicate IDs before examining notes database",expected.getMessage().contains("повторяется"));
+                }
+                f.assertUnchanged(registry);assertArrayEquals(before,sha(f.zip));
+            }finally{full.delete();}
+        }
+    }
+
+    @Test public void realFullBackupRestoresNoteAttachmentAndKeepsOriginalData()throws Exception{
+        try(Fixture f=new Fixture()){
+            String marker="synthetic-note-"+UUID.randomUUID();
+            File folder=new File(ctx.getCacheDir(),"note-source-"+f.key);
+            assertTrue(folder.mkdirs());
+            File attachment=new File(folder,"sample.bin");byte[] bytes="synthetic-note-attachment".getBytes(StandardCharsets.UTF_8);
+            try(OutputStream out=new FileOutputStream(attachment)){out.write(bytes);}
+            JSONArray registry=new JSONArray().put(new JSONObject().put("key",f.key).put("name","Synthetic").put("tree","local:"+folder.getAbsolutePath()));
+            assertTrue(f.prefs.edit().putString("archive_registry",registry.toString()).commit());
+            SavedStore notes=new SavedStore(ctx);long originalId=notes.add(marker,"sample.bin",Uri.fromFile(attachment).toString(),"application/octet-stream");
+            File full=File.createTempFile("full-note-roundtrip-", ".zip",ctx.getCacheDir());
+            String restoredKey=null;File restoredStage=null;
+            try{
+                try(OutputStream out=new FileOutputStream(full)){FullBackup.export(ctx,f.prefs,out,ignored->{});}
+                assertEquals(1,FullBackup.restore(ctx,f.prefs,Uri.fromFile(full),ignored->{}));
+                JSONArray result=new JSONArray(f.prefs.getString("archive_registry","[]"));assertEquals(2,result.length());
+                assertEquals(f.key,result.getJSONObject(0).getString("key"));
+                JSONObject restored=result.getJSONObject(1);restoredKey=restored.getString("key");
+                File mediaRoot=new File(restored.getString("tree").substring("local:".length()));
+                restoredStage=mediaRoot.getParentFile().getParentFile();
+                assertTrue(restoredStage.getName().matches("restore-[a-f0-9]{32}"));
+                MessageDb copied=new MessageDb(ctx,restoredKey);
+                try{assertEquals(1,copied.totalMessages());assertTrue(copied.isFavorite(f.id));}finally{copied.close();}
+                assertEquals(1,f.db.totalMessages());assertTrue(f.db.isFavorite(f.id));
+                boolean originalFound=false,restoredFound=false;
+                for(SavedStore.Note note:notes.recent(200))if(marker.equals(note.body)){
+                    if(note.id==originalId){originalFound=true;assertEquals(Uri.fromFile(attachment).toString(),note.fileId);}
+                    else{
+                        assertNotNull(note.fileId);assertTrue(note.fileId.startsWith(PortableNoteFiles.PREFIX));
+                        try(InputStream in=ctx.getContentResolver().openInputStream(PortableNoteFiles.openUri(ctx,note.fileId))){
+                            ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[128];int n;while((n=in.read(b))!=-1)out.write(b,0,n);
+                            assertArrayEquals(bytes,out.toByteArray());
+                        }
+                        restoredFound=true;
+                    }
+                }
+                assertTrue(originalFound);assertTrue(restoredFound);
+            }finally{
+                for(SavedStore.Note note:notes.recent(200))if(marker.equals(note.body))notes.delete(note.id);
+                notes.close();
+                if(restoredKey!=null)ctx.deleteDatabase("telegram_"+restoredKey+".db");
+                if(restoredStage!=null&&restoredStage.getName().matches("restore-[a-f0-9]{32}"))ArchiveFileImport.deleteTree(restoredStage);
+                ArchiveFileImport.deleteTree(folder);full.delete();
+            }
+        }
+    }
+
 }
