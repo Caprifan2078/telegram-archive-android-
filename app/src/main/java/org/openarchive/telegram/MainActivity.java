@@ -433,17 +433,41 @@ public class MainActivity extends Activity {
             "Плавность · окно до 200 сообщений, мягкие анимации",
             "Экономия · окно до 120 сообщений, без анимаций",
             "Автоматически · подстраивать окно под память устройства"};
-        // AlertDialog cannot reliably render message and list simultaneously on
-        // all Android versions; put the explanation into a dedicated info action.
-        new FontDialog.Builder(this).setTitle("Скорость и память")
-            .setSingleChoiceItems(options,performanceMode,(dialog,selection)->{
+        // Keep actions inside the scrollable content: stacked native dialog
+        // buttons can be clipped on short screens with a large system font.
+        ScrollView content=new ScrollView(this);
+        LinearLayout controls=column();
+        controls.setPadding(px(20),0,px(20),0);
+        content.addView(controls);
+        Button motion=new Button(this);
+        motion.setAllCaps(false);
+        motion.setText(reduceMotion?"С анимацией":"Без анимации");
+        controls.addView(motion,new LinearLayout.LayoutParams(-1,-2));
+        AlertDialog dialog=new FontDialog.Builder(this)
+            .setTitle("Скорость и память")
+            .setView(content)
+            .setNegativeButton("Закрыть",null)
+            .create();
+        motion.setOnClickListener(v->{
+            getPreferences(MODE_PRIVATE).edit().putBoolean("appearance_less_motion",!reduceMotion).apply();
+            reduceMotion=!reduceMotion;
+            dialog.dismiss();
+        });
+        for(int i=0;i<options.length;i++){
+            final int selection=i;
+            android.widget.RadioButton option=new android.widget.RadioButton(this);
+            option.setText(options[i]);
+            option.setChecked(i==performanceMode);
+            option.setPadding(0,px(10),0,px(10));
+            controls.addView(option,new LinearLayout.LayoutParams(-1,-2));
+            option.setOnClickListener(v->{
                 getPreferences(MODE_PRIVATE).edit().putInt("appearance_performance",selection).apply();
-                performanceMode=selection;thumbs.resize(PerformanceAdvisor.thumbnailCacheBytes(memoryClassMb(),performanceMode));
+                performanceMode=selection;
+                thumbs.resize(PerformanceAdvisor.thumbnailCacheBytes(memoryClassMb(),performanceMode));
                 dialog.dismiss();autoLoaded=PAGE;searchLoaded=PAGE;showPage();
-            }).setNeutralButton(reduceMotion?"С анимацией":"Без анимации",(dialog,which)->{
-                getPreferences(MODE_PRIVATE).edit().putBoolean("appearance_less_motion",!reduceMotion).apply();
-                reduceMotion=!reduceMotion;
-            }).setNegativeButton("Закрыть",null).show();
+            });
+        }
+        dialog.show();
     }
     private int px(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private GradientDrawable shape(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(px(radius));return d;}
