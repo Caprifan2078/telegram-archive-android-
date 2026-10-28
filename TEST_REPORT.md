@@ -7,3 +7,10 @@ APK из 40774441821: 3 613 916 байт, SHA-256 4512915414d7914fc7daaff4e43c4c
 Итоговый UI-регресс: [40776453369](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/40776453369) — 11/11 PASS, 0 skipped, Android 11, 320×640 dp/fontScale 1.5, тестовый код 27fcb4e; код приложения соответствует a4db7ce. Полный core/media regression после a4db7ce не запускался.
 
 29.10.2026: пустой чат, [RED 40783188564](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/40783188564) 4 FAIL и [GREEN 40784890623](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/40784890623) 4 PASS Android 11. Предыдущая core/media проверка 55 PASS относится к коду до изменения текста; повтор после этого изменения не выполнялся.
+
+
+## Объединённая проверка 29.10.2026
+
+[40786330996](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/40786330996), commit a916ce6: Android 11/API30, **165 тестов в XML: 164 PASS, 1 SKIPPED, 0 FAIL, 0 errors**. Пропущен SignedUpgradeSentinelTest: не задана двухфазная проверка с совместимым ключом. Набор содержит тесты импорта, архивов, резервных копий, миграций SQLite, просмотра файлов, медиа, поиска, аналитики, UI и QA-00/01; не означает полное покрытие модулей или проверку реального телефона. Лог runner ошибочно сообщает 166 после 165, поэтому считать по XML. Gradle JVM и build прошли.
+
+WorkQa APK: 3 614 012 байт; SHA-256 eaea2de3e338ba254c6b58ab0a8c9dac886c10eefb70638dfe7d0a6306e0e490. Проверены CRC, APK v2 подпись и digest; сертификат Android Debug SHA-256 c447f79ce18c280889ed24ecf982e13b4026f6e92ef1699d1aee903811694b7d. Отдельный тест установки того же APK в CI 40787653583 нужно сверить после завершения. Безопасное обновление основной/предыдущей QA установки не доказано.
