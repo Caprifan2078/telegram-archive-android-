@@ -1,0 +1,9 @@
+# Передача разработки следующему сеансу
+
+1. Открыть https://github.com/Caprifan2078/telegram-archive-android-, ветка `qa/work-modular-audit-00-18`, её актуальный HEAD. main не изменять и force push не применять.
+2. Прочитать docs/qa/modules/QA-00_REPORT_RU.md, docs/QA_MODULAR_MASTER_MATRIX_20261028_RU.md, docs/qa/WORK_MODULAR_CHECKPOINT_20261028_RU.md и исторический docs/BUG_REPORT_RECHECK_20261026_RU.md.
+3. Проверить CI 40776453369 на тестовый коммит 27fcb4e. Код приложения в нём соответствует a4db7ce. Разобрать все FAIL, сохранять RED/GREEN и не принимать дефект теста за дефект приложения. Последний подтверждённый точечный PASS — 40774441821, 1/1 на API30.
+4. Продолжить QA-00: покрыть 360/720dp, fontScale 1.3, другие темы, ориентацию, lifecycle, фактическую доступность и регрессию media/core. Состояние QA-00 неполное.
+5. Перейти к QA-01 — подготовленный список функций и сценариев в docs/qa/modules/QA-01_REPORT_RU.md; затем модули QA-02—QA-18 последовательно. Обновлять матрицу и отдельные отчёты только по реальным испытаниям.
+6. QA APK собирать при доступном Android SDK/Gradle 8.11.1/JDK17: gradle --no-daemon assembleWorkQa; тесты: testCompactQaUnitTest и connectedCompactQaAndroidTest на изолированном эмуляторе. Workflow qa00-narrow-font.yml задаёт 320×640 dp/160 dpi/fontScale 1.5. Использовать только синтетические данные. Build workQa имеет отдельный package и эфемерный debug-ключ, поэтому не обещать обновление/сохранность данных существующей установки. Не просить удалять приложение.
+7. Учитывать diverged viewer и office ветки: выбирать нужные функции по одной, перед переносом проверить совместимость БД/backup и регрессии. Не публиковать ключи, личные медиа, базы или архивы.
