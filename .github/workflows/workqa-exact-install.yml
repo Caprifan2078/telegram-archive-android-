@@ -1,0 +1,53 @@
+name: Install and launch exact QA APK
+on:
+  push:
+    branches: [qa/work-modular-audit-00-18]
+    paths: ['.github/workflows/workqa-exact-install.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  install:
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: consolidated-workqa-apk
+          path: qa-apk
+          run-id: 40786330996
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify exact artifact SHA-256
+        run: echo 'eaea2de3e338ba254c6b58ab0a8c9dac886c10eefb70638dfe7d0a6306e0e490  qa-apk/app-workQa.apk' | sha256sum -c -
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: |
+            mkdir -p qa-output
+            adb install -t qa-apk/app-workQa.apk
+            adb shell am start -W -n org.openarchive.telegram.qa.workqa20261028/org.openarchive.telegram.MainActivity > qa-output/launch.txt
+            adb shell pidof org.openarchive.telegram.qa.workqa20261028 > qa-output/pid.txt
+            adb shell uiautomator dump /sdcard/ta_workqa_home.xml
+            adb pull /sdcard/ta_workqa_home.xml qa-output/home.xml
+            grep -q 'Мои переписки' qa-output/home.xml
+            adb exec-out screencap -p > qa-output/home.png
+            adb shell dumpsys package org.openarchive.telegram.qa.workqa20261028 > qa-output/package.txt
+            adb logcat -d -t 400 > qa-output/logcat.txt || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: exact-workqa-install-synthetic-evidence
+          retention-days: 3
+          path: qa-output/
