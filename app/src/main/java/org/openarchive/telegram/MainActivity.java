@@ -1762,6 +1762,10 @@ public class MainActivity extends Activity {
         navBack=btn("‹");navBack.setTextSize(25);navBack.setGravity(Gravity.CENTER);
         head.addView(navBack,p(42,42));
         navBack.setOnClickListener(v->{if("help".equals(screen)){leaveHelp();return;}
+            // Android Back already restores the previous search/media/analytics
+            // context when jumping into a message. The header Back button must
+            // follow the same path rather than unexpectedly throwing users home.
+            if(!returnScreen.isEmpty()){restoreReturn();return;}
             if(!home){saveReadingProgress();home=true;screen="chat";returnScreen="";searchReturnsToAnalytics=false;showPage();}});
         TextView logo=text("◇",29,ACCENT);logo.setGravity(Gravity.CENTER);logo.setContentDescription("Локальный архив");head.addView(logo,p(34,42));
         LinearLayout headings=column();headings.setGravity(Gravity.CENTER_VERTICAL);
