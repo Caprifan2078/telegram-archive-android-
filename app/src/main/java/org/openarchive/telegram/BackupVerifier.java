@@ -40,6 +40,7 @@ final class BackupVerifier {
         boolean full=false;File inner=null;JSONObject manifest=null,compactManifest=null;
         boolean permitsFull=true,permitsCompact=true,hasCompactManifest=false,hasFullManifest=false,hasNotesDb=false;
         MediaIntegrity mediaHash=new MediaIntegrity();MediaIntegrity customHash=new MediaIntegrity();MediaIntegrity noteHash=new MediaIntegrity();long mediaBytes=0;int mediaFiles=0;int maxSeenMediaChat=-1;
+        Set<String> noteEntries=new HashSet<>();
         Map<String,Long> databaseLengths=new HashMap<>();
         Map<String,String> databaseDigests=new HashMap<>();
         java.util.HashSet<String> entries=new java.util.HashSet<>();
@@ -64,7 +65,9 @@ final class BackupVerifier {
                     maxSeenMediaChat=Math.max(maxSeenMediaChat,FullBackupLayout.mediaChatIndex(name));
                     mediaHash.begin(name);mediaFiles++;
                 }
-                if(name.startsWith("note_files/"))noteHash.begin(name);
+                if(name.startsWith("note_files/")){
+                    addNoteEntry(noteEntries,name);noteHash.begin(name);
+                }
                 if(name.startsWith("custom/"))customHash.begin(name);
                 ByteArrayOutputStream fullManifestBytes=(name.equals("full-manifest.json")||name.equals("manifest.json"))?
                     new ByteArrayOutputStream():null;
@@ -146,7 +149,7 @@ final class BackupVerifier {
             }
             if(manifest.getLong("files")!=mediaFiles||manifest.getLong("bytes")!=mediaBytes)throw new IOException("Неверные размеры или количество медиа");
             if(manifest.has("mediaSha256")&&!mediaHash.hex().equalsIgnoreCase(manifest.getString("mediaSha256")))throw new IOException("Не совпала контрольная сумма медиа");
-            if(manifest.has("noteFiles")&&!noteHash.hex().equalsIgnoreCase(manifest.getString("noteSha256")))throw new IOException("Не совпали файлы заметок");
+            verifyNoteInventory(manifest,noteHash,noteEntries);
             if(manifest.has("customSha256")&&!customHash.hex().equalsIgnoreCase(manifest.getString("customSha256")))throw new IOException("Не совпала контрольная сумма аватаров");
             if(inner==null||!inner.isFile())throw new IOException("Отсутствует metadata.zip");
             int chatsBefore=result.chats;
@@ -155,6 +158,26 @@ final class BackupVerifier {
                 throw new IOException("Неполный архив: число переписок не совпадает");
         }
         if(result.chats==0)throw new IOException("Не найдены проверяемые переписки");
+    }
+    private static void addNoteEntry(Set<String> entries,String name)throws IOException{
+        if(entries.size()>=5000)throw new IOException("Слишком много вложений заметок");
+        entries.add(name);
+    }
+    /** Match the restore contract: manifest IDs, file names and content digest must agree. */
+    private static void verifyNoteInventory(JSONObject manifest,MediaIntegrity hash,Set<String> entries)throws Exception{
+        if(!manifest.has("noteFiles")){
+            if(!entries.isEmpty())throw new IOException("Неизвестные вложения заметок в архиве");
+            return; // Legacy full backups did not contain note attachments.
+        }
+        if(!manifest.has("noteSha256")||!hash.hex().equalsIgnoreCase(manifest.getString("noteSha256")))
+            throw new IOException("Изменены вложения заметок");
+        JSONArray listed=manifest.getJSONArray("noteFiles");
+        if(listed.length()!=entries.size())throw new IOException("Неполный набор вложений заметок");
+        Set<String> remaining=new HashSet<>(entries);
+        for(int i=0;i<listed.length();i++){
+            String name="note_files/"+listed.getLong(i);
+            if(!remaining.remove(name))throw new IOException("Не найдено или повторяется вложение заметки");
+        }
     }
     private static void checkDatabase(File file,String name,DryRun report)throws Exception{
         // This file is an isolated throwaway cache copy, never the original backup
@@ -228,6 +251,7 @@ final class BackupVerifier {
         MediaIntegrity noteHash=new MediaIntegrity();
         long mediaBytes=0;int mediaFiles=0;JSONObject fullManifest=null;
         HashSet<String> names=new HashSet<>();
+        Set<String> noteEntries=new HashSet<>();
         boolean permitsFull=true,permitsCompact=true;
         boolean hasCompactManifest=false,hasNotesDb=false;
         JSONObject compactManifest=null;
@@ -254,7 +278,9 @@ final class BackupVerifier {
                     maxSeenMediaChat=Math.max(maxSeenMediaChat,FullBackupLayout.mediaChatIndex(name));
                     mediaHash.begin(name);mediaFiles++;
                 }
-                if(name.startsWith("note_files/"))noteHash.begin(name);
+                if(name.startsWith("note_files/")){
+                    addNoteEntry(noteEntries,name);noteHash.begin(name);
+                }
                 if(name.startsWith("custom/"))customHash.begin(name);
                 ByteArrayOutputStream manifestBytes=("full-manifest.json".equals(name)||
                     "manifest.json".equals(name))?new ByteArrayOutputStream():null;
@@ -311,8 +337,7 @@ final class BackupVerifier {
             if(fullManifest==null||!"telegram-archive-full".equals(fullManifest.optString("format"))||fullManifest.optInt("version")!=2)throw new IOException("Неверный манифест резервной копии");
             FullBackupLayout.requireWithinChatCount(maxSeenMediaChat,fullManifest.getJSONArray("chats").length());
             if(fullManifest.getLong("files")!=mediaFiles||fullManifest.getLong("bytes")!=mediaBytes)throw new IOException("Количество или размер медиа не совпадают");
-            if(fullManifest.has("noteFiles")&&!noteHash.hex().equalsIgnoreCase(fullManifest.getString("noteSha256")))
-                throw new IOException("Изменено вложение заметки");
+            verifyNoteInventory(fullManifest,noteHash,noteEntries);
             if(fullManifest.has("mediaSha256")){
                 if(!mediaHash.hex().equalsIgnoreCase(fullManifest.getString("mediaSha256")))throw new IOException("Контрольная сумма медиа не совпадает");
                 result.mediaHashVerified=true;

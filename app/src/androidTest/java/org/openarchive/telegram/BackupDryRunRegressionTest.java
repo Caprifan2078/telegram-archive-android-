@@ -161,4 +161,68 @@ public class BackupDryRunRegressionTest {
         checkFullBackup(2,null,false);
     }
 
+    private File fullBackupWithNotes(File metadata,long[] files,JSONArray listed,boolean includeHash)throws Exception{
+        File full=File.createTempFile("dryrun-notes-", ".zip",ctx.getCacheDir());
+        JSONArray chats=new JSONArray().put(new JSONObject().put("chatIndex",0).put("prefix","media/chat-0/"));
+        JSONObject manifest=new JSONObject().put("format","telegram-archive-full").put("version",2)
+            .put("chats",chats).put("files",0).put("bytes",0);
+        MediaIntegrity hash=new MediaIntegrity();
+        try(ZipOutputStream out=new ZipOutputStream(new FileOutputStream(full))){
+            out.putNextEntry(new ZipEntry("metadata.zip"));
+            try(InputStream in=new FileInputStream(metadata)){
+                byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);
+            }
+            out.closeEntry();
+            for(long id:files){
+                String name="note_files/"+id;byte[] bytes=("synthetic note "+id).getBytes(StandardCharsets.UTF_8);
+                out.putNextEntry(new ZipEntry(name));out.write(bytes);out.closeEntry();
+                hash.begin(name);hash.update(bytes,0,bytes.length);hash.end();
+            }
+            if(listed!=null)manifest.put("noteFiles",listed);
+            if(includeHash)manifest.put("noteSha256",hash.hex());
+            out.putNextEntry(new ZipEntry("full-manifest.json"));
+            out.write(manifest.toString().getBytes(StandardCharsets.UTF_8));out.closeEntry();
+        }
+        return full;
+    }
+    private void checkNoteInventory(long[] files,JSONArray listed,boolean includeHash,boolean valid)throws Exception{
+        try(Fixture f=new Fixture()){
+            String registry=f.prefs.getString("archive_registry","");byte[] before=sha(f.zip);
+            File full=fullBackupWithNotes(f.zip,files,listed,includeHash);
+            try{
+                if(valid){
+                    assertEquals(1,BackupVerifier.simulate(ctx,Uri.fromFile(full),null,ignored->{}).chats);
+                    BackupVerifier.verify(ctx,Uri.fromFile(full),null,ignored->{});
+                }else{
+                    try{BackupVerifier.simulate(ctx,Uri.fromFile(full),null,ignored->{});fail("Invalid note inventory passed dry-run");}
+                    catch(IOException expected){assertTrue(expected.getMessage().contains("вложени"));}
+                    try{BackupVerifier.verify(ctx,Uri.fromFile(full),null,ignored->{});fail("Invalid note inventory passed verification");}
+                    catch(IOException expected){assertTrue(expected.getMessage().contains("вложени"));}
+                }
+                f.assertUnchanged(registry);assertArrayEquals(before,sha(f.zip));
+            }finally{full.delete();}
+        }
+    }
+    @Test public void matchingNoteInventoryPassesBothChecks()throws Exception{
+        checkNoteInventory(new long[]{1,2},new JSONArray().put(1).put(2),true,true);
+    }
+    @Test public void legacyFullBackupWithoutNotesRemainsValid()throws Exception{
+        checkNoteInventory(new long[]{},null,false,true);
+    }
+    @Test public void wrongNoteIdFailsBothChecks()throws Exception{
+        checkNoteInventory(new long[]{1},new JSONArray().put(2),true,false);
+    }
+    @Test public void missingNoteFileFailsBothChecks()throws Exception{
+        checkNoteInventory(new long[]{1},new JSONArray().put(1).put(2),true,false);
+    }
+    @Test public void duplicateNoteIdFailsBothChecks()throws Exception{
+        checkNoteInventory(new long[]{1,2},new JSONArray().put(1).put(1),true,false);
+    }
+    @Test public void unlistedNoteFileFailsBothChecks()throws Exception{
+        checkNoteInventory(new long[]{1},null,false,false);
+    }
+    @Test public void missingNoteDigestFailsBothChecks()throws Exception{
+        checkNoteInventory(new long[]{1},new JSONArray().put(1),false,false);
+    }
+
 }
