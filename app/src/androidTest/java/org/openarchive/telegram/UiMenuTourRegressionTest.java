@@ -28,10 +28,23 @@ public class UiMenuTourRegressionTest {
     private final UiDevice device=UiDevice.getInstance(inst);
 
     private UiObject2 findVisible(String value) {
-        UiObject2 item=device.wait(Until.findObject(By.textContains(value)),1200L);
-        if(item==null)return null;
-        Rect bounds=item.getVisibleBounds();
-        return bounds!=null&&!bounds.isEmpty()?item:null;
+        UiObject2 item=device.wait(Until.findObject(By.textContains(value)),650L);
+        if(item!=null){
+            Rect bounds=item.getVisibleBounds();
+            if(bounds!=null&&!bounds.isEmpty())return item;
+        }
+        // Android AlertDialog capitalizes native action buttons even when
+        // setNegativeButton("Назад") passed mixed case. UI Automator's
+        // textContains is case-sensitive; fall back to actual visible buttons.
+        String wanted=value.toLowerCase(java.util.Locale.ROOT);
+        for(UiObject2 button:device.findObjects(By.clazz("android.widget.Button"))){
+            String text=button.getText();
+            if(text!=null&&text.toLowerCase(java.util.Locale.ROOT).contains(wanted)){
+                Rect bounds=button.getVisibleBounds();
+                if(bounds!=null&&!bounds.isEmpty())return button;
+            }
+        }
+        return null;
     }
     private UiObject2 scrollFind(String value) {
         for(int n=0;n<12;n++){
