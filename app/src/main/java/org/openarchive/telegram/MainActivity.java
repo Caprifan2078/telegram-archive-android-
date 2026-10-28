@@ -5164,9 +5164,15 @@ public class MainActivity extends Activity {
                 String explanation=fullBackupMode?
                     "Полная копия включает медиа, чаты, аватары, обои, избранное, цитаты, этапы истории и файлы заметок. Перед удалением оригиналов проверь копию.":
                     "Компактная копия сохраняет базы и настройки, но НЕ включает медиа и вложения заметок. Для переноса на другой телефон выбери полную копию.";
-                new FontDialog.Builder(this).setTitle(fullBackupMode?"Полная резервная копия":"Компактная резервная копия")
-                    .setMessage(explanation).setNegativeButton("Назад",(d,w)->backupPicker())
-                    .setPositiveButton("Продолжить",(d,w)->askBackupPassword()).show();
+                // The selection dialog automatically dismisses AFTER invoking its
+                // item listener. Open the confirmation on the next UI-loop turn so
+                // the original dismissal cannot obscure the new dialog.
+                handler.post(()->{
+                    if(isFinishing()||isDestroyed())return;
+                    new FontDialog.Builder(this).setTitle(fullBackupMode?"Полная резервная копия":"Компактная резервная копия")
+                        .setMessage(explanation).setNegativeButton("Назад",(d,w)->handler.post(this::backupPicker))
+                        .setPositiveButton("Продолжить",(d,w)->askBackupPassword()).show();
+                });
             }).setNegativeButton("Отмена",null).show();
     }
     private void askBackupPassword(){
