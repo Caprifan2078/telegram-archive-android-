@@ -4600,6 +4600,9 @@ public class MainActivity extends Activity {
     }
     /** TextureView lets Android crop video to a true circle while the SeekBar remains outside it. */
     private void startInlineRound(String path,FrameLayout holder,ImageView poster,TextView overlay){
+        startInlineRound(path,holder,poster,overlay,0);
+    }
+    private void startInlineRound(String path,FrameLayout holder,ImageView poster,TextView overlay,int resumeMs){
         // A repeated Telegram MP4 path does not identify a specific message.
         // Only tapping the active tile toggles the current decoder.
         if(player!=null&&RoundPlaybackTarget.isSameTarget(playingPath,path,inlineHolder,holder)){
@@ -4644,6 +4647,10 @@ public class MainActivity extends Activity {
                             // Keep the thumbnail above black/empty video surfaces until
                             // TextureView receives its first updated frame.
                             poster.bringToFront();overlay.bringToFront();
+                            if(resumeMs>0){
+                                try{mp.seekTo(Math.min(resumeMs,Math.max(0,mp.getDuration()-1)),MediaPlayer.SEEK_CLOSEST);}
+                                catch(IllegalStateException failure){toast("Не удалось восстановить позицию видео");}
+                            }
                             mp.start();
                             if(playerPause!=null)playerPause.setText("⏸");
                             diagnose[0]=new Runnable(){
@@ -5083,7 +5090,10 @@ public class MainActivity extends Activity {
     }
     /** Always register the media AFTER startInlineRound, because it resets the previous player. */
     private void startRoundPlayback(MessageDb.Attachment attachment,FrameLayout target,ImageView poster,TextView overlay){
-        startInlineRound(attachment.path,target,poster,overlay);
+        startRoundPlayback(attachment,target,poster,overlay,0);
+    }
+    private void startRoundPlayback(MessageDb.Attachment attachment,FrameLayout target,ImageView poster,TextView overlay,int resumeMs){
+        startInlineRound(attachment.path,target,poster,overlay,resumeMs);
         playingAttachment=attachment;
         inlineHolder=target;
         if(playerStrip!=null){
@@ -5361,10 +5371,7 @@ public class MainActivity extends Activity {
             }
         });
         // Playback may resolve asynchronously; the media generation check drops stale callbacks.
-        startRoundPlayback(a,round,preview,play);
-        handler.postDelayed(()->{try{
-            if(floatingPanel==panel&&player!=null&&resume>0)player.seekTo(resume);
-        }catch(Exception ignored){}},650);
+        startRoundPlayback(a,round,preview,play,resume);
     }
 
     @Override protected void onPause(){
