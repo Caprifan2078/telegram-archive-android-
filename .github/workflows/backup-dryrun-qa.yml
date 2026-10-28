@@ -4,6 +4,7 @@ on:
     branches:
       - qa/backup-dryrun-integrity-v2-20261027
       - qa/work-backup-envelope-20261028
+      - qa/postwork-backup-structure-20261028
     paths:
       - '.github/workflows/backup-dryrun-qa.yml'
       - 'app/src/main/java/org/openarchive/telegram/BackupVerifier.java'
