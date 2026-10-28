@@ -50,7 +50,7 @@ jobs:
           script: |
             mkdir -p qa-output
             gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.UiMenuTourRegressionTest,org.openarchive.telegram.Qa00NavigationCoreTest,org.openarchive.telegram.UiSmokeTest' || touch qa-output/ui-test-failed.marker
-            for shot in drawer-home drawer-group-0 drawer-group-1 drawer-group-2 drawer-group-3 help settings-applied font-choices theme-graphite performance-dialog failure; do adb pull "/sdcard/Download/ta_ui_tour_${shot}.png" "qa-output/${shot}.png" || true; done
+            for shot in drawer-home drawer-group-0 drawer-group-1 drawer-group-2 drawer-group-3 help settings-applied font-choices theme-graphite performance-dialog backup-confirm failure; do adb pull "/sdcard/Download/ta_ui_tour_${shot}.png" "qa-output/${shot}.png" || true; done
             for name in performance failure; do adb pull "/sdcard/Download/ta_ui_tour_${name}.xml" "qa-output/${name}.xml" || true; done
             adb logcat -d -t 400 > qa-output/logcat.txt || true
       - name: Reject a failing UI tour after collecting emulator evidence
