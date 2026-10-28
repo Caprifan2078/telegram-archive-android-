@@ -65,12 +65,23 @@ public class Qa00NavigationCoreTest {
         assertNotNull("Expected UI text missing: "+label,visible(label));
     }
     private void shownAfterDrawerScroll(String label) {
-        for(int i=0;i<10;i++){
-            if(visible(label)!=null)return;
-            int x=device.getDisplayWidth()/3;
-            device.swipe(x,device.getDisplayHeight()*76/100,
-                x,device.getDisplayHeight()*32/100,20);
-            device.waitForIdle();
+        // A prior search can leave the drawer below the next item.
+        // Swipe only inside its visible scroll area, in both directions.
+        for(int direction=0;direction<2;direction++){
+            for(int i=0;i<12;i++){
+                if(visible(label)!=null)return;
+                Rect area=null;
+                for(UiObject2 scrollable:device.findObjects(By.scrollable(true))){
+                    Rect candidate=scrollable.getVisibleBounds();
+                    if(candidate.width()>40&&candidate.height()>80){area=candidate;break;}
+                }
+                if(area==null)break;
+                int x=area.centerX();
+                int high=area.top+area.height()/4;
+                int low=area.bottom-area.height()/4;
+                device.swipe(x,direction==0?low:high,x,direction==0?high:low,20);
+                device.waitForIdle();
+            }
         }
         assertNotNull("Drawer item unreachable after scrolling: "+label,visible(label));
     }
