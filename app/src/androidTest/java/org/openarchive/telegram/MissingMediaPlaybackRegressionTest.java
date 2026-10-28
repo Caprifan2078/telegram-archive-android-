@@ -225,4 +225,62 @@ public class MissingMediaPlaybackRegressionTest {
         }
     }
 
+    private MessageDb seededRoundChat(Context ctx,String key)throws Exception{
+        MessageDb db=new MessageDb(ctx,key);android.database.sqlite.SQLiteDatabase sql=db.getWritableDatabase();
+        long first=db.stage(sql,"Synthetic","2026-01-01","First","one.mp4","round");
+        db.stageAttachment(sql,first,"one.mp4","round");
+        long second=db.stage(sql,"Synthetic","2026-01-01","Second","two.mp4","round");
+        db.stageAttachment(sql,second,"two.mp4","round");db.publishStaged(sql);return db;
+    }
+    private void checkAdjacentRequest(int action)throws Exception{
+        MainActivity a=activity.getActivity();String key=UUID.randomUUID().toString().replace("-","");
+        File folder=new File(a.getCacheDir(),"adjacent-"+key);assertTrue(folder.mkdirs());
+        copyAsset("short-round.mp4",new File(folder,"two.mp4"));
+        MessageDb oldDb=(MessageDb)get(a,"db");Object oldFolder=get(a,"folder"),oldKey=get(a,"activeKey");
+        MessageDb first=seededRoundChat(a,"next_a_"+key),second=seededRoundChat(a,"next_b_"+key);
+        MessageDb.Attachment current=first.attachmentsForMessage(1).get(0);
+        java.util.concurrent.ExecutorService executor=(java.util.concurrent.ExecutorService)get(a,"worker");
+        java.util.concurrent.CountDownLatch started=new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release=new java.util.concurrent.CountDownLatch(1);
+        executor.execute(()->{started.countDown();try{release.await();}catch(InterruptedException e){Thread.currentThread().interrupt();}});
+        try{
+            assertTrue("Background worker not blocked",started.await(5,java.util.concurrent.TimeUnit.SECONDS));
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{
+                try{
+                    set(a,"db",first);set(a,"activeKey","next_a_"+key);
+                    set(a,"folder",new DocumentFolder(a.getContentResolver(),folder));set(a,"playingAttachment",current);
+                    Method next=MainActivity.class.getDeclaredMethod("playAdjacent",boolean.class);
+                    next.setAccessible(true);next.invoke(a,true);
+                    if(action!=0){
+                        Method stop=MainActivity.class.getDeclaredMethod("stopPlayback");stop.setAccessible(true);stop.invoke(a);
+                        if(action==2){set(a,"db",second);set(a,"activeKey","next_b_"+key);}
+                    }
+                }catch(Exception ex){throw new AssertionError(ex);}
+            });
+            release.countDown();executor.submit(()->{}).get(10,java.util.concurrent.TimeUnit.SECONDS);
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+            java.util.concurrent.atomic.AtomicBoolean floating=new java.util.concurrent.atomic.AtomicBoolean();
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{
+                try{floating.set(get(a,"floatingPanel")!=null);}catch(Exception ex){throw new AssertionError(ex);}
+            });
+            if(action==0)assertTrue("Current request must open adjacent media",floating.get());
+            else assertFalse("Stale adjacent media reopened playback",floating.get());
+        }finally{
+            release.countDown();executor.submit(()->{}).get(10,java.util.concurrent.TimeUnit.SECONDS);
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{
+                try{
+                    Method close=MainActivity.class.getDeclaredMethod("closeFloatingRound");close.setAccessible(true);close.invoke(a);
+                    Method stop=MainActivity.class.getDeclaredMethod("stopPlayback");stop.setAccessible(true);stop.invoke(a);
+                    set(a,"db",oldDb);set(a,"folder",oldFolder);set(a,"activeKey",oldKey);
+                }catch(Exception ex){throw new AssertionError(ex);}
+            });
+            first.close();second.close();a.deleteDatabase("telegram_next_a_"+key+".db");a.deleteDatabase("telegram_next_b_"+key+".db");
+            ArchiveFileImport.deleteTree(folder);
+        }
+    }
+    @Test public void currentAdjacentRequestStillOpensMedia()throws Exception{checkAdjacentRequest(0);}
+    @Test public void closingPlayerCancelsPendingAdjacentRequest()throws Exception{checkAdjacentRequest(1);}
+    @Test public void changingChatCancelsPendingAdjacentRequest()throws Exception{checkAdjacentRequest(2);}
+
 }
