@@ -139,6 +139,14 @@ public class Qa00NavigationCoreTest {
             device.waitForIdle();
             assertEquals("chat",field(a,"screen"));
             assertEquals(false,field(a,"home"));
+            // On a message-jump return path, the top-left Back control must
+            // follow the same destination as Android's system Back.
+            inst.runOnMainSync(()->{
+                try{set(a,"returnScreen","analytics");}catch(Exception e){throw new AssertionError(e);}
+            });
+            tap("‹");
+            assertEquals("Toolbar Back lost the source screen","analytics",field(a,"screen"));
+            assertEquals(false,field(a,"home"));
             device.pressBack();
             device.waitForIdle();
             assertEquals(true,field(a,"home"));
