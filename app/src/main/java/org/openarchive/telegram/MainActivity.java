@@ -3813,6 +3813,13 @@ public class MainActivity extends Activity {
         }
         if(media.isEmpty())return;
         boolean grid=mediaKind.equals("image")||mediaKind.equals("video")||mediaKind.equals("gif")||mediaKind.equals("sticker");
+        // The gallery is inside a padded scrolling column, which can be far
+        // narrower than the display (split-screen, narrow phones, tablets).
+        int availableWidth=list.getWidth()-list.getPaddingLeft()-list.getPaddingRight();
+        if(availableWidth<=0)
+            availableWidth=Math.max(px(96),getResources().getDisplayMetrics().widthPixels-
+                px(24)-list.getPaddingLeft()-list.getPaddingRight());
+        MediaGridSizing.Spec gridSpec=MediaGridSizing.fit(availableWidth,px(96),px(2));
         String currentMonth=null;GridLayout gallery=null;
         for(MessageDb.Attachment a:media){
             String month=MediaTimeline.month(a.date);
@@ -3820,14 +3827,14 @@ public class MainActivity extends Activity {
                 currentMonth=month;
                 TextView group=text("▦  "+month,15,FG);group.setTypeface(null,Typeface.BOLD);
                 group.setPadding(px(12),px(15),px(12),px(7));list.addView(group,p(-1,-2));
-                if(grid){gallery=new GridLayout(this);gallery.setColumnCount(3);list.addView(gallery,p(-1,-2));}
+                if(grid){gallery=new GridLayout(this);gallery.setColumnCount(gridSpec.columns);list.addView(gallery,p(-1,-2));}
             }
             if(grid){
                 FrameLayout tile=new FrameLayout(this);tile.setBackground(outlined(PANEL,13,false));tile.setClipToOutline(true);
-                int screenWidth=getResources().getDisplayMetrics().widthPixels;
-                int cell=(screenWidth-px(40))/3;
-                GridLayout.LayoutParams t=new GridLayout.LayoutParams();t.width=cell-px(4);t.height=cell-px(4);
-                t.setMargins(px(2),px(2),px(2),px(2));gallery.addView(tile,t);
+                GridLayout.LayoutParams t=new GridLayout.LayoutParams();
+                t.width=gridSpec.tilePx;t.height=gridSpec.tilePx;
+                t.setMargins(gridSpec.marginPx,gridSpec.marginPx,gridSpec.marginPx,gridSpec.marginPx);
+                gallery.addView(tile,t);
                 ImageView image=new ImageView(this);image.setScaleType(ImageView.ScaleType.FIT_CENTER);
                 tile.addView(image,new FrameLayout.LayoutParams(-1,-1));
                 if("sticker".equals(a.kind)&&isTgsPath(a.path)){
