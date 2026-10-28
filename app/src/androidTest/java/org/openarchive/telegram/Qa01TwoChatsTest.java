@@ -95,6 +95,19 @@ public class Qa01TwoChatsTest {
                 device.waitForIdle();
                 requireMessage("QA01_ONLY_BETA");
                 assertNull("Wrong chat after Activity recreation",device.findObject(By.textContains("QA01_ONLY_ALPHA")));
+                device.pressBack();device.waitForIdle();
+                UiObject2 beta=locate("QA01 Бета");
+                assertNotNull("Second chat card missing",beta);
+                beta.longClick();device.waitForIdle();
+                tap("Закрепить чат");
+                assertTrue("Pin preference was not saved",prefs.getBoolean("pinned_chat_"+keyB,false));
+                scenario.recreate();device.waitForIdle();
+                UiObject2 pinned=locate("QA01 Бета");
+                assertNotNull("Pinned chat card missing after recreation",pinned);
+                assertTrue("Pin indicator lost after recreation",pinned.getText().contains("📌"));
+                pinned.longClick();device.waitForIdle();
+                tap("Открепить чат");
+                assertFalse("Unpin preference was not saved",prefs.getBoolean("pinned_chat_"+keyB,true));
             }
         } finally {
             ctx.deleteDatabase("telegram_"+keyA+".db");
@@ -103,7 +116,7 @@ public class Qa01TwoChatsTest {
             if(hadRegistry)edit.putString("archive_registry",registry);else edit.remove("archive_registry");
             if(hadActive)edit.putString("active_archive",active);else edit.remove("active_archive");
             for(String key:new String[]{keyA,keyB}) {
-                edit.remove("read_offset_"+key).remove("read_id_"+key).remove("read_top_"+key);
+                edit.remove("read_offset_"+key).remove("read_id_"+key).remove("read_top_"+key).remove("pinned_chat_"+key);
             }
             assertTrue(edit.commit());
         }
