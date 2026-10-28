@@ -39,7 +39,7 @@ final class BackupVerifier {
     private static void scanBackup(Context context,InputStream source,File stage,DryRun result,Progress progress)throws Exception {
         boolean full=false;File inner=null;JSONObject manifest=null,compactManifest=null;
         boolean permitsFull=true,permitsCompact=true,hasCompactManifest=false,hasFullManifest=false,hasNotesDb=false;
-        MediaIntegrity mediaHash=new MediaIntegrity();MediaIntegrity customHash=new MediaIntegrity();MediaIntegrity noteHash=new MediaIntegrity();long mediaBytes=0;int mediaFiles=0;
+        MediaIntegrity mediaHash=new MediaIntegrity();MediaIntegrity customHash=new MediaIntegrity();MediaIntegrity noteHash=new MediaIntegrity();long mediaBytes=0;int mediaFiles=0;int maxSeenMediaChat=-1;
         Map<String,Long> databaseLengths=new HashMap<>();
         Map<String,String> databaseDigests=new HashMap<>();
         java.util.HashSet<String> entries=new java.util.HashSet<>();
@@ -60,7 +60,10 @@ final class BackupVerifier {
                 boolean database=name.matches("db/(?:chat-[0-9]{1,5}|notes)\\.sqlite");
                 boolean innerMeta=name.equals("metadata.zip");
                 boolean media=name.startsWith("media/");
-                if(media){mediaHash.begin(name);mediaFiles++;}
+                if(media){
+                    maxSeenMediaChat=Math.max(maxSeenMediaChat,FullBackupLayout.mediaChatIndex(name));
+                    mediaHash.begin(name);mediaFiles++;
+                }
                 if(name.startsWith("note_files/"))noteHash.begin(name);
                 if(name.startsWith("custom/"))customHash.begin(name);
                 ByteArrayOutputStream fullManifestBytes=(name.equals("full-manifest.json")||name.equals("manifest.json"))?
@@ -134,12 +137,22 @@ final class BackupVerifier {
         }
         if(full){
             if(manifest==null||!"telegram-archive-full".equals(manifest.optString("format"))||manifest.optInt("version")!=2)throw new IOException("Некорректная полная резервная копия");
+            JSONArray roots=manifest.getJSONArray("chats");
+            FullBackupLayout.requireWithinChatCount(maxSeenMediaChat,roots.length());
+            for(int i=0;i<roots.length();i++){
+                JSONObject root=roots.getJSONObject(i);
+                if(root.getInt("chatIndex")!=i||!("media/chat-"+i+"/").equals(root.getString("prefix")))
+                    throw new IOException("Неверный порядок каталогов медиа");
+            }
             if(manifest.getLong("files")!=mediaFiles||manifest.getLong("bytes")!=mediaBytes)throw new IOException("Неверные размеры или количество медиа");
             if(manifest.has("mediaSha256")&&!mediaHash.hex().equalsIgnoreCase(manifest.getString("mediaSha256")))throw new IOException("Не совпала контрольная сумма медиа");
             if(manifest.has("noteFiles")&&!noteHash.hex().equalsIgnoreCase(manifest.getString("noteSha256")))throw new IOException("Не совпали файлы заметок");
             if(manifest.has("customSha256")&&!customHash.hex().equalsIgnoreCase(manifest.getString("customSha256")))throw new IOException("Не совпала контрольная сумма аватаров");
             if(inner==null||!inner.isFile())throw new IOException("Отсутствует metadata.zip");
+            int chatsBefore=result.chats;
             try(InputStream nested=new FileInputStream(inner)){scanBackup(context,nested,stage,result,progress);}
+            if(result.chats-chatsBefore!=roots.length())
+                throw new IOException("Неполный архив: число переписок не совпадает");
         }
         if(result.chats==0)throw new IOException("Не найдены проверяемые переписки");
     }

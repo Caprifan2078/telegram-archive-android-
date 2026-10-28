@@ -113,4 +113,52 @@ public class BackupDryRunRegressionTest {
         }
     }
 
+    private File syntheticFullBackup(File metadata, int roots, String mediaPath)throws Exception{
+        File full=File.createTempFile("dryrun-full-", ".zip",ctx.getCacheDir());
+        JSONArray chats=new JSONArray();
+        for(int i=0;i<roots;i++)chats.put(new JSONObject().put("chatIndex",i).put("prefix","media/chat-"+i+"/"));
+        byte[] media="synthetic media".getBytes(StandardCharsets.UTF_8);
+        JSONObject manifest=new JSONObject().put("format","telegram-archive-full").put("version",2)
+            .put("chats",chats).put("files",mediaPath==null?0:1).put("bytes",mediaPath==null?0:media.length);
+        try(ZipOutputStream out=new ZipOutputStream(new FileOutputStream(full))){
+            out.putNextEntry(new ZipEntry("metadata.zip"));
+            try(InputStream in=new FileInputStream(metadata)){
+                byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))!=-1)out.write(buffer,0,n);
+            }
+            out.closeEntry();
+            if(mediaPath!=null){out.putNextEntry(new ZipEntry(mediaPath));out.write(media);out.closeEntry();}
+            out.putNextEntry(new ZipEntry("full-manifest.json"));
+            out.write(manifest.toString().getBytes(StandardCharsets.UTF_8));out.closeEntry();
+        }
+        return full;
+    }
+    private void checkFullBackup(int roots,String mediaPath,boolean shouldPass)throws Exception{
+        try(Fixture f=new Fixture()){
+            String registry=f.prefs.getString("archive_registry","");byte[] before=sha(f.zip);
+            File full=syntheticFullBackup(f.zip,roots,mediaPath);
+            try{
+                if(shouldPass){
+                    BackupVerifier.DryRun result=BackupVerifier.simulate(ctx,Uri.fromFile(full),null,ignored->{});
+                    assertEquals(1,result.chats);assertEquals(mediaPath==null?0:1,result.mediaFiles);
+                }else{
+                    try{BackupVerifier.simulate(ctx,Uri.fromFile(full),null,ignored->{});fail("Invalid full backup passed dry-run");}
+                    catch(IOException expected){assertNotNull(expected.getMessage());}
+                }
+                f.assertUnchanged(registry);assertArrayEquals(before,sha(f.zip));
+            }finally{full.delete();}
+        }
+    }
+    @Test public void fullBackupWithMatchingChatAndMediaPassesDryRun()throws Exception{
+        checkFullBackup(1,"media/chat-0/example.bin",true);
+    }
+    @Test public void fullBackupWithMediaForMissingChatFailsDryRun()throws Exception{
+        checkFullBackup(1,"media/chat-1/example.bin",false);
+    }
+    @Test public void fullBackupWithNoncanonicalMediaIndexFailsDryRun()throws Exception{
+        checkFullBackup(1,"media/chat-00/example.bin",false);
+    }
+    @Test public void fullBackupWithMismatchedChatCountFailsDryRun()throws Exception{
+        checkFullBackup(2,null,false);
+    }
+
 }
