@@ -47,6 +47,13 @@ public class UiMenuTourRegressionTest {
         if(item==null){
             // Diagnostic screenshot and accessibility tree for real UI issues,
             // not for hiding assertions. Only disposable synthetic test data.
+            StringBuilder visible=new StringBuilder();
+            for(UiObject2 textView:device.findObjects(By.clazz("android.widget.TextView"))){
+                String content=textView.getText();
+                if(content!=null&&visible.length()<2500)
+                    visible.append('[').append(content).append(']');
+            }
+            android.util.Log.e("UI_MENU_TOUR","Missing: "+label+"; visible: "+visible);
             screenshot("failure");
             device.executeShellCommand("uiautomator dump /sdcard/Download/ta_ui_tour_failure.xml");
         }
