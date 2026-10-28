@@ -68,6 +68,8 @@ public class Qa01ChatListSizeTest {
                 assertNotNull("Last chat did not open",device.wait(
                     Until.findObject(By.text("История сообщений · локально")),8000));
                 assertNotNull("Wrong chat heading",device.wait(Until.findObject(By.textContains(last)),8000));
+                assertNotNull("Empty chat must explain that it has no messages",
+                    device.wait(Until.findObject(By.text("В этой переписке пока нет сообщений.")),8000));
                 if(count==50)device.executeShellCommand("screencap -p /sdcard/Download/ta_qa01_size50.png");
                 device.pressBack();device.waitForIdle();
                 assertNotNull("Back did not return to chats",device.wait(
