@@ -335,7 +335,15 @@ final class BackupVerifier {
         }
         if(result.full){
             if(fullManifest==null||!"telegram-archive-full".equals(fullManifest.optString("format"))||fullManifest.optInt("version")!=2)throw new IOException("Неверный манифест резервной копии");
-            FullBackupLayout.requireWithinChatCount(maxSeenMediaChat,fullManifest.getJSONArray("chats").length());
+            // Fast verification must enforce the same canonical chat roots as
+            // the deeper read-only dry-run and the restore path.
+            JSONArray roots=fullManifest.getJSONArray("chats");
+            FullBackupLayout.requireWithinChatCount(maxSeenMediaChat,roots.length());
+            for(int i=0;i<roots.length();i++){
+                JSONObject root=roots.getJSONObject(i);
+                if(root.getInt("chatIndex")!=i||!("media/chat-"+i+"/").equals(root.getString("prefix")))
+                    throw new IOException("Неверный порядок каталогов медиа");
+            }
             if(fullManifest.getLong("files")!=mediaFiles||fullManifest.getLong("bytes")!=mediaBytes)throw new IOException("Количество или размер медиа не совпадают");
             verifyNoteInventory(fullManifest,noteHash,noteEntries);
             if(fullManifest.has("mediaSha256")){
