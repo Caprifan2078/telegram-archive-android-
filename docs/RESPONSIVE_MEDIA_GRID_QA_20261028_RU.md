@@ -12,8 +12,14 @@
 - Локальный JDK21 smoke: 1–5000 пикселей, 4 минимальных размера плитки × 4 значения отступа, ни одного переполнения, плюс отдельные случаи двух, трёх и четырёх колонок.
 - `MediaGridSizingTest`: JVM-регрессии.
 - `MediaGridResponsiveAndroidTest`: synthetic-only, проверка двух колонок и ширины плиток в 280dp области внутри Android Activity.
-- Android CI: https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/40742718988 — отмечать PASS только после завершения.
+- Android CI: https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/40742718988 — PASS, Gradle `assembleCompactQa`, `assembleCompactQaAndroidTest`, `assembleWorkQa`, `testCompactQaUnitTest` прошли; эмулятор Android 11: **55/55 Android-тестов PASS** (0 skipped, 0 failed).
 - Ветка: `qa/responsive-media-grid-20261028`, основной `main` не менялся.
 
 ## Ограничения
 Это не подтверждает качество UI на любом реальном устройстве; нужны визуальные тесты split-screen, 320dp, крупного шрифта, альбомной ориентации и планшетов. Встроенные медиаплееры и форматы медиа этим изменением не переписывались. Установка APK на личный смартфон и сохранение пользовательских данных при обновлении не проверены.
+
+## Готовый артефакт
+- Отдельная WorkQA APK (не обновление основной установки), собрана успешным GitHub Actions-прогоном 40742718988.
+- APK размер: 3 613 900 байт, SHA-256: `51309c1875464e580c34be56a1d9c9a1a059528423c75dc7b235efe5a24bf61c`.
+- GitHub Actions ZIP SHA-256: `33ce88a901fa6b67e7145f2df2700578aa511f4a8dfaffb81c3316978485f9ea`.
+- ZIP и APK проверены на целостность локально. APK не установлен на физическом устройстве пользователя. Подпись debug-ключом из GitHub runner нельзя считать постоянным ключом обновлений.
