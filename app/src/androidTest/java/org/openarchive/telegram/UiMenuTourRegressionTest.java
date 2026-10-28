@@ -134,7 +134,13 @@ public class UiMenuTourRegressionTest {
                 tap("ПЕРЕЕЗД · Полная копия");
                 expect("Полная резервная копия");
                 expect("Перед удалением оригиналов");
-                tap("Назад");
+                screenshot("backup-confirm");
+                // The button must remain in the confirmation after the initial
+                // list has dismissed. Do not scroll the background on failure.
+                UiObject2 back=findVisible("Назад");
+                assertNotNull("No Back in full-backup confirmation",back);
+                back.click();
+                device.waitForIdle();
                 expect("Создать резервную копию");
             }
             close();
@@ -149,16 +155,20 @@ public class UiMenuTourRegressionTest {
 
     @Test public void settingsOptionsAreActuallyAppliedOnAndroid()throws Exception {
         SharedPreferences prefs=activity.getActivity().getPreferences(Context.MODE_PRIVATE);
-        String[] modes={"Классический ·","Плавность ·","Экономия ·","Автоматически ·"};
+        // Start with a DIFFERENT radio option: clicking the already selected
+        // zero option can be a no-op on some widgets. Then return to zero.
+        String[] modes={"Плавность ·","Экономия ·","Автоматически ·","Классический ·"};
+        int[] values={1,2,3,0};
         for(int n=0;n<modes.length;n++){
             openDialog("performanceDialog");
             expect("Производительность переписки");
-            if(n==0){
-                screenshot("performance-dialog");
-                device.executeShellCommand("uiautomator dump /sdcard/Download/ta_ui_tour_performance.xml");
-            }
+            if(n==0)screenshot("performance-dialog");
             tap(modes[n]);
-            assertEquals("Performance option not saved: "+n,n,prefs.getInt("appearance_performance",-1));
+            inst.waitForIdleSync();
+            int saved=activity.getActivity().getPreferences(Context.MODE_PRIVATE)
+                .getInt("appearance_performance",-1);
+            android.util.Log.i("QA00", "selected="+values[n]+", saved="+saved);
+            assertEquals("Performance option not saved: "+values[n],values[n],saved);
         }
         String[] styles={"Обычные карточки","Стеклянный стиль"};
         for(int n=0;n<styles.length;n++){
