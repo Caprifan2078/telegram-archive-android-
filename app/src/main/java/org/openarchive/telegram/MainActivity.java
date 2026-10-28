@@ -433,8 +433,9 @@ public class MainActivity extends Activity {
             "Плавность · окно до 200 сообщений, мягкие анимации",
             "Экономия · окно до 120 сообщений, без анимаций",
             "Автоматически · подстраивать окно под память устройства"};
+        // AlertDialog cannot reliably render message and list simultaneously on
+        // all Android versions; put the explanation into a dedicated info action.
         new FontDialog.Builder(this).setTitle("Производительность переписки")
-            .setMessage("Оконный режим удаляет с экрана только старые карточки. Сообщения и медиа в архиве не изменяются. Кнопка сверху возвращает к более ранним сообщениям.")
             .setSingleChoiceItems(options,performanceMode,(dialog,selection)->{
                 getPreferences(MODE_PRIVATE).edit().putInt("appearance_performance",selection).apply();
                 performanceMode=selection;thumbs.resize(PerformanceAdvisor.thumbnailCacheBytes(memoryClassMb(),performanceMode));
@@ -667,7 +668,6 @@ public class MainActivity extends Activity {
         if(home){toast("Выбери переписку для её медиатеки");return;}
         String[] entries={"Галерея медиа · по типам", "Кинолента · по годам и месяцам", "Мои коллекции", "Проверка недостающих оригиналов"};
         new FontDialog.Builder(this).setTitle("Медиатека PRO")
-            .setMessage("Ничего не скачивается. Фото, видео и голосовые читаются из выбранного локального экспорта.")
             .setItems(entries,(d,i)->{
                 if(i==0){screen="media";showPage();}
                 else if(i==1){screen="cinema";showPage();}
@@ -1035,7 +1035,6 @@ public class MainActivity extends Activity {
     }
     private void glassDialog(){
         new FontDialog.Builder(this).setTitle("Полупрозрачные карточки")
-            .setMessage("Лёгкий стеклянный градиент без тяжёлого размытия. На слабом устройстве автоматический режим упростит оформление. Исходные чаты не изменяются.")
             .setSingleChoiceItems(new String[]{"Стеклянный стиль", "Обычные карточки"},glassStyle?0:1,
                 (d,selection)->{glassStyle=selection==0;getPreferences(MODE_PRIVATE).edit()
                     .putBoolean("appearance_glass",glassStyle).apply();d.dismiss();showPage();})
@@ -1071,7 +1070,6 @@ public class MainActivity extends Activity {
         int selected=FontManager.choiceIndex(this);
         String[] options=FontManager.LABELS;
         new FontDialog.Builder(this).setTitle("Шрифты · оформление всего приложения")
-            .setMessage("Системный шрифт выбран по умолчанию. Можно выбрать готовый стиль или добавить свой TTF/OTF. Настройки действуют только внутри Telegram Archive. Для необычных шрифтов убедись, что читается русский текст.")
             .setSingleChoiceItems(options,selected,(dialog,index)->{
                 dialog.dismiss();
                 if(index==8&&!FontManager.customFile(this).isFile()){
@@ -5159,10 +5157,17 @@ public class MainActivity extends Activity {
     }
     private void backupPicker(){
         new FontDialog.Builder(this).setTitle("Создать резервную копию")
-            .setMessage("Для переноса на ДРУГОЙ ТЕЛЕФОН выбирай ПОЛНУЮ копию. Она включает медиа чатов, аватары, обои, избранное, цитаты, этапы истории и файлы заметок. Компактная копия сохраняет базы и настройки, но НЕ переносит медиа и файлы заметок. Проверь копию перед удалением оригиналов.")
             .setItems(new String[]{"ПЕРЕЕЗД · Полная копия со всеми медиа и заметками","КОМПАКТНАЯ · Без медиа и вложений заметок"},(dlg,choice)->{
-                fullBackupMode=choice==0;askBackupPassword();
-            }).show();
+                fullBackupMode=choice==0;
+                // Keep the essential migration warning accessible in a separate
+                // confirmation dialog rather than hiding the type-choice list.
+                String explanation=fullBackupMode?
+                    "Полная копия включает медиа, чаты, аватары, обои, избранное, цитаты, этапы истории и файлы заметок. Перед удалением оригиналов проверь копию.":
+                    "Компактная копия сохраняет базы и настройки, но НЕ включает медиа и вложения заметок. Для переноса на другой телефон выбери полную копию.";
+                new FontDialog.Builder(this).setTitle(fullBackupMode?"Полная резервная копия":"Компактная резервная копия")
+                    .setMessage(explanation).setNegativeButton("Назад",(d,w)->backupPicker())
+                    .setPositiveButton("Продолжить",(d,w)->askBackupPassword()).show();
+            }).setNegativeButton("Отмена",null).show();
     }
     private void askBackupPassword(){
         LinearLayout layout=column();layout.setPadding(px(23),px(5),px(23),px(3));
