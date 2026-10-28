@@ -228,6 +228,9 @@ final class FullBackup {
                         zip.closeEntry();
                         if(count%200==0)progress.show("Восстановлено "+count+" файлов");
                     }
+                    // Validate an encrypted source's final authenticated record
+                    // before publishing any restored databases or settings.
+                    byte[] trailer=new byte[65536];while(streamed.read(trailer)!=-1){}
                 }
             }
             if(manifest==null||!"telegram-archive-full".equals(manifest.optString("format"))||

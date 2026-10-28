@@ -181,6 +181,10 @@ final class ArchiveBackup {
                         }
                         zip.closeEntry();
                     }
+                    // ZIP can stop at the central directory without consuming the
+                    // authenticated final record of the encrypted source. Drain it
+                    // before any database or registry changes are published.
+                    byte[] trailer=new byte[65536];while(streamed.read(trailer)!=-1){}
                 }
             }
             if(manifest==null||!"telegram-archive-metadata".equals(manifest.optString("format"))||

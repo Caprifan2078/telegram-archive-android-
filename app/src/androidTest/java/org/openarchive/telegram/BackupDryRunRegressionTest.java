@@ -289,4 +289,48 @@ public class BackupDryRunRegressionTest {
         }
     }
 
+    private byte[] encryptedCopy(File source)throws Exception{
+        ByteArrayOutputStream bytes=new ByteArrayOutputStream();
+        try(OutputStream out=SecureArchive.encryptedOutput(bytes,"synthetic-password".toCharArray());
+            InputStream in=new FileInputStream(source)){
+            byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);
+        }
+        return bytes.toByteArray();
+    }
+    private void checkTruncatedEncryptedRestore(boolean full)throws Exception{
+        try(Fixture f=new Fixture()){
+            String registry=f.prefs.getString("archive_registry","");byte[] before=sha(f.zip);
+            File outer=full?syntheticFullBackup(f.zip,1,null):null;
+            try{
+                byte[] encrypted=encryptedCopy(full?outer:f.zip);
+                byte[] truncated=java.util.Arrays.copyOf(encrypted,encrypted.length-20);
+                try(InputStream in=SecureArchive.decryptedInput(new ByteArrayInputStream(truncated),"synthetic-password".toCharArray())){
+                    if(full)FullBackup.restore(ctx,f.prefs,in,ignored->{});
+                    else ArchiveBackup.restore(ctx,f.prefs,in,ignored->{});
+                    fail("Missing authenticated final record must reject restore");
+                }catch(IOException expected){assertNotNull(expected.getMessage()==null?expected.getClass():expected.getMessage());}
+                f.assertUnchanged(registry);assertArrayEquals(before,sha(f.zip));
+            }finally{if(outer!=null)outer.delete();}
+        }
+    }
+    @Test public void compactRestoreRejectsMissingEncryptedFinalRecord()throws Exception{checkTruncatedEncryptedRestore(false);}
+    @Test public void fullRestoreRejectsMissingEncryptedFinalRecord()throws Exception{checkTruncatedEncryptedRestore(true);}
+    @Test public void validEncryptedCompactBackupRestores()throws Exception{
+        try(Fixture f=new Fixture()){
+            String original=f.prefs.getString("archive_registry","");String restoredKey=null;
+            try{
+                byte[] encrypted=encryptedCopy(f.zip);
+                try(InputStream in=SecureArchive.decryptedInput(new ByteArrayInputStream(encrypted),"synthetic-password".toCharArray())){
+                    assertEquals(1,ArchiveBackup.restore(ctx,f.prefs,in,ignored->{}));
+                }
+                JSONArray chats=new JSONArray(f.prefs.getString("archive_registry","[]"));assertEquals(2,chats.length());
+                assertEquals(f.key,chats.getJSONObject(0).getString("key"));restoredKey=chats.getJSONObject(1).getString("key");
+                MessageDb restored=new MessageDb(ctx,restoredKey);
+                try{assertEquals(1,restored.totalMessages());assertTrue(restored.isFavorite(f.id));}finally{restored.close();}
+                assertEquals(1,f.db.totalMessages());assertTrue(f.db.isFavorite(f.id));
+                assertEquals("Preserve original",f.db.page(0,1,"",false,"",false,false).get(0).body);
+            }finally{if(restoredKey!=null)ctx.deleteDatabase("telegram_"+restoredKey+".db");f.prefs.edit().putString("archive_registry",original).commit();}
+        }
+    }
+
 }
