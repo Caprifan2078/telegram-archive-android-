@@ -147,7 +147,7 @@ public class UiMenuTourRegressionTest {
             {"Открытия · новые возможности","Студия оформления 2.0","Студия чата 2.0"},
             {"Оформление и персонализация","Темы и оформление","Тема оформления"},
             {"Оформление и персонализация","Стеклянные карточки","Полупрозрачные карточки"},
-            {"Оформление и персонализация","Умная производительность","Производительность переписки"},
+            {"Оформление и персонализация","Умная производительность","Скорость и память"},
             {"Оформление и персонализация","Настройки переписки","Настройки переписки"},
             {"","Шрифты · изменить везде","Шрифты · оформление всего приложения"}
         };
@@ -188,7 +188,7 @@ public class UiMenuTourRegressionTest {
         int[] values={1,2,3,0};
         for(int n=0;n<modes.length;n++){
             openDialog("performanceDialog");
-            expect("Производительность переписки");
+            expect("Скорость и память");
             if(n==0)screenshot("performance-dialog");
             tap(modes[n]);
             inst.waitForIdleSync();
@@ -205,7 +205,7 @@ public class UiMenuTourRegressionTest {
         }
         openDialog("performanceDialog");
         boolean old=prefs.getBoolean("appearance_less_motion",false);
-        tap(old?"Включить анимации":"Уменьшить анимации");
+        tap(old?"С анимацией":"Без анимации");
         assertEquals(!old,prefs.getBoolean("appearance_less_motion",old));
         openDialog("bubbleStyleDialog");
         expect("Скругление сообщений");
@@ -218,11 +218,11 @@ public class UiMenuTourRegressionTest {
         drawer();
         tap("Оформление и персонализация");
         tap("Умная производительность");
-        expect("Производительность переписки");
+        expect("Скорость и память");
         screenshot("performance-action-visibility");
         boolean reduced=activity.getActivity().getPreferences(Context.MODE_PRIVATE)
             .getBoolean("appearance_less_motion",false);
-        String label=reduced?"Включить анимации":"Уменьшить анимации";
+        String label=reduced?"С анимацией":"Без анимации";
         UiObject2 button=findVisible(label);
         assertNotNull("Motion action is not visible: "+label,button);
         Rect visible=button.getVisibleBounds();

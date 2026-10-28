@@ -435,12 +435,12 @@ public class MainActivity extends Activity {
             "Автоматически · подстраивать окно под память устройства"};
         // AlertDialog cannot reliably render message and list simultaneously on
         // all Android versions; put the explanation into a dedicated info action.
-        new FontDialog.Builder(this).setTitle("Производительность переписки")
+        new FontDialog.Builder(this).setTitle("Скорость и память")
             .setSingleChoiceItems(options,performanceMode,(dialog,selection)->{
                 getPreferences(MODE_PRIVATE).edit().putInt("appearance_performance",selection).apply();
                 performanceMode=selection;thumbs.resize(PerformanceAdvisor.thumbnailCacheBytes(memoryClassMb(),performanceMode));
                 dialog.dismiss();autoLoaded=PAGE;searchLoaded=PAGE;showPage();
-            }).setNeutralButton(reduceMotion?"Включить анимации":"Уменьшить анимации",(dialog,which)->{
+            }).setNeutralButton(reduceMotion?"С анимацией":"Без анимации",(dialog,which)->{
                 getPreferences(MODE_PRIVATE).edit().putBoolean("appearance_less_motion",!reduceMotion).apply();
                 reduceMotion=!reduceMotion;
             }).setNegativeButton("Закрыть",null).show();
