@@ -214,6 +214,27 @@ public class UiMenuTourRegressionTest {
         screenshot("settings-applied");
     }
 
+    @Test public void performanceDialogMotionButtonIsFullyVisible()throws Exception {
+        drawer();
+        tap("Оформление и персонализация");
+        tap("Умная производительность");
+        expect("Производительность переписки");
+        screenshot("performance-action-visibility");
+        boolean reduced=activity.getActivity().getPreferences(Context.MODE_PRIVATE)
+            .getBoolean("appearance_less_motion",false);
+        String label=reduced?"Включить анимации":"Уменьшить анимации";
+        UiObject2 button=findVisible(label);
+        assertNotNull("Motion action is not visible: "+label,button);
+        Rect visible=button.getVisibleBounds();
+        float density=activity.getActivity().getResources().getDisplayMetrics().density;
+        assertTrue("Motion action is clipped: visible height="+visible.height(),
+            visible.height()>=Math.round(40*density));
+        button.click();
+        device.waitForIdle();
+        assertEquals(!reduced,activity.getActivity().getPreferences(Context.MODE_PRIVATE)
+            .getBoolean("appearance_less_motion",reduced));
+    }
+
     @Test public void fontPreviewAndThemeSelectionAreClickable()throws Exception {
         openDialog("showFontStudio");
         expect("Шрифты · оформление всего приложения");
