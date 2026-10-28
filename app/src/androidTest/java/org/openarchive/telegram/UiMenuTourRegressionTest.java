@@ -42,8 +42,14 @@ public class UiMenuTourRegressionTest {
         }
         return null;
     }
-    private void tap(String label) {
+    private void tap(String label)throws Exception {
         UiObject2 item=scrollFind(label);
+        if(item==null){
+            // Diagnostic screenshot and accessibility tree for real UI issues,
+            // not for hiding assertions. Only disposable synthetic test data.
+            screenshot("failure");
+            device.executeShellCommand("uiautomator dump /sdcard/Download/ta_ui_tour_failure.xml");
+        }
         assertNotNull("Not found or inaccessible: "+label,item);
         item.click();
         device.waitForIdle();
@@ -132,6 +138,10 @@ public class UiMenuTourRegressionTest {
         for(int n=0;n<modes.length;n++){
             openDialog("performanceDialog");
             expect("Производительность переписки");
+            if(n==0){
+                screenshot("performance-dialog");
+                device.executeShellCommand("uiautomator dump /sdcard/Download/ta_ui_tour_performance.xml");
+            }
             tap(modes[n]);
             assertEquals("Performance option not saved: "+n,n,prefs.getInt("appearance_performance",-1));
         }
