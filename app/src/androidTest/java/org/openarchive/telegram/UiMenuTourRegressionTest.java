@@ -129,6 +129,14 @@ public class UiMenuTourRegressionTest {
             if(!path[0].isEmpty())tap(path[0]);
             tap(path[1]);
             expect(path[2]);
+            if("Создать резервную копию".equals(path[1])){
+                // Previously the long message could hide both backup choices.
+                tap("ПЕРЕЕЗД · Полная копия");
+                expect("Полная резервная копия");
+                expect("Перед удалением оригиналов");
+                tap("Назад");
+                expect("Создать резервную копию");
+            }
             close();
         }
         drawer();
@@ -172,7 +180,10 @@ public class UiMenuTourRegressionTest {
     @Test public void fontPreviewAndThemeSelectionAreClickable()throws Exception {
         openDialog("showFontStudio");
         expect("Шрифты · оформление всего приложения");
+        expect("Serif · классический");
         screenshot("font-choices");
+        tap("Serif · классический");
+        expect("Предпросмотр.");
         close();
         openDialog("appearanceDialog");
         expect("Тема оформления");
