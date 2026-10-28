@@ -162,7 +162,7 @@ public class MainActivity extends Activity {
     private String analyticsCompareFirst="",analyticsCompareSecond="";
     private ChatAnalytics.Snapshot lastAnalytics;
     private MediaPlayer player;private String playingPath="";private TextureView activeTexture;
-    private int playbackGeneration=0;
+    private volatile int playbackGeneration=0;
     private Runnable progressUpdater;private MessageDb.Attachment playingAttachment;private LinearLayout playerStrip;private TextView playerText;private Button playerPause;private FrameLayout inlineHolder;private int floatingStart=0;
     private RoundControls activeRound;
     private TextView activeAudioButton;
@@ -5111,9 +5111,19 @@ public class MainActivity extends Activity {
     private void playAdjacent(boolean forward){
         if(playingAttachment==null)return;
         final MessageDb.Attachment current=playingAttachment;
+        final MessageDb source=db;
+        final String requestedArchive=activeKey;
+        final int requestedPlayback=playbackGeneration;
         worker.execute(()->{
-            MessageDb.Attachment found=db.adjacentMedia(current.kind,current.messageId,current.id,forward);
-            runOnUiThread(()->{if(found==null){toast("Других сообщений нет");return;}
+            // Skip queued work once closing or switching invalidated this request.
+            if(requestedPlayback!=playbackGeneration)return;
+            MessageDb.Attachment found=source.adjacentMedia(current.kind,current.messageId,current.id,forward);
+            runOnUiThread(()->{
+                // A delayed query must not reopen media after closing the player,
+                // switching chats, or starting another message in this chat.
+                if(isFinishing()||isDestroyed()||source!=db||!requestedArchive.equals(activeKey)||
+                    requestedPlayback!=playbackGeneration||playingAttachment!=current)return;
+                if(found==null){toast("Других сообщений нет");return;}
                 if(found.kind.equals("round"))showFloatingRound(found);
                 else if(found.kind.equals("voice")||found.kind.equals("audio")){
                     startAudio(found.path,playerPause,playerText);

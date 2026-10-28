@@ -252,6 +252,9 @@ public class MissingMediaPlaybackRegressionTest {
                     Method next=MainActivity.class.getDeclaredMethod("playAdjacent",boolean.class);
                     next.setAccessible(true);next.invoke(a,true);
                     if(action!=0){
+                        // For action 3 let the query post its UI callback while
+                        // the main thread is occupied, then close before delivery.
+                        if(action==3){release.countDown();executor.submit(()->{}).get(10,java.util.concurrent.TimeUnit.SECONDS);}
                         Method stop=MainActivity.class.getDeclaredMethod("stopPlayback");stop.setAccessible(true);stop.invoke(a);
                         if(action==2){set(a,"db",second);set(a,"activeKey","next_b_"+key);}
                     }
@@ -282,5 +285,6 @@ public class MissingMediaPlaybackRegressionTest {
     @Test public void currentAdjacentRequestStillOpensMedia()throws Exception{checkAdjacentRequest(0);}
     @Test public void closingPlayerCancelsPendingAdjacentRequest()throws Exception{checkAdjacentRequest(1);}
     @Test public void changingChatCancelsPendingAdjacentRequest()throws Exception{checkAdjacentRequest(2);}
+    @Test public void closingPlayerDiscardsAlreadyPostedAdjacentResult()throws Exception{checkAdjacentRequest(3);}
 
 }
