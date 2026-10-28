@@ -1,7 +1,8 @@
 name: Consolidated Android QA and APK
+# PDF export and QA-01 pin-order regression are covered in this combined run.
 on:
   push:
-    branches: [qa/work-modular-audit-00-18]
+    branches: [qa/work-modular-audit-00-18, qa/work-pdf-candidate-20261029]
     paths: ['.github/workflows/consolidated-work-qa.yml']
   workflow_dispatch:
 permissions:

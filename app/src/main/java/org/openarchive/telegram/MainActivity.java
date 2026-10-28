@@ -111,6 +111,8 @@ public class MainActivity extends Activity {
     private String pendingMediaSavePath;
     private MediaSavePolicy.Spec pendingMediaSaveSpec;
     private String pendingMessageText;
+    private static final int SAVE_CONVERSATION_PDF_REQUEST=118;
+    private String pendingPdfKey,pendingPdfName;
     private final LinkedHashMap<Long,MessageDb.Attachment> mediaSelection=new LinkedHashMap<>();
     private boolean multiSelectMedia=false;
     private String selectedMediaArchive="";
@@ -189,6 +191,7 @@ public class MainActivity extends Activity {
         }
         loadAppearance();
         if(state!=null){
+            pendingPdfKey=state.getString("ta_pending_pdf_key");pendingPdfName=state.getString("ta_pending_pdf_name");
             home=state.getBoolean("ta_home",true);screen=state.getString("ta_screen","chat");
             q=state.getString("ta_search_query","");byAuthor=state.getString("ta_search_author","");
             deep=state.getBoolean("ta_search_deep",false);onlyMedia=state.getBoolean("ta_search_media",false);
@@ -229,6 +232,7 @@ public class MainActivity extends Activity {
         showPage();
     }
     @Override protected void onSaveInstanceState(Bundle state){
+        state.putString("ta_pending_pdf_key",pendingPdfKey);state.putString("ta_pending_pdf_name",pendingPdfName);
         if(!home&&"chat".equals(screen))saveReadingProgress();
         state.putBoolean("ta_home",home);state.putString("ta_screen",screen);
         state.putString("ta_search_query",q);state.putString("ta_search_author",byAuthor);
@@ -1679,6 +1683,7 @@ public class MainActivity extends Activity {
         popup.getMenu().add("⌕ Поиск");popup.getMenu().add("▥ Анализ переписки");popup.getMenu().add("♡ Хронология");popup.getMenu().add("▤ Кинолента медиа");
         popup.getMenu().add("⚙ Настроить чат");popup.getMenu().add("▦ Медиатека");
         popup.getMenu().add("📌 Закреплённые сообщения");
+        popup.getMenu().add("⇩ Сохранить переписку в PDF");
         popup.setOnMenuItemClickListener(item->{
             String action=item.getTitle().toString();
             if(action.contains("Все инструменты"))showSideMenu();
@@ -1689,8 +1694,20 @@ public class MainActivity extends Activity {
             else if(action.contains("Настроить"))settingsMenu();
             else if(action.contains("Медиатека")){screen="media";showPage();}
             else if(action.contains("Закреплённые"))showPinList();
+            else if(action.contains("PDF"))chooseConversationPdf();
             return true;
         });popup.show();
+    }
+    private void chooseConversationPdf(){
+        new FontDialog.Builder(this).setTitle("Сохранить переписку в PDF")
+            .setMessage("В PDF войдут текст, авторы и даты всех сообщений. Вложения будут обозначены текстом, без самих файлов. Для очень больших переписок действует ограничение: 250 страниц.")
+            .setNegativeButton("Отмена",null).setPositiveButton("Выбрать файл",(dialog,which)->{
+                pendingPdfKey=activeKey;pendingPdfName=activeName;
+                Intent picker=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/pdf");
+                picker.putExtra(Intent.EXTRA_TITLE,"Telegram Archive.pdf");
+                try{startActivityForResult(picker,SAVE_CONVERSATION_PDF_REQUEST);}
+                catch(Exception error){pendingPdfKey=null;pendingPdfName=null;toast("Не удалось открыть выбор файла");}
+            }).show();
     }
     /** Compact Telegram-like pinned preview: tap the message to jump, arrow to switch, cross to unpin. */
     private void renderPinnedBar(){
@@ -2050,6 +2067,36 @@ public class MainActivity extends Activity {
         if(screen.equals("saved")||(!home&&returnScreen.isEmpty())){saveReadingProgress();home=true;screen="chat";searchReturnsToAnalytics=false;bottomNav.setVisibility(View.VISIBLE);showPage();return;}if(!returnScreen.isEmpty()){restoreReturn();return;}super.onBackPressed();}
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
+        if(request==SAVE_CONVERSATION_PDF_REQUEST){
+            final String key=pendingPdfKey,name=pendingPdfName;pendingPdfKey=null;pendingPdfName=null;
+            if(result==RESULT_OK&&data!=null&&data.getData()!=null&&key!=null){
+                final Uri destination=data.getData();
+                status.setText("Создаю PDF переписки…");
+                worker.execute(()->{
+                    MessageDb source=new MessageDb(getApplicationContext(),key);
+                    java.io.File temporary=null;
+                    try{
+                        temporary=java.io.File.createTempFile("conversation_pdf_",".tmp",getCacheDir());
+                        int pages;
+                        try(OutputStream out=new java.io.FileOutputStream(temporary)){
+                            pages=ConversationPdfExporter.write(source,name,out);
+                        }
+                        try(InputStream in=new java.io.FileInputStream(temporary);
+                            OutputStream out=getContentResolver().openOutputStream(destination,"w")){
+                            if(out==null)throw new IOException("Нет доступа к файлу");
+                            byte[] buffer=new byte[32768];int n;
+                            while((n=in.read(buffer))!=-1)out.write(buffer,0,n);
+                            out.flush();
+                        }
+                        runOnUiThread(()->{status.setText("PDF сохранён · страниц: "+pages);toast("PDF сохранён");});
+                    }catch(Exception error){
+                        MediaSaver.discardIncompleteDocument(this,destination);
+                        runOnUiThread(()->{status.setText("Не удалось сохранить PDF");toast("Ошибка PDF: "+error.getMessage());});
+                    }finally{source.close();if(temporary!=null)temporary.delete();}
+                });
+            }
+            return;
+        }
         if(request==PICK_FONT){
             if(result==RESULT_OK&&data!=null&&data.getData()!=null)handleFontImport(data.getData());
             return;

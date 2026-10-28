@@ -85,6 +85,12 @@ public class Qa01TwoChatsTest {
                 tap("QA01 Альфа");
                 requireMessage("QA01_ONLY_ALPHA");
                 assertNull("Wrong chat message visible",device.findObject(By.textContains("QA01_ONLY_BETA")));
+                UiObject2 menu=device.wait(Until.findObject(By.desc("Меню переписки")),5000);
+                assertNotNull("Conversation menu missing",menu);menu.click();device.waitForIdle();
+                tap("Сохранить переписку в PDF");
+                assertNotNull("PDF explanation missing",device.wait(Until.findObject(By.textContains("Вложения будут обозначены")),5000));
+                tap("Отмена");
+                requireMessage("QA01_ONLY_ALPHA");
                 device.pressBack();device.waitForIdle();
                 assertNotNull(locate("Мои переписки"));
                 tap("QA01 Бета");
@@ -101,6 +107,10 @@ public class Qa01TwoChatsTest {
                 beta.longClick();device.waitForIdle();
                 tap("Закрепить чат");
                 assertTrue("Pin preference was not saved",prefs.getBoolean("pinned_chat_"+keyB,false));
+                UiObject2 betaPinned=locate("QA01 Бета"), alphaUnpinned=locate("QA01 Альфа");
+                assertNotNull(betaPinned);assertNotNull(alphaUnpinned);
+                assertTrue("Pinned chat should appear before unpinned chat",
+                    betaPinned.getVisibleBounds().top<alphaUnpinned.getVisibleBounds().top);
                 scenario.recreate();device.waitForIdle();
                 UiObject2 pinned=locate("QA01 Бета");
                 assertNotNull("Pinned chat card missing after recreation",pinned);
