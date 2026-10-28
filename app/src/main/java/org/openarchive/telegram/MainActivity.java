@@ -1648,12 +1648,17 @@ public class MainActivity extends Activity {
     }
     private void showConversationMenu(View anchor){
         PopupMenu popup=new PopupMenu(this,anchor);
+        // All-chat tools live in the drawer, but the ☰ button is hidden
+        // while viewing a chat to make room for the Back button. Expose the
+        // drawer here without making the header too cramped on narrow phones.
+        popup.getMenu().add("☰ Все инструменты");
         popup.getMenu().add("⌕ Поиск");popup.getMenu().add("▥ Анализ переписки");popup.getMenu().add("♡ Хронология");popup.getMenu().add("▤ Кинолента медиа");
         popup.getMenu().add("⚙ Настроить чат");popup.getMenu().add("▦ Медиатека");
         popup.getMenu().add("📌 Закреплённые сообщения");
         popup.setOnMenuItemClickListener(item->{
             String action=item.getTitle().toString();
-            if(action.contains("Поиск")){screen="search";showPage();}
+            if(action.contains("Все инструменты"))showSideMenu();
+            else if(action.contains("Поиск")){screen="search";showPage();}
             else if(action.contains("Анализ")){screen="analytics";showPage();}
             else if(action.contains("Хронология")){screen="relationships";showPage();}
             else if(action.contains("Кинолента")){screen="cinema";showPage();}
