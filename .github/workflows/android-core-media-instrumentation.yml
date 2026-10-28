@@ -6,9 +6,12 @@ on:
     branches:
       - qa/v052-duplicate-id-safety-20261026
       - qa/work-backup-envelope-20261028
+      - qa/responsive-media-grid-20261028
     paths:
       - '.github/workflows/android-core-media-instrumentation.yml'
       - 'app/src/main/java/org/openarchive/telegram/MainActivity.java'
+      - 'app/src/main/java/org/openarchive/telegram/MediaGridSizing.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/MediaGridResponsiveAndroidTest.java'
       - 'app/src/main/java/org/openarchive/telegram/MessageDb.java'
       - 'app/src/androidTest/java/org/openarchive/telegram/ImportRollbackRegressionTest.java'
       - 'app/src/androidTest/java/org/openarchive/telegram/MissingMediaPlaybackRegressionTest.java'
@@ -40,7 +43,7 @@ jobs:
       - name: Install Android SDK and build instrumentation packages
         run: |
           "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
-          gradle --no-daemon --max-workers=2 assembleCompactQa assembleCompactQaAndroidTest assembleWorkQa
+          gradle --no-daemon --max-workers=2 assembleCompactQa assembleCompactQaAndroidTest assembleWorkQa testCompactQaUnitTest
       - name: Enable Linux KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -56,7 +59,7 @@ jobs:
           emulator-boot-timeout: 420
           script: |
             mkdir -p qa-output
-            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.MediaAssetsRegressionTest,org.openarchive.telegram.MediaPlaybackTest,org.openarchive.telegram.RoundPlayerActivityTest,org.openarchive.telegram.PlaybackLifecycleTest,org.openarchive.telegram.ImportRollbackRegressionTest,org.openarchive.telegram.MissingMediaPlaybackRegressionTest,org.openarchive.telegram.ArchiveIntegrationTest,org.openarchive.telegram.TelegramReplyIntegrationTest,org.openarchive.telegram.MediaClassifierTest,org.openarchive.telegram.MediaTabsIsolationTest,org.openarchive.telegram.UiSmokeTest,org.openarchive.telegram.ReadableUiTest,org.openarchive.telegram.ExportMediaFilenameRegressionTest,org.openarchive.telegram.PinnedFocusNavigationRegressionTest,org.openarchive.telegram.RelationshipAnalyticsExplanationUiTest,org.openarchive.telegram.SearchLifecycleRegressionTest'
+            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.MediaAssetsRegressionTest,org.openarchive.telegram.MediaPlaybackTest,org.openarchive.telegram.RoundPlayerActivityTest,org.openarchive.telegram.PlaybackLifecycleTest,org.openarchive.telegram.ImportRollbackRegressionTest,org.openarchive.telegram.MissingMediaPlaybackRegressionTest,org.openarchive.telegram.ArchiveIntegrationTest,org.openarchive.telegram.TelegramReplyIntegrationTest,org.openarchive.telegram.MediaClassifierTest,org.openarchive.telegram.MediaTabsIsolationTest,org.openarchive.telegram.MediaGridResponsiveAndroidTest,org.openarchive.telegram.UiSmokeTest,org.openarchive.telegram.ReadableUiTest,org.openarchive.telegram.ExportMediaFilenameRegressionTest,org.openarchive.telegram.PinnedFocusNavigationRegressionTest,org.openarchive.telegram.RelationshipAnalyticsExplanationUiTest,org.openarchive.telegram.SearchLifecycleRegressionTest'
             # Synthetic-only screenshots created by our fixture-based UI test.
             adb pull /sdcard/Download/ta_synthetic_relationships.png qa-output/relationships-explained.png
             test -s qa-output/relationships-explained.png
