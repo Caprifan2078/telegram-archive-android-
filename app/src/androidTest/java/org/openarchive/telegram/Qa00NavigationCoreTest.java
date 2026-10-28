@@ -185,6 +185,22 @@ public class Qa00NavigationCoreTest {
                 assertEquals("Wrong destination for "+destination[0],
                     destination[1],field(a,"screen"));
             }
+            // A second entry into the full tool drawer must exist from an
+            // active conversation. The home-only hamburger is otherwise hidden.
+            inst.runOnMainSync(()->{
+                try{
+                    set(a,"screen","chat");set(a,"home",false);call(a,"showPage");
+                }catch(Exception e){throw new AssertionError(e);}
+            });
+            inst.waitForIdleSync();
+            tap("≡");
+            shown("Все инструменты");
+            tap("Все инструменты");
+            shown("TELEGRAM ARCHIVE");
+            tap("Инструменты переписки");
+            shown("Навигатор пауз");
+            shown("В этот день");
+            device.pressBack();device.waitForIdle();
         }finally{
             CountDownLatch idle=new CountDownLatch(1);
             ((ExecutorService)field(a,"worker")).execute(idle::countDown);
