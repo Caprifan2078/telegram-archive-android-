@@ -171,6 +171,46 @@ public class Qa00NavigationCoreTest {
         }
     }
 
+    @Test public void repeatedChatAndMediaTabSwitchesKeepTheCorrectScreen()throws Exception {
+        MainActivity a=activity.getActivity();
+        String key="qa00tabs"+UUID.randomUUID().toString().replace("-","");
+        MessageDb synthetic=new MessageDb(a,key);
+        synthetic.getWritableDatabase();
+        Object dbOld=field(a,"db"),keyOld=field(a,"activeKey"),
+            nameOld=field(a,"activeName"),homeOld=field(a,"home"),
+            screenOld=field(a,"screen"),folderOld=field(a,"folder");
+        try {
+            inst.runOnMainSync(()->{
+                try {
+                    set(a,"db",synthetic);set(a,"activeKey",key);
+                    set(a,"activeName","QA00 вкладки");set(a,"folder",null);
+                    set(a,"home",false);set(a,"screen","chat");call(a,"showPage");
+                }catch(Exception e){throw new AssertionError(e);}
+            });
+            inst.waitForIdleSync();
+            for(int i=0;i<10;i++) {
+                tap("▦ Медиа");
+                assertEquals("media",field(a,"screen"));
+                shown("Фото, видео, голосовые и файлы");
+                tap("💬 Переписка");
+                assertEquals("chat",field(a,"screen"));
+                shown("История сообщений · локально");
+            }
+        }finally {
+            CountDownLatch idle=new CountDownLatch(1);
+            ((ExecutorService)field(a,"worker")).execute(idle::countDown);
+            assertTrue("Async UI/DB work did not finish",idle.await(12,TimeUnit.SECONDS));
+            inst.runOnMainSync(()->{
+                try {
+                    set(a,"db",dbOld);set(a,"activeKey",keyOld);
+                    set(a,"activeName",nameOld);set(a,"home",homeOld);
+                    set(a,"screen",screenOld);set(a,"folder",folderOld);call(a,"showPage");
+                }catch(Exception e){throw new AssertionError(e);}
+            });
+            synthetic.close();a.deleteDatabase("telegram_"+key+".db");
+        }
+    }
+
     @Test public void allConversationMenuDestinationsAreAccessibleOnSyntheticDb()throws Exception{
         MainActivity a=activity.getActivity();
         String key="qa00menu"+UUID.randomUUID().toString().replace("-","");
@@ -235,3 +275,4 @@ public class Qa00NavigationCoreTest {
         }
     }
 }
+
