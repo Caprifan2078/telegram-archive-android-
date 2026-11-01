@@ -1,4 +1,5 @@
 name: PDF and chat list focused checks
+# Synthetic PDF is copied out before Gradle uninstalls the app.
 on:
   push:
     branches: [qa/work-pdf-candidate-20261029]
