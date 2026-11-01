@@ -21,11 +21,11 @@ public class ConversationPdfExporterTest {
         Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
         String key="pdf_"+UUID.randomUUID().toString().replace("-","");
         MessageDb db=new MessageDb(context,key);
-        File file=new File(context.getCacheDir(),"synthetic-conversation.pdf");
+        File file=new File(context.getExternalFilesDir(null),"synthetic-conversation.pdf");
         try {
             SQLiteDatabase sql=db.getWritableDatabase();
             for(int i=0;i<150;i++)db.stage(sql,"Тестовый автор","2026-01-01 12:34",
-                "Синтетическое сообщение номер "+i+". Длинный текст для проверки переноса строк и страниц. "
+                "QA_PDF_MESSAGE_"+i+" Синтетическое сообщение номер "+i+". Длинный текст для проверки переноса строк и страниц. "
                 +"Emoji 😀; unicode и кириллица.",null,"");
             db.publishStaged(sql);
             int pages;
@@ -48,7 +48,7 @@ public class ConversationPdfExporterTest {
                     }finally{bitmap.recycle();}
                 }
             }
-        } finally {db.close();context.deleteDatabase("telegram_"+key+".db");file.delete();}
+        } finally {db.close();context.deleteDatabase("telegram_"+key+".db");}
     }
     @Test public void emptyConversationStillCreatesPdf() throws Exception {
         Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();

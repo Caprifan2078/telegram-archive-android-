@@ -89,7 +89,8 @@ public class Qa01TwoChatsTest {
                 assertNotNull("Conversation menu missing",menu);menu.click();device.waitForIdle();
                 tap("Сохранить переписку в PDF");
                 assertNotNull("PDF explanation missing",device.wait(Until.findObject(By.textContains("Вложения будут обозначены")),5000));
-                tap("Отмена");
+                UiObject2 cancel=device.wait(Until.findObject(By.res("android:id/button2")),5000);
+                assertNotNull("PDF cancel button missing",cancel);cancel.click();device.waitForIdle();
                 requireMessage("QA01_ONLY_ALPHA");
                 device.pressBack();device.waitForIdle();
                 assertNotNull(locate("Мои переписки"));

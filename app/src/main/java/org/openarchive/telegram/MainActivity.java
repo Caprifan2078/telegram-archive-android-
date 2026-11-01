@@ -2090,8 +2090,8 @@ public class MainActivity extends Activity {
                         }
                         runOnUiThread(()->{status.setText("PDF сохранён · страниц: "+pages);toast("PDF сохранён");});
                     }catch(Exception error){
-                        MediaSaver.discardIncompleteDocument(this,destination);
-                        runOnUiThread(()->{status.setText("Не удалось сохранить PDF");toast("Ошибка PDF: "+error.getMessage());});
+                        // A document provider may return an existing document: never delete it on failure.
+                        runOnUiThread(()->{status.setText("Не удалось сохранить PDF; проверь выбранный файл");toast("Ошибка PDF: "+error.getMessage());});
                     }finally{source.close();if(temporary!=null)temporary.delete();}
                 });
             }
