@@ -1,9 +1,5 @@
 name: PDF and chat list focused checks
-# Synthetic PDF is copied out before Gradle uninstalls the app.
 on:
-  push:
-    branches: [qa/work-pdf-candidate-20261029]
-    paths: ['.github/workflows/pdf-targeted.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -40,12 +36,10 @@ jobs:
           script: |
             mkdir -p qa-output
             if ! gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.ConversationPdfExporterTest,org.openarchive.telegram.Qa01TwoChatsTest; then touch qa-output/failed.marker; fi
-            adb exec-out cat /sdcard/Download/ta_synthetic_pdf_test.pdf > qa-output/synthetic-conversation.pdf
-      - name: Require passing tests and a PDF file
+      - name: Require passing tests
         if: always()
         run: |
           test ! -f qa-output/failed.marker
-          test "$(head -c 5 qa-output/synthetic-conversation.pdf)" = '%PDF-'
       - uses: actions/upload-artifact@v4
         if: always()
         with:

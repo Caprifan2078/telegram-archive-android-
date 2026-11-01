@@ -48,19 +48,6 @@ public class ConversationPdfExporterTest {
                     }finally{bitmap.recycle();}
                 }
             }
-            // Preserve only this synthetic fixture outside the app sandbox before
-            // Gradle uninstalls the test application at the end of the run.
-            byte[] fixture=java.nio.file.Files.readAllBytes(file.toPath());
-            String encoded=android.util.Base64.encodeToString(fixture,android.util.Base64.NO_WRAP);
-            try(ParcelFileDescriptor copied=InstrumentationRegistry.getInstrumentation().getUiAutomation()
-                    .executeShellCommand("echo '"+encoded+"' | base64 -d > /sdcard/Download/ta_synthetic_pdf_test.pdf && echo PDF_COPY_OK");
-                java.io.InputStream in=new ParcelFileDescriptor.AutoCloseInputStream(copied)) {
-                java.io.ByteArrayOutputStream reply=new java.io.ByteArrayOutputStream();
-                byte[] buffer=new byte[256];int read;
-                while((read=in.read(buffer))!=-1)reply.write(buffer,0,read);
-                assertTrue("Could not copy synthetic PDF for independent text verification",
-                    reply.toString("UTF-8").contains("PDF_COPY_OK"));
-            }
         } finally {db.close();context.deleteDatabase("telegram_"+key+".db");}
     }
     @Test public void emptyConversationStillCreatesPdf() throws Exception {

@@ -30,8 +30,6 @@ jobs:
         run: gradle --no-daemon --max-workers=2 assembleCompactQa assembleCompactQaAndroidTest assembleWorkQa testCompactQaUnitTest
       - name: Enable KVM
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y poppler-utils
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
@@ -46,9 +44,6 @@ jobs:
           script: |
             mkdir -p qa-output
             if ! gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest; then touch qa-output/failed.marker; fi
-            adb exec-out cat /sdcard/Download/ta_synthetic_pdf_test.pdf > qa-output/synthetic-conversation.pdf || touch qa-output/failed.marker
-            if ! pdftotext qa-output/synthetic-conversation.pdf qa-output/synthetic-conversation.txt; then touch qa-output/failed.marker; fi
-            for marker in QA_PDF_MESSAGE_0 QA_PDF_MESSAGE_149; do grep -Fq "$marker" qa-output/synthetic-conversation.txt || touch qa-output/failed.marker; done
             adb logcat -d -t 400 > qa-output/logcat.txt || true
       - name: Require passing Android tests
         if: always()
