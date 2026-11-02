@@ -21,3 +21,8 @@ WorkQa APK: 3 614 012 байт; SHA-256 eaea2de3e338ba254c6b58ab0a8c9dac886c10ee
 
 [41513186703](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41513186703), Android 11 x86_64: по XML **170 тестов: 169 PASS, 1 SKIPPED, 0 FAIL, 0 errors**. Пропущен `SignedUpgradeSentinelTest.syntheticDataSurvivesSignedUpgrade`. Оба QA-02 теста, QA-01 с задержанным worker, PDF и предыдущий проблемный тест media PASS. Gradle build/JVM PASS. Сценарии запускались на compactQa; это не доказательство полной проверки 19 модулей или физических устройств. Подпись APK debug, совместимое обновление не тестировалось.
 
+# 02.11.2026 — точечные дополнительные проверки
+
+- [41516564261](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41516564261), прежний код приложения: Android 11, 720dp/fontScale 100%, **11/11 UI PASS**. Проверены снимки меню и диалога. Не все экраны или темы.
+- [41516886599](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41516886599): **1/1 FAIL (RED)** при отсутствующем сохранённом ID; [41517699272](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41517699272), исправленный код: **4/4 PASS**, 0 skipped; JVM/build PASS. Более ранний полный 169/170 Android относится к предыдущему коду, не повторялся после новой правки.
+

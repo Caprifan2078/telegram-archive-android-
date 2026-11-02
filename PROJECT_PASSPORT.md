@@ -13,3 +13,7 @@
 
 Продолжать с HEAD `qa/work-integrated-qa02-20261102` репозитория `Caprifan2078/telegram-archive-android-`: сохранены PDF из `qa/work-pdf-candidate-20261029` и исправление позиции чтения из `qa/qa02-reading-progress-fixed-20261102`. Код приложения на `ea54d49716bc679cb923374ce4d09c502aef4d84`; main не изменять. [41513186703](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41513186703): 169 Android PASS, 1 SKIPPED, 0 FAIL; полный охват модулей не заявляется. Точный APK SHA-256 `b3adc340cf359ce95d32ae41aab62fdb48bc094d864b992ab1297b52c3a1b34b`, отдельный QA package, debug signature. Обновление существующего приложения без потери данных не проверено.
 
+# QA-00 / QA-02 обновление 02.11.2026
+
+На `qa/work-integrated-qa02-20261102` код `0793e56f3974f714b4a04ad046bf3e9be5090fe6`: исправлен переход к запасной позиции при отсутствии сохранённого сообщения. RED [41516886599](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41516886599), GREEN 4/4 [41517699272](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41517699272). QA-00 720dp/100% 11/11 PASS [41516564261](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41516564261). 2/11 первоначальных крупных блоков QA-00 полностью проверены только в описанных условиях, не доля полной проверки проекта. Debug APK SHA-256 `eb48fb0ad91b0b45580136c90acf3da5495eac0a1e516983f907d0c58eaf9916`, совместимое обновление не подтверждено.
+

@@ -13,3 +13,7 @@
 
 Сравнены разошедшиеся ветки QA-02 и ветка PDF; исправление якорей и два QA-02 теста перенесены выборочно, существующий экспорт PDF сохранён. Добавлен тест быстрых UI-переходов при искусственной задержке worker и уточнён неоднозначный селектор теста анимации. Android 11 общий прогон [41513186703](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41513186703) SUCCESS, 169 PASS / 1 SKIPPED. Причина прежнего падения теста вкладки медиа не установлена. Ветка `qa/work-integrated-qa02-20261102`, код `ea54d49716bc679cb923374ce4d09c502aef4d84`. main не менялся.
 
+# 02.11.2026 — QA-00 широкий экран и QA-02 восстановление
+
+Проверен 720dp/100% UI: 11/11 PASS, [41516564261](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41516564261); просмотрены синтетические снимки. Проверена и исправлена обработка отсутствующего сохранённого ID (RED [41516886599](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41516886599), GREEN 4/4 [41517699272](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41517699272)). Исходники продолжать от ветки `qa/work-integrated-qa02-20261102`.
+
