@@ -11,8 +11,8 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: qa02-reading-progress
-  cancel-in-progress: true
+  group: qa02-reading-progress-red
+  cancel-in-progress: false
 jobs:
   reading-regression:
     runs-on: ubuntu-latest
