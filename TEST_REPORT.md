@@ -26,3 +26,7 @@ WorkQa APK: 3 614 012 байт; SHA-256 eaea2de3e338ba254c6b58ab0a8c9dac886c10ee
 - [41516564261](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41516564261), прежний код приложения: Android 11, 720dp/fontScale 100%, **11/11 UI PASS**. Проверены снимки меню и диалога. Не все экраны или темы.
 - [41516886599](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41516886599): **1/1 FAIL (RED)** при отсутствующем сохранённом ID; [41517699272](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41517699272), исправленный код: **4/4 PASS**, 0 skipped; JVM/build PASS. Более ранний полный 169/170 Android относится к предыдущему коду, не повторялся после новой правки.
 
+# 02.11.2026 — быстрые вкладки QA-00
+
+[41522912617](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41522912617), Android 11, 360dp/100%: **5/5 PASS, 0 skipped** по XML. Новый сценарий 20 быстрых реальных нажатий между вкладками, проверка итогового назначения и заголовков; смежные проверки навигации PASS. Начальное синтетическое состояние подготовлено инструментально. Не проверены фильтры/scroll после быстрых нажатий и физические устройства. Приложение и ранее выданный APK не изменялись.
+

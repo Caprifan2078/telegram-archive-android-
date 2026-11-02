@@ -17,3 +17,7 @@
 
 Проверен 720dp/100% UI: 11/11 PASS, [41516564261](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41516564261); просмотрены синтетические снимки. Проверена и исправлена обработка отсутствующего сохранённого ID (RED [41516886599](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41516886599), GREEN 4/4 [41517699272](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41517699272)). Исходники продолжать от ветки `qa/work-integrated-qa02-20261102`.
 
+# 02.11.2026 — продолжение QA-00
+
+Добавлен сценарий быстрой смены вкладок реальными нажатиями; [41522912617](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41522912617) 5/5 PASS на Android 11/360dp. Новых подтверждённых багов нет. Подробности и ограничения — `docs/qa/modules/QA-00_REPORT_RU.md`.
+
