@@ -81,6 +81,27 @@ public class Qa02ReadingPositionIsolationTest {
                 assertTrue("Test precondition: first chat reading ID was not saved",firstId>0);
                 click("QA02 Бета");
                 visible("В этой переписке пока нет сообщений.");
+                // Regression edge: while a chat is showing a temporary
+                // non-message loading/empty placeholder, a lifecycle save must
+                // not reuse a message ID from the previously opened chat.
+                // The actual chat switch and earlier position were produced
+                // by real touches; only this transient view is synthetic.
+                scenario.onActivity(current->{
+                    try {
+                        java.lang.reflect.Field listField=MainActivity.class.getDeclaredField("list");
+                        listField.setAccessible(true);
+                        android.widget.LinearLayout messageList=
+                            (android.widget.LinearLayout)listField.get(current);
+                        android.widget.TextView placeholder=new android.widget.TextView(current);
+                        placeholder.setText("QA02 загрузка без сообщения");
+                        messageList.addView(placeholder);
+                        java.lang.reflect.Method save=MainActivity.class.getDeclaredMethod("saveReadingProgress");
+                        save.setAccessible(true);
+                        save.invoke(current);
+                    }catch(Exception e){throw new AssertionError(e);}
+                });
+                assertFalse("A temporary placeholder in empty Beta inherited Alpha's message ID",
+                    pref.contains("read_id_"+b));
                 device.pressBack();device.waitForIdle();
                 visible("Мои переписки");
                 assertFalse("A chat with zero messages inherited a stale message ID from another chat",
