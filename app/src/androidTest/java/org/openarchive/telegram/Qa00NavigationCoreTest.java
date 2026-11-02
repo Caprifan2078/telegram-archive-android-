@@ -309,6 +309,8 @@ public class Qa00NavigationCoreTest {
             assertNotNull("No fully visible synthetic message after scrolling",marker);
             String text=marker.getText();
             tap("▦ Медиа");shown("Фото, видео, голосовые и файлы");
+            assertNotNull("Media page did not finish loading",device.wait(
+                Until.findObject(By.textContains("Таких медиа пока нет")),15000));
             tap("💬 Переписка");
             UiObject2 restored=device.wait(Until.findObject(By.text(text)),15000);
             assertNotNull("Scrolled message disappeared after media round trip: "+text,restored);

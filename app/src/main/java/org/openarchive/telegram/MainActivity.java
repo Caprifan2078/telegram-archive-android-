@@ -1883,7 +1883,22 @@ public class MainActivity extends Activity {
         t.setContentDescription(label);t.setBackground(shape(Color.TRANSPARENT,14));
         LinearLayout.LayoutParams tabBounds=new LinearLayout.LayoutParams(0,px(44),1);
         tabBounds.leftMargin=px(2);tabBounds.rightMargin=px(2);bottomNav.addView(t,tabBounds);
-        t.setOnClickListener(v->{if(floatingPanel==null)stopPlayback();screen=key;returnScreen="";searchReturnsToAnalytics=false;highlightId=-1;showPage();});
+        t.setOnClickListener(v->{
+            if(!home&&"chat".equals(screen)&&"media".equals(key)){
+                // The page is rebuilt on tab changes. Capture an anchor only
+                // when actual message rows are present: rapid switches can
+                // leave the previous tab's views on screen while loading.
+                boolean hasRows=false;
+                for(int i=0;i<list.getChildCount();i++){
+                    if(list.getChildAt(i).getTag() instanceof Long){hasRows=true;break;}
+                }
+                if(hasRows){
+                    saveReadingProgress();
+                    if(lastVisibleMessage>0){pendingRestoreId=lastVisibleMessage;pendingRestoreTop=lastVisibleTop;}
+                }
+            }
+            if(floatingPanel==null)stopPlayback();screen=key;returnScreen="";searchReturnsToAnalytics=false;highlightId=-1;showPage();
+        });
     }
     private void refreshTabs(){
         for(int i=0;i<bottomNav.getChildCount();i++){
