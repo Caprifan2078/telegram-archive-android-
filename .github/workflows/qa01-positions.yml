@@ -1,0 +1,54 @@
+name: QA-01 reading position and chat isolation
+on:
+  push:
+    branches: [qa/work-pdf-candidate-20261029]
+    paths: ['.github/workflows/qa01-positions.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Compile test application
+        run: gradle --no-daemon --max-workers=2 assembleCompactQaAndroidTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: |
+            mkdir -p qa-output
+            if ! gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.Qa01ReadingPositionTest,org.openarchive.telegram.Qa01TwoChatsTest; then touch qa-output/failed.marker; fi
+            adb logcat -d -t 400 > qa-output/logcat.txt || true
+      - name: Require test success
+        if: always()
+        run: test ! -f qa-output/failed.marker
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qa01-position-synthetic-results
+          retention-days: 3
+          path: |
+            app/build/outputs/androidTest-results/
+            app/build/reports/androidTests/
+            qa-output/
