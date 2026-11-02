@@ -2,6 +2,12 @@
 
 Состояние: В РАБОТЕ. Исходная ветка `qa/work-pdf-candidate-20261029` на `96c2a0ee457061886e462f497af52a9085d6ce2f`; интеграционная ветка `qa/work-integrated-qa02-20261102`. Взяты изменения из `qa/qa02-reading-progress-fixed-20261102`, а также пользовательский сценарий из `qa/qa02-reading-position-isolation-20261102`; актуальные исправления PDF сохранены.
 
+## Интеграционная проверка
+
+[41513186703](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41513186703), код `ea54d49716bc679cb923374ce4d09c502aef4d84`: Gradle сборка и JVM PASS; Android 11 XML: **170 тестов, 169 PASS, 1 SKIPPED, 0 FAIL, 0 errors**. Пропущен `SignedUpgradeSentinelTest.syntheticDataSurvivesSignedUpgrade`, поскольку не настроен двухэтапный прогон с прежним совместимым ключом. Оба QA-02 теста PASS; тест двух баз по 100 сообщений PASS, включая быстрые нажатия при контролируемой задержке фонового потока и отсутствие видимого чужого текста. Тест PDF PASS. Ранее упавший `Qa00NavigationCoreTest.syntheticChatSwitchesTabsAndReturnsHome` теперь PASS, но первопричина прежней ошибки всё ещё не установлена. Широкий набор не означает полного покрытия 19 модулей.
+
+APK `org.openarchive.telegram.qa.workqa20261028`: SHA-256 `b3adc340cf359ce95d32ae41aab62fdb48bc094d864b992ab1297b52c3a1b34b`; APK v2 signature/digest PASS, debug certificate SHA-256 `6c6926e8f0009b119983359786e1fe3f8da65f023fb0e461753b3f5c124dde87`. CI-ключ отличается от предыдущих; обновление существующей установки с данными не проверено. Сценарии PDF/чтения запускались на compactQa, точный workQa APK требует отдельной проверки установки. Результат exact-install записать после выполнения.
+
 ## Проверка работы предыдущего разработчика
 
 - [41509799546](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41509799546) — RED: в контролируемом тестовом состоянии предыдущий якорь оставался в Activity после открытия другого чата. [41509485664](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41509485664) — GREEN: 1/1 Android 11. Этот тест вызывает внутренние методы и проверяет инвариант; он не является самостоятельной полноценной проверкой пользовательского перехода.
