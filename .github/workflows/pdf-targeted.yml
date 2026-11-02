@@ -47,6 +47,12 @@ jobs:
         run: |
           test ! -f qa-output/failed.marker
           python3 scripts/qa/verify_pdf_fixture.py qa-output/pdf-fixture.log qa-output/synthetic-conversation.pdf
+      - name: Verify extracted PDF text
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y poppler-utils
+          pdftotext -layout qa-output/synthetic-conversation.pdf qa-output/synthetic-conversation.txt
+          python3 scripts/qa/verify_pdf_content.py qa-output/synthetic-conversation.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:

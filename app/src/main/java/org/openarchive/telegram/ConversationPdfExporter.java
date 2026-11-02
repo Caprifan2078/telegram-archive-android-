@@ -33,7 +33,8 @@ final class ConversationPdfExporter {
         for(int start=0;start<value.length();){
             int end=Math.min(value.length(),start+4000);
             if(end<value.length()&&Character.isHighSurrogate(value.charAt(end-1)))end--;
-            StaticLayout layout=StaticLayout.Builder.obtain(value,start,end,paint,WIDTH-2*MARGIN)
+            CharSequence chunk=value.subSequence(start,end);
+            StaticLayout layout=StaticLayout.Builder.obtain(chunk,0,chunk.length(),paint,WIDTH-2*MARGIN)
                 .setAlignment(Layout.Alignment.ALIGN_NORMAL).setIncludePad(false).build();
             int line=0;
             while(line<layout.getLineCount()){
@@ -42,9 +43,14 @@ final class ConversationPdfExporter {
                 while(line<layout.getLineCount() && y+layout.getLineBottom(line)-top<=HEIGHT-MARGIN)line++;
                 if(line==first)throw new IOException("Не удалось разместить текст на странице");
                 int bottom=layout.getLineBottom(line-1);
+                // A clipped draw of the entire layout still embeds off-page glyphs
+                // in Android PDFs, duplicating emoji during text extraction.
+                CharSequence visible=layout.getText().subSequence(layout.getLineStart(first),layout.getLineEnd(line-1));
+                StaticLayout visibleLayout=StaticLayout.Builder.obtain(visible,0,visible.length(),paint,WIDTH-2*MARGIN)
+                    .setAlignment(Layout.Alignment.ALIGN_NORMAL).setIncludePad(false).build();
                 Canvas canvas=page.getCanvas();canvas.save();
                 canvas.clipRect(MARGIN,y,WIDTH-MARGIN,y+bottom-top);
-                canvas.translate(MARGIN,y-top);layout.draw(canvas);canvas.restore();
+                canvas.translate(MARGIN,y);visibleLayout.draw(canvas);canvas.restore();
                 y+=bottom-top;
             }
             start=end;
