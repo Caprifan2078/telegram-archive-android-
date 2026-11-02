@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - qa/qa02-reading-progress-20261102
+      - qa/qa02-reading-progress-fixed-20261102
     paths:
       - '.github/workflows/qa02-reading-progress.yml'
       - 'app/src/main/java/org/openarchive/telegram/MainActivity.java'
