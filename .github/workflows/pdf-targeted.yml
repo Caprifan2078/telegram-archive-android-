@@ -46,8 +46,7 @@ jobs:
         if: always()
         run: |
           test ! -f qa-output/failed.marker
-          grep -q '^BEGIN ' qa-output/pdf-fixture.log
-          grep -q '^END$' qa-output/pdf-fixture.log
+          python3 scripts/qa/verify_pdf_fixture.py qa-output/pdf-fixture.log qa-output/synthetic-conversation.pdf
       - uses: actions/upload-artifact@v4
         if: always()
         with:

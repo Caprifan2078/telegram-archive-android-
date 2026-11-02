@@ -39,8 +39,10 @@ public class ConversationPdfExporterTest {
             byte[] fixture=java.nio.file.Files.readAllBytes(file.toPath());
             String encoded=android.util.Base64.encodeToString(fixture,android.util.Base64.NO_WRAP);
             android.util.Log.i("TA_PDF_FIXTURE","BEGIN "+encoded.length());
-            for(int offset=0;offset<encoded.length();offset+=2000)
+            for(int offset=0;offset<encoded.length();offset+=2000){
                 android.util.Log.i("TA_PDF_FIXTURE","PART "+offset+" "+encoded.substring(offset,Math.min(offset+2000,encoded.length())));
+                android.os.SystemClock.sleep(40); // Avoid logd dropping bursts of synthetic test data.
+            }
             android.util.Log.i("TA_PDF_FIXTURE","END");
             try(ParcelFileDescriptor descriptor=ParcelFileDescriptor.open(file,ParcelFileDescriptor.MODE_READ_ONLY);
                 PdfRenderer renderer=new PdfRenderer(descriptor)){
