@@ -70,6 +70,30 @@ public class Qa01ReadingPositionTest {
                 scenario.recreate();device.waitForIdle();message("QA01_B_075");
                 device.pressBack();device.waitForIdle();
                 tap("QA01 Reading Alpha");message("QA01_A_020");
+                device.pressBack();device.waitForIdle();
+                // Block only the background worker as test setup, then use the
+                // actual chat cards and Back button to queue rapid switches.
+                java.util.concurrent.CountDownLatch started=new java.util.concurrent.CountDownLatch(1);
+                java.util.concurrent.CountDownLatch release=new java.util.concurrent.CountDownLatch(1);
+                scenario.onActivity(activity->{
+                    try{
+                        java.lang.reflect.Field field=MainActivity.class.getDeclaredField("worker");
+                        field.setAccessible(true);
+                        ((java.util.concurrent.ExecutorService)field.get(activity)).execute(()->{
+                            started.countDown();
+                            try{release.await(20,java.util.concurrent.TimeUnit.SECONDS);}
+                            catch(InterruptedException e){Thread.currentThread().interrupt();}
+                        });
+                    }catch(Exception e){throw new AssertionError(e);}
+                });
+                assertTrue("Worker did not enter controlled delay",started.await(10,java.util.concurrent.TimeUnit.SECONDS));
+                try{
+                    tap("QA01 Reading Alpha");
+                    device.pressBack();device.waitForIdle();
+                    tap("QA01 Reading Beta");
+                }finally{release.countDown();}
+                message("QA01_B_");
+                assertNull("Foreign chat after rapid switching",device.findObject(By.textContains("QA01_A_")));
             }
         }finally{
             ctx.deleteDatabase("telegram_"+a+".db");ctx.deleteDatabase("telegram_"+b+".db");
