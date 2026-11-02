@@ -2958,7 +2958,7 @@ public class MainActivity extends Activity {
         lastRenderedDay=last;
         if(append)return; // Never jump to the top when more history is appended.
         if(results&&pendingSearchScroll>=0)return; // The return path restores after layout.
-        if(pendingRestoreId>0){
+        if("chat".equals(screen)&&pendingRestoreId>0){
             final View restored=renderedMessageViews.get(pendingRestoreId);
             final int top=pendingRestoreTop;
             pendingRestoreId=-1;
@@ -4410,6 +4410,8 @@ public class MainActivity extends Activity {
                 home=false;autoLoaded=PAGE;
                 if(resultScroll>=0)searchReturnScroll=resultScroll;
                 if(analysisScroll>=0)analyticsReturnScroll=analysisScroll;
+                // An explicit jump must take precedence over a saved tab position.
+                pendingRestoreId=-1;
                 returnScreen=source;screen="chat";chatOffset=Math.max(0,at-7);highlightId=id;showPage();
             });
         });
