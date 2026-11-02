@@ -1647,7 +1647,10 @@ public class MainActivity extends Activity {
             worker.execute(()->{
                 if(!openedKey.equals(activeKey)||restoreDb!=db)return;
                 int restoredPos;
-                try{restoredPos=restoreDb.positionFor(messageId);}
+                // A changed or reimported archive may no longer contain the
+                // saved ID. positionFor returns an insertion position, so only
+                // use it after confirming that the actual message still exists.
+                try{restoredPos=restoreDb.hasMessage(messageId)?restoreDb.positionFor(messageId):-1;}
                 catch(RuntimeException closedOrInvalid){
                     runOnUiThread(()->{
                         if(isFinishing()||!openedKey.equals(activeKey)||restoreDb!=db)return;
