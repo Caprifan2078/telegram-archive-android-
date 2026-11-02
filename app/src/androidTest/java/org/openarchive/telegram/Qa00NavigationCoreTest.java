@@ -333,6 +333,74 @@ public class Qa00NavigationCoreTest {
         }
     }
 
+    @Test public void favoritesRoundTripPreservesScrolledChatPosition()throws Exception {
+        MainActivity a=activity.getActivity();
+        String key="qa00scroll"+UUID.randomUUID().toString().replace("-","");
+        MessageDb synthetic=new MessageDb(a,key);
+        android.database.sqlite.SQLiteDatabase sql=synthetic.getWritableDatabase();
+        sql.beginTransaction();
+        try{
+            for(int i=1;i<=100;i++)synthetic.stage(sql,"Synthetic author","2026-01-01 12:00",
+                String.format(java.util.Locale.ROOT,"QA00_SCROLL_%03d synthetic message",i),null,"");
+            sql.setTransactionSuccessful();
+        }finally{sql.endTransaction();}
+        synthetic.publishStaged(sql);
+        for(int i=1;i<=100;i++)synthetic.toggleFavorite(i);
+        Object dbOld=field(a,"db"),keyOld=field(a,"activeKey"),nameOld=field(a,"activeName"),
+            homeOld=field(a,"home"),screenOld=field(a,"screen"),folderOld=field(a,"folder");
+        try{
+            inst.runOnMainSync(()->{
+                try{
+                    set(a,"db",synthetic);set(a,"activeKey",key);set(a,"activeName","QA00 scroll");
+                    set(a,"folder",null);set(a,"home",false);set(a,"screen","chat");call(a,"showPage");
+                }catch(Exception e){throw new AssertionError(e);}
+            });
+            assertNotNull("Synthetic messages did not load",device.wait(Until.findObject(By.textContains("QA00_SCROLL_")),15000));
+            android.widget.ScrollView scroller=(android.widget.ScrollView)field(a,"scroll");
+            int[] xy=new int[2];
+            inst.runOnMainSync(()->scroller.getLocationOnScreen(xy));
+            int x=xy[0]+scroller.getWidth()/2, top=xy[1], height=scroller.getHeight();
+            assertTrue("Chat viewport is too small",height>100);
+            for(int i=0;i<3;i++){
+                device.swipe(x,top+height*3/4,x,top+height/4,30);
+                device.waitForIdle();
+            }
+            java.util.concurrent.atomic.AtomicInteger before=new java.util.concurrent.atomic.AtomicInteger();
+            inst.runOnMainSync(()->before.set(scroller.getScrollY()));
+            assertTrue("Test did not scroll the chat",before.get()>100);
+            UiObject2 marker=null;
+            for(UiObject2 candidate:device.findObjects(By.textContains("QA00_SCROLL_"))){
+                Rect b=candidate.getVisibleBounds();
+                if(!b.isEmpty()&&b.top>=top&&b.bottom<=top+height){marker=candidate;break;}
+            }
+            assertNotNull("No fully visible synthetic message after scrolling",marker);
+            String text=marker.getText();
+            tap("▦ Медиа");shown("Фото, видео, голосовые и файлы");
+            tap("Избранное");
+            assertNotNull("Favorite messages did not load",device.wait(
+                Until.findObject(By.textContains("QA00_SCROLL_")),15000));
+            tap("💬 Переписка");
+            UiObject2 restored=device.wait(Until.findObject(By.text(text)),15000);
+            assertNotNull("Scrolled message disappeared after media round trip: "+text,restored);
+            Rect after=restored.getVisibleBounds();
+            assertTrue("Scrolled message is outside the chat viewport after media round trip: "+text,
+                !after.isEmpty()&&after.top>=top&&after.bottom<=top+height);
+        }finally{
+            CountDownLatch idle=new CountDownLatch(1);
+            ((ExecutorService)field(a,"worker")).execute(idle::countDown);
+            assertTrue("Async UI/DB work did not finish",idle.await(12,TimeUnit.SECONDS));
+            inst.runOnMainSync(()->{
+                try{
+                    set(a,"db",dbOld);set(a,"activeKey",keyOld);set(a,"activeName",nameOld);
+                    set(a,"home",homeOld);set(a,"screen",screenOld);set(a,"folder",folderOld);call(a,"showPage");
+                }catch(Exception e){throw new AssertionError(e);}
+            });
+            synthetic.close();a.deleteDatabase("telegram_"+key+".db");
+            a.getPreferences(Context.MODE_PRIVATE).edit().remove("read_offset_"+key)
+                .remove("read_id_"+key).remove("read_top_"+key).apply();
+        }
+    }
+
     @Test public void allConversationMenuDestinationsAreAccessibleOnSyntheticDb()throws Exception{
         MainActivity a=activity.getActivity();
         String key="qa00menu"+UUID.randomUUID().toString().replace("-","");
