@@ -1,0 +1,61 @@
+name: QA-02 RED witness: reading position
+on:
+  push:
+    branches: [qa/qa02-reading-anchor-red-20261102]
+    paths:
+      - '.github/workflows/qa02-reading-position-qa.yml'
+      - 'app/src/androidTest/java/org/openarchive/telegram/Qa02ReadingPositionIsolationTest.java'
+      - 'app/src/main/java/org/openarchive/telegram/MainActivity.java'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: qa02-reading-position-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  reading-position:
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Compile target test and QA APK
+        run: gradle --no-daemon --max-workers=2 assembleCompactQa assembleCompactQaAndroidTest testCompactQaUnitTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: |
+            mkdir -p qa-output
+            if ! gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.Qa02ReadingPositionIsolationTest'; then touch qa-output/failed.marker; fi
+            adb logcat -d -t 500 > qa-output/logcat.txt || true
+      - name: Mark failure after collecting evidence
+        if: always()
+        run: test ! -f qa-output/failed.marker
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qa02-reading-position-results
+          retention-days: 3
+          path: |
+            app/build/outputs/androidTest-results/
+            app/build/reports/androidTests/
+            qa-output/
