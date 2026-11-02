@@ -205,8 +205,18 @@ public class UiMenuTourRegressionTest {
         }
         openDialog("performanceDialog");
         boolean old=prefs.getBoolean("appearance_less_motion",false);
-        tap(old?"С анимацией":"Без анимации");
-        assertEquals(!old,prefs.getBoolean("appearance_less_motion",old));
+        // Do not use a substring selector here: the Economy radio choice
+        // also contains "без анимаций" and can be matched instead of the
+        // motion BUTTON. Target the exact native Button text and class.
+        String motionLabel=old?"С анимацией":"Без анимации";
+        UiObject2 motionButton=device.wait(
+            Until.findObject(By.clazz("android.widget.Button").text(motionLabel)),3500L);
+        assertNotNull("Motion button missing or UI state disagrees with saved setting: "+motionLabel,motionButton);
+        assertFalse("Motion button is clipped",motionButton.getVisibleBounds().isEmpty());
+        motionButton.click();
+        inst.waitForIdleSync();
+        assertEquals("Motion action must persist the opposite choice",
+            !old,prefs.getBoolean("appearance_less_motion",old));
         openDialog("bubbleStyleDialog");
         expect("Скругление сообщений");
         tap("Применить");
