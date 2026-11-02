@@ -1577,12 +1577,19 @@ public class MainActivity extends Activity {
         // Child order is stable; HashMap iteration order is not. Record the first
         // visible message's ID and pixel offset, never a random mapped message.
         long visibleId=-1;int visibleTop=0;
+        long lastRenderedId=-1;int lastRenderedTop=0;
         for(int i=0;i<list.getChildCount();i++){
             View v=list.getChildAt(i);Object tag=v.getTag();
             if(!(tag instanceof Long))continue;
+            // Keep a valid fallback for the very bottom of a long chat.
+            lastRenderedId=(Long)tag;lastRenderedTop=v.getTop()-y;
             if(v.getBottom()>probe){visibleId=(Long)tag;visibleTop=v.getTop()-y;break;}
         }
-        if(visibleId>0){lastVisibleMessage=visibleId;lastVisibleTop=visibleTop;}
+        if(visibleId<=0){visibleId=lastRenderedId;visibleTop=lastRenderedTop;}
+        // Loading/empty placeholders have no message IDs. They must never
+        // overwrite a chat's stored anchor with one from another archive.
+        if(visibleId<=0)return;
+        lastVisibleMessage=visibleId;lastVisibleTop=visibleTop;
         int child=0;
         for(int i=0;i<list.getChildCount();i++){
             if(list.getChildAt(i).getBottom()>y){child=i;break;}
@@ -1590,10 +1597,8 @@ public class MainActivity extends Activity {
         int approx=chatOffset+Math.min(autoLoaded-1,Math.max(0,child/2));
         SharedPreferences.Editor editor=getPreferences(MODE_PRIVATE).edit();
         editor.putInt("read_offset_"+activeKey,approx);
-        if(lastVisibleMessage>0){
-            editor.putLong("read_id_"+activeKey,lastVisibleMessage);
-            editor.putInt("read_top_"+activeKey,lastVisibleTop);
-        }
+        editor.putLong("read_id_"+activeKey,visibleId);
+        editor.putInt("read_top_"+activeKey,visibleTop);
         editor.apply();
     }
     private void checkAutoFloat(){
@@ -1626,7 +1631,11 @@ public class MainActivity extends Activity {
         saveReadingProgress();
         if(importing){toast("Импорт ещё идёт");return;}
         JSONObject choice=null;for(int i=0;i<archives.length();i++){JSONObject o=archives.optJSONObject(i);if(o!=null&&key.equals(o.optString("key")))choice=o;}
-        if(choice==null)return;closeFloatingRound();stopPlayback();++loadToken;clearMediaSelection();activeKey=key;activeName=choice.optString("name","Архив");analyticsSelectedAuthor="";analyticsCalendarYear=0;analyticsCompareFirst="";analyticsCompareSecond="";lastAnalytics=null;saveRegistry();
+        if(choice==null)return;closeFloatingRound();stopPlayback();++loadToken;clearMediaSelection();activeKey=key;activeName=choice.optString("name","Архив");analyticsSelectedAuthor="";analyticsCalendarYear=0;analyticsCompareFirst="";analyticsCompareSecond="";lastAnalytics=null;
+        // Anchors are bound to an archive. Do not reuse a previous chat's
+        // visible-message ID or pixel offset while the new chat loads.
+        lastVisibleMessage=-1;lastVisibleTop=0;
+        saveRegistry();
         if(db!=null)db.close();db=new MessageDb(this,activeKey);
         String path=choice.optString("tree","");folder=path.isEmpty()?null:path.startsWith("local:")?new DocumentFolder(getContentResolver(),new java.io.File(path.substring(6))):new DocumentFolder(getContentResolver(),Uri.parse(path));
         chatOffset=searchOffset=mediaOffset=favOffset=0;autoLoaded=PAGE;home=false;screen="chat";returnScreen="";searchReturnsToAnalytics=false;chatOffset=getPreferences(MODE_PRIVATE).getInt("read_offset_"+activeKey,0);
@@ -1634,12 +1643,28 @@ public class MainActivity extends Activity {
         pendingRestoreTop=getPreferences(MODE_PRIVATE).getInt("read_top_"+activeKey,0);
         if(pendingRestoreId>0){
             final String openedKey=activeKey;
+            final MessageDb restoreDb=db;
             final long messageId=pendingRestoreId;
-            worker.execute(()->{int pos=db.positionFor(messageId);runOnUiThread(()->{
-                if(isFinishing()||!openedKey.equals(activeKey))return;
-                if(pos<0){pendingRestoreId=-1;showPage();return;}
-                chatOffset=Math.max(0,pos-3);showPage();
-            });});
+            worker.execute(()->{
+                if(!openedKey.equals(activeKey)||restoreDb!=db)return;
+                int restoredPos;
+                try{restoredPos=restoreDb.positionFor(messageId);}
+                catch(RuntimeException closedOrInvalid){
+                    // A fast archive switch can close this database before the
+                    // restore query begins. Never reopen or redirect to another DB.
+                    runOnUiThread(()->{
+                        if(isFinishing()||!openedKey.equals(activeKey)||restoreDb!=db)return;
+                        pendingRestoreId=-1;showPage();
+                    });
+                    return;
+                }
+                final int pos=restoredPos;
+                runOnUiThread(()->{
+                    if(isFinishing()||!openedKey.equals(activeKey)||restoreDb!=db)return;
+                    if(pos<0){pendingRestoreId=-1;showPage();return;}
+                    chatOffset=Math.max(0,pos-3);showPage();
+                });
+            });
         }
         else showPage();
     }
