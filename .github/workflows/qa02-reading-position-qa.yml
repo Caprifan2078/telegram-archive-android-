@@ -1,4 +1,4 @@
-name: QA-02 RED witness: reading position
+name: QA-02 RED reading position witness
 on:
   push:
     branches: [qa/qa02-reading-anchor-red-20261102]
