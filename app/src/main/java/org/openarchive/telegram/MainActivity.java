@@ -1590,9 +1590,12 @@ public class MainActivity extends Activity {
         int approx=chatOffset+Math.min(autoLoaded-1,Math.max(0,child/2));
         SharedPreferences.Editor editor=getPreferences(MODE_PRIVATE).edit();
         editor.putInt("read_offset_"+activeKey,approx);
-        if(lastVisibleMessage>0){
-            editor.putLong("read_id_"+activeKey,lastVisibleMessage);
-            editor.putInt("read_top_"+activeKey,lastVisibleTop);
+        // Only a message actually visible in THIS chat may become its reading
+        // anchor. The Activity's lastVisibleMessage can belong to a prior chat
+        // (or a previous, now-empty page) and must never be persisted here.
+        if(visibleId>0){
+            editor.putLong("read_id_"+activeKey,visibleId);
+            editor.putInt("read_top_"+activeKey,visibleTop);
         }
         editor.apply();
     }
@@ -1626,7 +1629,12 @@ public class MainActivity extends Activity {
         saveReadingProgress();
         if(importing){toast("Импорт ещё идёт");return;}
         JSONObject choice=null;for(int i=0;i<archives.length();i++){JSONObject o=archives.optJSONObject(i);if(o!=null&&key.equals(o.optString("key")))choice=o;}
-        if(choice==null)return;closeFloatingRound();stopPlayback();++loadToken;clearMediaSelection();activeKey=key;activeName=choice.optString("name","Архив");analyticsSelectedAuthor="";analyticsCalendarYear=0;analyticsCompareFirst="";analyticsCompareSecond="";lastAnalytics=null;saveRegistry();
+        if(choice==null)return;closeFloatingRound();stopPlayback();++loadToken;clearMediaSelection();
+        // Reading anchors are in-memory state for ONE archive. Reset them
+        // after preserving the old chat, before selecting the next archive.
+        // Saved read_id_<key> and read_top_<key> preferences are untouched.
+        lastVisibleMessage=-1;lastVisibleTop=0;
+        activeKey=key;activeName=choice.optString("name","Архив");analyticsSelectedAuthor="";analyticsCalendarYear=0;analyticsCompareFirst="";analyticsCompareSecond="";lastAnalytics=null;saveRegistry();
         if(db!=null)db.close();db=new MessageDb(this,activeKey);
         String path=choice.optString("tree","");folder=path.isEmpty()?null:path.startsWith("local:")?new DocumentFolder(getContentResolver(),new java.io.File(path.substring(6))):new DocumentFolder(getContentResolver(),Uri.parse(path));
         chatOffset=searchOffset=mediaOffset=favOffset=0;autoLoaded=PAGE;home=false;screen="chat";returnScreen="";searchReturnsToAnalytics=false;chatOffset=getPreferences(MODE_PRIVATE).getInt("read_offset_"+activeKey,0);
