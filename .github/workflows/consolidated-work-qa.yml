@@ -2,7 +2,7 @@ name: Consolidated Android QA and APK
 on:
   push:
     branches: [qa/work-modular-audit-00-18, qa/qa02-reading-position-isolation-20261102]
-    paths: ['.github/workflows/consolidated-work-qa.yml']
+    paths: ['.github/workflows/consolidated-work-qa.yml', 'app/src/androidTest/java/org/openarchive/telegram/UiMenuTourRegressionTest.java']
   workflow_dispatch:
 permissions:
   contents: read
