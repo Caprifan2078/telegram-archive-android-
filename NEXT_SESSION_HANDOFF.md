@@ -1,5 +1,9 @@
 # Передача разработки следующему сеансу
 
+## Продолжение 02.11.2026 — QA-ветка с PDF
+
+Актуальный кандидат: `qa/work-pdf-candidate-20261029`, код исправления `32276a18a7a9a76342a233dbfdedee057054da9c`, HEAD ветки проверить. Подробные результаты и ограничения: `docs/qa/modules/QA-13_PDF_CANDIDATE_20261102_RU.md`. Android 11: [41408384468](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41408384468) 3/3 PASS, 150 синтетических сообщений независимо сверены по тексту с эмодзи; ранее сквозное системное сохранение подтвердил [41406396306](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41406396306). Исправлено дублирование глифов на стыках страниц. Полный набор Android 166 PASS / 1 SKIPPED запускался на предшествующем коде без этой последней правки. APK c исправлением: SHA-256 `5b2db31c352ca11ecc1342f67af359058ce0e44392fbcbc2edb42cce62813b5a`; debug-сертификат несовместим с предшествующим QA APK. Не советовать удалять установленные приложения. Модуль QA-01 остаётся частичным; продолжать проверку по модулям и не относить неподтверждённые гонки к установленным багам. Основную ветку main не изменять.
+
 1. Открыть https://github.com/Caprifan2078/telegram-archive-android-, ветка `qa/work-modular-audit-00-18`, её актуальный HEAD. main не изменять и force push не применять.
 2. Прочитать docs/qa/modules/QA-00_REPORT_RU.md, docs/QA_MODULAR_MASTER_MATRIX_20261028_RU.md, docs/qa/WORK_MODULAR_CHECKPOINT_20261028_RU.md и исторический docs/BUG_REPORT_RECHECK_20261026_RU.md.
 3. CI 40776453369: 11/11 UI PASS на тестовом коммите 27fcb4e, код приложения соответствует a4db7ce. Точечный RED/GREEN: 40772524824 / 40774441821. Сохранять результаты FAIL и не принимать дефект теста за дефект приложения.
