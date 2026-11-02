@@ -222,6 +222,51 @@ public class Qa00NavigationCoreTest {
         }
     }
 
+    @Test public void quickRepeatedChatMediaTapsKeepTheLastDestination()throws Exception {
+        MainActivity a=activity.getActivity();
+        String key="qa00quick"+UUID.randomUUID().toString().replace("-","");
+        MessageDb synthetic=new MessageDb(a,key);synthetic.getWritableDatabase();
+        Object dbOld=field(a,"db"),keyOld=field(a,"activeKey"),nameOld=field(a,"activeName"),
+            homeOld=field(a,"home"),screenOld=field(a,"screen"),folderOld=field(a,"folder");
+        try {
+            inst.runOnMainSync(()->{
+                try {
+                    set(a,"db",synthetic);set(a,"activeKey",key);set(a,"activeName","QA00 быстрые вкладки");
+                    set(a,"folder",null);set(a,"home",false);set(a,"screen","chat");call(a,"showPage");
+                } catch(Exception e){throw new AssertionError(e);}
+            });
+            inst.waitForIdleSync();
+            UiObject2 chat=visible("💬 Переписка"),media=visible("▦ Медиа");
+            assertNotNull("Chat tab missing",chat);assertNotNull("Media tab missing",media);
+            Rect chatBounds=chat.getVisibleBounds(),mediaBounds=media.getVisibleBounds();
+            assertFalse(chatBounds.isEmpty());assertFalse(mediaBounds.isEmpty());
+            for(int i=0;i<10;i++) {
+                assertTrue(device.click(mediaBounds.centerX(),mediaBounds.centerY()));
+                assertTrue(device.click(chatBounds.centerX(),chatBounds.centerY()));
+            }
+            device.waitForIdle();
+            java.util.concurrent.atomic.AtomicReference<String> current=new java.util.concurrent.atomic.AtomicReference<>();
+            inst.runOnMainSync(()->{
+                try{current.set((String)field(a,"screen"));}catch(Exception e){throw new AssertionError(e);}
+            });
+            assertEquals("The last tap should leave the chat tab active","chat",current.get());
+            shown("История сообщений · локально");
+            tap("▦ Медиа");shown("Фото, видео, голосовые и файлы");
+            tap("💬 Переписка");shown("История сообщений · локально");
+        } finally {
+            CountDownLatch idle=new CountDownLatch(1);
+            ((ExecutorService)field(a,"worker")).execute(idle::countDown);
+            assertTrue("Async UI/DB work did not finish",idle.await(12,TimeUnit.SECONDS));
+            inst.runOnMainSync(()->{
+                try{
+                    set(a,"db",dbOld);set(a,"activeKey",keyOld);set(a,"activeName",nameOld);
+                    set(a,"home",homeOld);set(a,"screen",screenOld);set(a,"folder",folderOld);call(a,"showPage");
+                }catch(Exception e){throw new AssertionError(e);}
+            });
+            synthetic.close();a.deleteDatabase("telegram_"+key+".db");
+        }
+    }
+
     @Test public void allConversationMenuDestinationsAreAccessibleOnSyntheticDb()throws Exception{
         MainActivity a=activity.getActivity();
         String key="qa00menu"+UUID.randomUUID().toString().replace("-","");
