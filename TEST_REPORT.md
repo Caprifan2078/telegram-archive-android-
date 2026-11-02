@@ -17,3 +17,7 @@ WorkQa APK: 3 614 012 байт; SHA-256 eaea2de3e338ba254c6b58ab0a8c9dac886c10ee
 
 
 [40787653583](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/40787653583): точный APK SHA-256 eaea2de3e338ba254c6b58ab0a8c9dac886c10eefb70638dfe7d0a6306e0e490 установлен через adb на чистом эмуляторе Android 11 (x86_64), холодный запуск MainActivity Status: ok, PID найден, UI-текст «Мои переписки» проверен и синтетический снимок просмотрен. dumpsys: package org.openarchive.telegram.qa.workqa20261028, versionCode 51, versionName 0.51, minSdk 26, targetSdk 35, primaryCpuAbi=null. Это не проверка обновления с существующих подписанных APK и не проверка физического телефона.
+# 02.11.2026 — объединённый QA-02 и PDF
+
+[41513186703](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41513186703), Android 11 x86_64: по XML **170 тестов: 169 PASS, 1 SKIPPED, 0 FAIL, 0 errors**. Пропущен `SignedUpgradeSentinelTest.syntheticDataSurvivesSignedUpgrade`. Оба QA-02 теста, QA-01 с задержанным worker, PDF и предыдущий проблемный тест media PASS. Gradle build/JVM PASS. Сценарии запускались на compactQa; это не доказательство полной проверки 19 модулей или физических устройств. Подпись APK debug, совместимое обновление не тестировалось.
+
