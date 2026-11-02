@@ -92,6 +92,17 @@ public class Qa01TwoChatsTest {
                 UiObject2 cancel=device.wait(Until.findObject(By.res("android:id/button2")),5000);
                 assertNotNull("PDF cancel button missing",cancel);cancel.click();device.waitForIdle();
                 requireMessage("QA01_ONLY_ALPHA");
+                menu=device.wait(Until.findObject(By.desc("Меню переписки")),5000);
+                assertNotNull(menu);menu.click();device.waitForIdle();
+                tap("Сохранить переписку в PDF");
+                UiObject2 choose=device.wait(Until.findObject(By.res("android:id/button1")),5000);
+                assertNotNull("PDF choose button missing",choose);choose.click();device.waitForIdle();
+                assertTrue("System document picker was not opened",device.wait(Until.hasObject(By.pkg(java.util.regex.Pattern.compile(".*documentsui"))),10000));
+                UiObject2 downloads=device.findObject(By.text(java.util.regex.Pattern.compile("(?i)downloads|загрузки")));
+                if(downloads!=null){downloads.click();device.waitForIdle();}
+                UiObject2 save=device.wait(Until.findObject(By.text(java.util.regex.Pattern.compile("(?i)save|сохранить"))),5000);
+                assertNotNull("System picker Save button missing",save);save.click();
+                assertNotNull("App did not report PDF export success",device.wait(Until.findObject(By.textContains("PDF сохранён")),20000));
                 device.pressBack();device.waitForIdle();
                 assertNotNull(locate("Мои переписки"));
                 tap("QA01 Бета");

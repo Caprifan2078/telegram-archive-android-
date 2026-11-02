@@ -1,5 +1,8 @@
 name: PDF and chat list focused checks
 on:
+  push:
+    branches: [qa/work-pdf-candidate-20261029]
+    paths: ['.github/workflows/pdf-targeted.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -35,11 +38,16 @@ jobs:
           emulator-boot-timeout: 420
           script: |
             mkdir -p qa-output
+            adb logcat -G 16M
+            adb logcat -c
             if ! gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.ConversationPdfExporterTest,org.openarchive.telegram.Qa01TwoChatsTest; then touch qa-output/failed.marker; fi
+            adb logcat -d -v raw -s TA_PDF_FIXTURE:I '*:S' > qa-output/pdf-fixture.log
       - name: Require passing tests
         if: always()
         run: |
           test ! -f qa-output/failed.marker
+          grep -q '^BEGIN ' qa-output/pdf-fixture.log
+          grep -q '^END$' qa-output/pdf-fixture.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -34,6 +34,14 @@ public class ConversationPdfExporterTest {
             }
             assertTrue("Long conversation must span multiple pages",pages>1);
             assertTrue("PDF should contain data",file.length()>1000);
+            // This fixture contains synthetic text only. Emit bounded chunks so
+            // the host can independently inspect it after Gradle uninstalls the app.
+            byte[] fixture=java.nio.file.Files.readAllBytes(file.toPath());
+            String encoded=android.util.Base64.encodeToString(fixture,android.util.Base64.NO_WRAP);
+            android.util.Log.i("TA_PDF_FIXTURE","BEGIN "+encoded.length());
+            for(int offset=0;offset<encoded.length();offset+=2000)
+                android.util.Log.i("TA_PDF_FIXTURE","PART "+offset+" "+encoded.substring(offset,Math.min(offset+2000,encoded.length())));
+            android.util.Log.i("TA_PDF_FIXTURE","END");
             try(ParcelFileDescriptor descriptor=ParcelFileDescriptor.open(file,ParcelFileDescriptor.MODE_READ_ONLY);
                 PdfRenderer renderer=new PdfRenderer(descriptor)){
                 assertEquals(pages,renderer.getPageCount());
