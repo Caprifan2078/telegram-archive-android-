@@ -102,4 +102,41 @@ public class Qa00MediaLifecycleTest {
                 device.wait(Until.findObject(By.text("QA_LIFE_026")),15000));
         });
     }
+    @Test public void nearbyMediaJumpIsNotOverriddenByOldReadingPosition()throws Exception{
+        fixture(scenario->{
+            String marker=scrollToVisibleMarker();
+            UiObject2 viewport=device.wait(Until.findObject(By.clazz("android.widget.ScrollView")),15000);
+            assertNotNull(viewport);Rect area=viewport.getVisibleBounds();
+            // The photo belongs to #26; jump loads from #19. Place the old
+            // anchor within that same loaded window, but above the target.
+            for(int attempt=0;attempt<12;attempt++){
+                int number=Integer.parseInt(marker.substring("QA_LIFE_".length()));
+                if(number>=19)break;
+                device.swipe(area.centerX(),area.top+area.height()*2/3,
+                    area.centerX(),area.top+area.height()/2,35);
+                device.waitForIdle();
+                for(UiObject2 v:device.findObjects(By.textContains("QA_LIFE_"))){
+                    Rect pos=v.getVisibleBounds();
+                    if(!pos.isEmpty()&&pos.top>=area.top&&pos.bottom<=area.bottom){marker=v.getText();break;}
+                }
+            }
+            openPhotoFilter();
+            final long[] saved={-1};
+            scenario.onActivity(a->{
+                try{java.lang.reflect.Field f=MainActivity.class.getDeclaredField("pendingRestoreId");
+                    f.setAccessible(true);saved[0]=f.getLong(a);
+                }catch(Exception e){throw new AssertionError(e);}
+            });
+            assertTrue("Old anchor must be in same page and sufficiently far from target: "+saved[0],
+                saved[0]>=19&&saved[0]<=21);
+            UiObject2 go=device.wait(Until.findObject(By.desc("К исходному сообщению")),15000);
+            assertNotNull(go);go.click();device.waitForIdle();
+            UiObject2 target=device.wait(Until.findObject(By.text("QA_LIFE_026")),15000);
+            assertNotNull("Old anchor overrode explicit jump",target);
+            UiObject2 chatViewport=device.wait(Until.findObject(By.clazz("android.widget.ScrollView")),15000);
+            assertNotNull(chatViewport);Rect bounds=chatViewport.getVisibleBounds(),pos=target.getVisibleBounds();
+            assertTrue("Jump target is not in upper half of chat viewport: "+pos,
+                !pos.isEmpty()&&pos.top>=bounds.top&&pos.top<bounds.centerY());
+        });
+    }
 }
