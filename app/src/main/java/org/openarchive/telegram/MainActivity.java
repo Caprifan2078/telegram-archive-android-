@@ -1189,6 +1189,7 @@ public class MainActivity extends Activity {
 
     private void showHelp(){
         if(!"help".equals(screen)){
+            rememberChatPositionForReturn();
             helpReturnHome=home;
             helpReturnScreen=screen;
         }
@@ -1627,6 +1628,18 @@ public class MainActivity extends Activity {
         editor.putInt("read_top_"+activeKey,visibleTop);
         editor.apply();
     }
+    private void rememberChatPositionForReturn(){
+        if(home||!"chat".equals(screen)||list==null)return;
+        // During a fast screen switch the list can still contain the old
+        // screen's views. Do not overwrite an existing anchor without rows.
+        for(int i=0;i<list.getChildCount();i++){
+            if(list.getChildAt(i).getTag() instanceof Long){
+                saveReadingProgress();
+                if(lastVisibleMessage>0){pendingRestoreId=lastVisibleMessage;pendingRestoreTop=lastVisibleTop;}
+                return;
+            }
+        }
+    }
     private void checkAutoFloat(){
         if(player==null||inlineHolder==null||floatingPanel!=null||!screen.equals("chat"))return;
         try{if(!player.isPlaying())return;}catch(Exception badState){return;}
@@ -1909,19 +1922,7 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams tabBounds=new LinearLayout.LayoutParams(0,px(44),1);
         tabBounds.leftMargin=px(2);tabBounds.rightMargin=px(2);bottomNav.addView(t,tabBounds);
         t.setOnClickListener(v->{
-            if(!home&&"chat".equals(screen)&&"media".equals(key)){
-                // The page is rebuilt on tab changes. Capture an anchor only
-                // when actual message rows are present: rapid switches can
-                // leave the previous tab's views on screen while loading.
-                boolean hasRows=false;
-                for(int i=0;i<list.getChildCount();i++){
-                    if(list.getChildAt(i).getTag() instanceof Long){hasRows=true;break;}
-                }
-                if(hasRows){
-                    saveReadingProgress();
-                    if(lastVisibleMessage>0){pendingRestoreId=lastVisibleMessage;pendingRestoreTop=lastVisibleTop;}
-                }
-            }
+            if("media".equals(key))rememberChatPositionForReturn();
             if(floatingPanel==null)stopPlayback();screen=key;returnScreen="";searchReturnsToAnalytics=false;highlightId=-1;showPage();
         });
     }
