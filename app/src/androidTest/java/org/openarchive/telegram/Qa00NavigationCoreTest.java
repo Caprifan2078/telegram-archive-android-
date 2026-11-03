@@ -86,6 +86,44 @@ public class Qa00NavigationCoreTest {
         assertNotNull("Drawer item unreachable after scrolling: "+label,visible(label));
     }
 
+    private void openHelpFromDrawer(){
+        shownAfterDrawerScroll("Помощь и инструкция");tap("Помощь и инструкция");
+        shown("Помощь · Telegram Archive");shown("СПРАВОЧНИК");
+    }
+    private void enterHelpChapterAndReturn(){
+        tap("Первые шаги");shown("РАЗДЕЛ");
+        tap("Быстрый старт: первые три шага");shown("ИНСТРУКЦИЯ");
+        device.pressBack();device.waitForIdle();shown("РАЗДЕЛ");
+        device.pressBack();device.waitForIdle();shown("СПРАВОЧНИК");
+    }
+    @Test public void helpNestedNavigationReturnsToHomeUsingRealControls(){
+        shown("Мои переписки");tap("☰");openHelpFromDrawer();enterHelpChapterAndReturn();
+        device.pressBack();device.waitForIdle();shown("Мои переписки");
+    }
+    @Test public void helpNestedNavigationReturnsToActiveChatUsingRealControls()throws Exception{
+        MainActivity a=activity.getActivity();String key="qa00help"+UUID.randomUUID().toString().replace("-","");
+        MessageDb synthetic=new MessageDb(a,key);synthetic.getWritableDatabase();
+        Object dbOld=field(a,"db"),keyOld=field(a,"activeKey"),nameOld=field(a,"activeName"),
+            homeOld=field(a,"home"),screenOld=field(a,"screen"),folderOld=field(a,"folder");
+        try{
+            inst.runOnMainSync(()->{try{
+                set(a,"db",synthetic);set(a,"activeKey",key);set(a,"activeName","QA00 help chat");
+                set(a,"folder",null);set(a,"home",false);set(a,"screen","chat");call(a,"showPage");
+            }catch(Exception e){throw new AssertionError(e);}});
+            shown("QA00 help chat");tap("≡");tap("Все инструменты");openHelpFromDrawer();enterHelpChapterAndReturn();
+            device.pressBack();device.waitForIdle();shown("QA00 help chat");shown("История сообщений · локально");
+            assertEquals("chat",field(a,"screen"));assertEquals(false,field(a,"home"));
+        }finally{
+            CountDownLatch idle=new CountDownLatch(1);((ExecutorService)field(a,"worker")).execute(idle::countDown);
+            assertTrue("Worker did not finish",idle.await(12,TimeUnit.SECONDS));
+            inst.runOnMainSync(()->{try{
+                set(a,"db",dbOld);set(a,"activeKey",keyOld);set(a,"activeName",nameOld);
+                set(a,"home",homeOld);set(a,"screen",screenOld);set(a,"folder",folderOld);call(a,"showPage");
+            }catch(Exception e){throw new AssertionError(e);}});
+            synthetic.close();a.deleteDatabase("telegram_"+key+".db");
+        }
+    }
+
     @Test public void emptyHomeOpensImportDialogAndClosesDrawerByTouchOutside() {
         shown("Мои переписки");
         shown("Добавить переписку");
