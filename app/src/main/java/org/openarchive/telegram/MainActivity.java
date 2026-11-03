@@ -193,6 +193,22 @@ public class MainActivity extends Activity {
         if(state!=null){
             pendingPdfKey=state.getString("ta_pending_pdf_key");pendingPdfName=state.getString("ta_pending_pdf_name");
             home=state.getBoolean("ta_home",true);screen=state.getString("ta_screen","chat");
+            if("help".equals(screen)){
+                helpReturnHome=state.getBoolean("ta_help_return_home",true);
+                helpReturnScreen=state.getString("ta_help_return_screen","chat");
+                if(helpReturnScreen==null||"help".equals(helpReturnScreen))helpReturnScreen="chat";
+                int category=state.getInt("ta_help_category",-1);
+                if(category>=0&&category<HelpCatalog.GROUPS.length){
+                    helpCategory=category;
+                    int shelf=state.getInt("ta_help_shelf",-1);
+                    if(shelf>=0&&shelf<HelpCatalog.GROUPS[category].shelves.length)helpShelf=shelf;
+                    int chapter=state.getInt("ta_help_chapter",-1);
+                    if(chapter>0&&chapter<=HelpContent.all().size()){
+                        int[] path=HelpCatalog.findChapter(chapter);
+                        if(path!=null&&path[0]==category&&(helpShelf<0||path[1]==helpShelf))helpChapter=chapter;
+                    }
+                }
+            }
             q=state.getString("ta_search_query","");byAuthor=state.getString("ta_search_author","");
             deep=state.getBoolean("ta_search_deep",false);onlyMedia=state.getBoolean("ta_search_media",false);
             chatOffset=Math.max(0,state.getInt("ta_chat_offset",0));autoLoaded=Math.max(PAGE,state.getInt("ta_chat_loaded",PAGE));
@@ -237,6 +253,10 @@ public class MainActivity extends Activity {
     }
     @Override protected void onSaveInstanceState(Bundle state){
         state.putString("ta_pending_pdf_key",pendingPdfKey);state.putString("ta_pending_pdf_name",pendingPdfName);
+        if("help".equals(screen)){
+            state.putBoolean("ta_help_return_home",helpReturnHome);state.putString("ta_help_return_screen",helpReturnScreen);
+            state.putInt("ta_help_category",helpCategory);state.putInt("ta_help_shelf",helpShelf);state.putInt("ta_help_chapter",helpChapter);
+        }
         if(!home&&"chat".equals(screen))saveReadingProgress();
         state.putBoolean("ta_home",home);state.putString("ta_screen",screen);
         state.putString("ta_search_query",q);state.putString("ta_search_author",byAuthor);
