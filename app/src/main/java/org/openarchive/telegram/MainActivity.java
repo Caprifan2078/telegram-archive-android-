@@ -205,6 +205,10 @@ public class MainActivity extends Activity {
             highlightId=state.getLong("ta_highlight_id",-1);
             if(!home&&"chat".equals(screen)){
                 pendingRestoreId=state.getLong("ta_visible_id",-1);pendingRestoreTop=state.getInt("ta_visible_top",0);
+            }else if(!home){
+                // The user may return to chat after Android recreates another tab.
+                pendingRestoreId=state.getLong("ta_pending_chat_id",-1);
+                pendingRestoreTop=state.getInt("ta_pending_chat_top",0);
             }
             analyticsUnit=state.getString("ta_analytics_unit","month");
             analyticsSelectedAuthor=state.getString("ta_analytics_author","");
@@ -252,6 +256,7 @@ public class MainActivity extends Activity {
             if("analytics".equals(screen))state.putInt("ta_analytics_scroll",scroll.getScrollY());
         }
         state.putLong("ta_highlight_id",highlightId);state.putLong("ta_visible_id",lastVisibleMessage);state.putInt("ta_visible_top",lastVisibleTop);
+        state.putLong("ta_pending_chat_id",pendingRestoreId);state.putInt("ta_pending_chat_top",pendingRestoreTop);
         state.putString("ta_analytics_unit",analyticsUnit);
         state.putString("ta_analytics_author",analyticsSelectedAuthor);
         state.putInt("ta_analytics_year",analyticsCalendarYear);
