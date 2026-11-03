@@ -275,6 +275,8 @@ public class MainActivity extends Activity {
             if("search".equals(screen))state.putInt("ta_search_scroll",scroll.getScrollY());
             if("analytics".equals(screen))state.putInt("ta_analytics_scroll",scroll.getScrollY());
         }
+        if("help".equals(screen)&&"search".equals(helpReturnScreen)&&pendingSearchScroll>=0)
+            state.putInt("ta_search_scroll",pendingSearchScroll);
         state.putLong("ta_highlight_id",highlightId);state.putLong("ta_visible_id",lastVisibleMessage);state.putInt("ta_visible_top",lastVisibleTop);
         state.putLong("ta_pending_chat_id",pendingRestoreId);state.putInt("ta_pending_chat_top",pendingRestoreTop);
         state.putString("ta_analytics_unit",analyticsUnit);
@@ -1190,6 +1192,7 @@ public class MainActivity extends Activity {
     private void showHelp(){
         if(!"help".equals(screen)){
             rememberChatPositionForReturn();
+            if(!home&&"search".equals(screen)&&scroll!=null)pendingSearchScroll=scroll.getScrollY();
             helpReturnHome=home;
             helpReturnScreen=screen;
         }
