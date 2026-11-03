@@ -83,6 +83,31 @@ public class Qa00MediaLifecycleTest {
         tap("▦ Медиа");tap("Фото");
         assertNotNull("Synthetic photo tile missing",device.wait(Until.findObject(By.descContains("Фото ·")),15000));
     }
+    @Test public void helpRoundTripPreservesScrolledChatPosition()throws Exception{
+        fixture(scenario->{
+            String marker=scrollToVisibleMarker();
+            tap("≡");
+            UiObject2 tools=device.wait(Until.findObject(By.textContains("Все инструменты")),15000);
+            assertNotNull("Tools menu missing",tools);tools.click();device.waitForIdle();
+            UiObject2 help=null;
+            for(int i=0;i<10;i++){
+                help=device.findObject(By.textContains("Помощь и инструкция"));
+                if(help!=null&&!help.getVisibleBounds().isEmpty())break;
+                UiObject2 scroll=device.findObject(By.clazz("android.widget.ScrollView"));
+                assertNotNull("Drawer viewport missing",scroll);Rect b=scroll.getVisibleBounds();
+                device.swipe(b.centerX(),b.top+b.height()*3/4,b.centerX(),b.top+b.height()/4,25);device.waitForIdle();
+            }
+            assertNotNull("Help item missing",help);help.click();device.waitForIdle();
+            assertNotNull("Help did not open",device.wait(Until.findObject(By.text("СПРАВОЧНИК")),15000));
+            device.pressBack();device.waitForIdle();
+            UiObject2 restored=device.wait(Until.findObject(By.text(marker)),15000);
+            assertNotNull("Chat position lost after help: "+marker,restored);
+            UiObject2 view=device.wait(Until.findObject(By.clazz("android.widget.ScrollView")),15000);
+            assertNotNull(view);Rect b=view.getVisibleBounds(),pos=restored.getVisibleBounds();
+            assertTrue("Restored message outside chat viewport: "+marker,
+                !pos.isEmpty()&&pos.top>=b.top&&pos.bottom<=b.bottom);
+        });
+    }
     @Test public void recreationInMediaRestoresPreviousChatPosition()throws Exception{
         fixture(scenario->{
             String marker=scrollToVisibleMarker();openPhotoFilter();
