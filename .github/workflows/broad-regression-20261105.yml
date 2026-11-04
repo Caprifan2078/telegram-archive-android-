@@ -64,3 +64,5 @@ jobs:
           retention-days: 3
           path: app/build/outputs/apk/workQa/*.apk
           if-no-files-found: warn
+
+# Include direct image import regression.
