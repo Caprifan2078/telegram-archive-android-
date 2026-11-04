@@ -23,4 +23,16 @@ public class MediaClassifierTest {
         assertEquals("audio",TelegramImporter.classify("audio/song.mp3",element("audio/song.mp3","music")));
         assertEquals("file",TelegramImporter.classify("files/test.pdf",element("files/test.pdf","document")));
     }
+    @Test public void importsDirectPicturesWithFragmentsAndApng(){
+        Element message=Jsoup.parse("<div class='message'><div class='body'>"+
+            "<div class='photo_wrap'><img src='photos/one.jpg#view'></div>"+
+            "<div class='photo_wrap'><img src='photos/two.apng?size=full'></div>"+
+            "</div></div>").selectFirst(".message");
+        java.util.List<TelegramImporter.Media> media=TelegramImporter.findMedia(message);
+        assertEquals(2,media.size());
+        assertEquals("photos/one.jpg#view",media.get(0).path);
+        assertEquals("image",media.get(0).kind);
+        assertEquals("photos/two.apng?size=full",media.get(1).path);
+        assertEquals("image",media.get(1).kind);
+    }
 }
