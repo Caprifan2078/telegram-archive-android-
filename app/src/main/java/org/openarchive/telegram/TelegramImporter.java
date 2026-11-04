@@ -101,7 +101,7 @@ class TelegramImporter {
         }
         return new ArrayList<>(found.values());
     }
-    private static boolean isPicture(String p){return p.toLowerCase(Locale.ROOT).matches(".*\\.(png|jpg|jpeg|webp|gif|heic|bmp)(\\?.*)?$");}
+    private static boolean isPicture(String p){return p.toLowerCase(Locale.ROOT).split("[?#]",2)[0].matches(".*\\.(png|jpg|jpeg|webp|gif|heic|bmp|apng)$");}
     static String kindFromExtension(String path){
         String s=path.toLowerCase(Locale.ROOT).split("[?#]",2)[0];
         if(s.matches(".*\\.(mp4|mov|m4v|webm|mkv)$"))return "video";
