@@ -5284,7 +5284,13 @@ public class MainActivity extends Activity {
     }
     private void toggleActivePlayback(){
         if(player==null)return;
-        try{if(player.isPlaying()){player.pause();playerPause.setText("▶");}else{player.start();playerPause.setText("⏸");}}catch(Exception ignored){}
+        try{
+            if(player.isPlaying())player.pause();else player.start();
+            boolean playing=player.isPlaying();
+            if(playerPause!=null)playerPause.setText(playing?"⏸":"▶");
+            if(activeAudioButton!=null&&activeAudioButton!=playerPause)
+                activeAudioButton.setText(playing?"❚❚":"▶");
+        }catch(Exception ignored){}
     }
     private void playAdjacent(boolean forward){
         if(playingAttachment==null)return;
