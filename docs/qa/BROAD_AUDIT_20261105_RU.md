@@ -88,3 +88,6 @@ Android 15: [41940596589](https://github.com/Caprifan2078/telegram-archive-andro
 
 
 После подтверждения трёх версий 98406c2 уточняет отображение: SeekBar создаётся только для kind=voice, для музыки сохранена прежняя графика и запуск отдельного плеера. Повторные Android 8/15 и общий Android 11 после этой правки запущены; при записи их результаты неизвестны.
+
+
+Повтор после 98406c2: [Android 8: 42030710158](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42030710158) и [Android 15: 42030714947](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42030714947) — 22/22 PASS в каждом, 0 skipped/fail/error по XML; тест перемотки голосового через UI прошёл. Доступность ползунка для экранного диктора и другие форматы/физические устройства остаются непроверенными. Общий Android 11 после этой правки: [42030705177](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42030705177), результат при записи не получен.
