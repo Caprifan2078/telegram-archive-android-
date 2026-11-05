@@ -36,8 +36,13 @@ public class MediaAssetsRegressionTest {
             p.setDataSource(f.getAbsolutePath());p.prepare();
             assertTrue("OGG/Opus duration",p.getDuration()>=1500);
             p.start();assertTrue(p.isPlaying());p.pause();assertFalse(p.isPlaying());
-            p.seekTo(500);p.start();SystemClock.sleep(80);p.pause();
-            assertTrue("voice position",p.getCurrentPosition()>=350);
+            java.util.concurrent.CountDownLatch seekDone=new java.util.concurrent.CountDownLatch(1);
+            p.setOnSeekCompleteListener(ignored->seekDone.countDown());
+            p.seekTo(500);
+            assertTrue("voice seek did not complete",seekDone.await(8,java.util.concurrent.TimeUnit.SECONDS));
+            assertTrue("voice position after seek",p.getCurrentPosition()>=350);
+            p.start();SystemClock.sleep(80);p.pause();
+            assertFalse("voice pause after seek",p.isPlaying());
         }finally{p.release();f.delete();}
     }
     private void verifyMp4(String file)throws Exception {
