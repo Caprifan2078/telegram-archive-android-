@@ -43,3 +43,7 @@ Android 15: [41940596589](https://github.com/Caprifan2078/telegram-archive-andro
 [41942028916](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41942028916), commit 48e74a70, Android 15: те же 18/18 тестов PASS, 0 skipped/fail/error по XML, включая оба теста ZIP. Синтетические данные; не проверка физического телефона.
 
 Широкий Android 11 после двух правок: [41941892493](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41941892493), commit 24551457, на момент записи ещё выполняется.
+
+## Общая проверка после обеих правок
+
+[41941892493](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41941892493), commit 24551457: Android 11, 186 тестов по XML: 185 PASS, 1 SKIPPED, 0 FAIL/ERROR. Пропущен двухфазный SignedUpgradeSentinelTest; отдельный [41939112641](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41939112641) подтвердил только synthetic upgrade с временным ключом до правки обнаружения корней ZIP. Совместимость обновления пользовательской APK и сохранность реальных данных не доказаны. Общий набор автоматический на синтетике, не полный ручной проход, не проверка физического устройства; ни один модуль не считать закрытым только по количеству тестов.
