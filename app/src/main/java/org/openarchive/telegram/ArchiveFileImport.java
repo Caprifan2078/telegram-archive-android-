@@ -203,15 +203,22 @@ final class ArchiveFileImport {
             }
         }finally{compressed.delete();}
     }
-    private static File findChatRoot(File folder,int depth){
-        if(depth>5)return null;
-        File[] items=folder.listFiles();if(items==null)return null;
-        for(File f:items)if(f.isFile()&&f.getName().matches("(?i)^messages\\d*\\.html$"))return folder;
+    private static File findChatRoot(File folder,int depth)throws IOException{
+        ArrayList<File> roots=new ArrayList<>();
+        collectChatRoots(folder,depth,roots);
+        if(roots.size()>1)throw new IOException("В архиве найдено несколько переписок. Выбери архив одной переписки; данные не изменены.");
+        return roots.isEmpty()?null:roots.get(0);
+    }
+    private static void collectChatRoots(File folder,int depth,List<File> roots)throws IOException{
+        if(depth>5)return;
+        File[] items=folder.listFiles();
+        if(items==null)throw new IOException("Не удалось прочитать распакованный архив");
+        for(File f:items)if(f.isFile()&&f.getName().matches("(?i)^messages\\d*\\.html$")){roots.add(folder);break;}
+        if(roots.size()>1)return;
         for(File f:items)if(f.isDirectory()){
-            File match=findChatRoot(f,depth+1);
-            if(match!=null)return match;
+            collectChatRoots(f,depth+1,roots);
+            if(roots.size()>1)return;
         }
-        return null;
     }
     static void deleteTree(File file){
         if(file==null)return;
