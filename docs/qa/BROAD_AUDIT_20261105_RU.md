@@ -47,3 +47,7 @@ Android 15: [41940596589](https://github.com/Caprifan2078/telegram-archive-andro
 ## Общая проверка после обеих правок
 
 [41941892493](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41941892493), commit 24551457: Android 11, 186 тестов по XML: 185 PASS, 1 SKIPPED, 0 FAIL/ERROR. Пропущен двухфазный SignedUpgradeSentinelTest; отдельный [41939112641](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41939112641) подтвердил только synthetic upgrade с временным ключом до правки обнаружения корней ZIP. Совместимость обновления пользовательской APK и сохранность реальных данных не доказаны. Общий набор автоматический на синтетике, не полный ручной проход, не проверка физического устройства; ни один модуль не считать закрытым только по количеству тестов.
+
+## Медиа и аналитика на Android 15
+
+[41943538341](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41943538341), commit c747b633: 21/21 PASS, 0 skipped/fail/error по XML, Android 15/API35. Классы MediaPlaybackTest, RoundPlayerActivityTest, PlaybackLifecycleTest, MediaAssetsRegressionTest, Qa00MediaLifecycleTest, AnalyticsIntegrationTest, LightAnalyticsVisualTest, RelationshipAnalyticsExplanationUiTest. Синтетические медиа и данные; результаты не покрывают все кодеки, все разделы аналитики, физическое устройство или большой пользовательский архив.
