@@ -68,3 +68,5 @@ jobs:
 # Include direct image import regression.
 
 # Full regression with multi-chat import safeguard.
+
+# Full synthetic regression after voice seek changes.
