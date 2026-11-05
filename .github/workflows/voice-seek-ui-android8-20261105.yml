@@ -76,3 +76,5 @@ jobs:
 # Keep playback active during UI automation.
 
 # Verify voice-card indicator after global resume.
+
+# Verify voice-only control rendering.
