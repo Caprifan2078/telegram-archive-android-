@@ -68,3 +68,7 @@ Android 15: [41940596589](https://github.com/Caprifan2078/telegram-archive-andro
 
 ### Диагностика OGG/Opus на Android 8
 [42022560015](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42022560015), commit d7cc6f4: 6/6 PASS по XML, включая исходный упавший MediaAssetsRegressionTest.voiceOpusSeekPauseResume и новый тест ожидания события onSeekComplete с позицией не ниже 350 мс после seekTo(500). Первый FAIL сохраняется в истории: возможна гонка теста, но единственный повтор не устанавливает первопричину. Это framework MediaPlayer, не интерфейс приложения. В cdccd7b тест теперь ожидает завершение seek, а не полагается на 80 мс; повтор после изменения ещё требуется. Код приложения не менялся. Отсутствие пользовательской перемотки голосовых остаётся открытым.
+
+
+### Работа над перемоткой голосовых
+[42023792348](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42023792348): RED 1/1, VoiceSeekUiRegressionTest не нашёл перемотку в карточке синтетического голосового в чате. Реализация 8ab24c49 добавляет SeekBar в карточку, отключённый до готовности MediaPlayer, и не вызывает start() при перемотке на паузе. [42024849364](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42024849364): проверка ещё выполняется, до фактического результата не считать исправление подтверждённым. Не проверены все версии Android, другие форматы, доступность, физическое устройство. Ранее 42023534884: тест декодера после исправления ожидания завершения перемотки 6/6 PASS, Android 8, XML.
