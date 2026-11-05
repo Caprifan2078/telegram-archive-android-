@@ -2,7 +2,7 @@ name: Multi-chat archive import regression
 # PDF export and QA-01 pin-order regression are covered in this combined run.
 on:
   push:
-    branches: [qa/broad-regression-20261105]
+    branches: [qa/deep-chat-roots-20261105]
     paths: ['.github/workflows/multi-chat-import-20261105.yml']
   workflow_dispatch:
 permissions:
