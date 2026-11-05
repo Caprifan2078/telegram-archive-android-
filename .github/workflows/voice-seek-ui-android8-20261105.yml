@@ -70,3 +70,5 @@ jobs:
 # Validate deterministic seek completion.
 
 # Validate voice seek and surrounding playback/navigation.
+
+# Use long synthetic Opus for UI interaction.
