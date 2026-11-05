@@ -35,3 +35,7 @@ Android 15: [41940596589](https://github.com/Caprifan2078/telegram-archive-andro
 ## ZIP с несколькими чатами
 
 Аудит показал, что findChatRoot выбирал первую папку, содержащую messages*.html, не сообщая о других найденных корнях. Код не доказывает частоту на пользовательских архивах. Правка cfcd04a предупреждает об обнаружении нескольких переписок и останавливает импорт; одновременный импорт всех чатов не реализован. Тест 21ed33f проверяет отказ без оставшихся файлов и приём одного чата из нескольких частей. [41940905418](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41940905418) пока выполняется: до завершения не объявлять исправление проверенным.
+
+
+### Проверка защиты
+[41940905418](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41940905418), commit a2d885f0, Android 11: 18/18 PASS, 0 skipped/fail/error по XML. Включает MultipleChatArchiveRegressionTest, ImportRollbackRegressionTest, SevenZTelegramImportRegressionTest, EncryptedTelegramImportRegressionTest, RarCompatibilityRegressionTest. Два новых теста проверяют отказ от ZIP с несколькими чатами с удалением временной папки, и принятие одного чата с messages.html и messages2.html. Проверка искусственная, данные пользователя не затронуты. Поддержка одновременного импорта нескольких переписок не реализована.
