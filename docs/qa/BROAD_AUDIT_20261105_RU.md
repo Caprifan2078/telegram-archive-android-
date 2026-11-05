@@ -27,3 +27,11 @@ P0: старая установка с пользовательскими дан
 [41936927663](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41936927663), commit b4125f2e: Android 11, XML 184 теста: 183 PASS, 1 SKIPPED, 0 FAIL/ERROR. Пропущен двухфазный SignedUpgradeSentinelTest, отдельно выполненный успешно в 41939112641 на том же коде приложения с временным ключом. Полноценный пользовательский ключ и update реального приложения не проверены. Набор синтетический; все функции и физический телефон не покрывает.
 
 Android 15: [41940596589](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41940596589) запущен на commit e3399ad8, итог при записи неизвестен.
+
+## Android 15
+
+[41940596589](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41940596589), commit e3399ad8: 44/44 PASS по XML, 0 skipped/failure/error, Android 15/API35. Семь классов: ImportRollbackRegressionTest, BackupDryRunRegressionTest, BackupIntegrityAndroid15RegressionTest, SearchLifecycleRegressionTest, MediaClassifierTest, MissingMediaPlaybackRegressionTest, ConversationPdfExporterTest. Синтетические данные; не реальный телефон. Проверка проходила до новой защиты импорта нескольких чатов.
+
+## ZIP с несколькими чатами
+
+Аудит показал, что findChatRoot выбирал первую папку, содержащую messages*.html, не сообщая о других найденных корнях. Код не доказывает частоту на пользовательских архивах. Правка cfcd04a предупреждает об обнаружении нескольких переписок и останавливает импорт; одновременный импорт всех чатов не реализован. Тест 21ed33f проверяет отказ без оставшихся файлов и приём одного чата из нескольких частей. [41940905418](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41940905418) пока выполняется: до завершения не объявлять исправление проверенным.
