@@ -39,3 +39,7 @@ Android 15: [41940596589](https://github.com/Caprifan2078/telegram-archive-andro
 
 ### Проверка защиты
 [41940905418](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41940905418), commit a2d885f0, Android 11: 18/18 PASS, 0 skipped/fail/error по XML. Включает MultipleChatArchiveRegressionTest, ImportRollbackRegressionTest, SevenZTelegramImportRegressionTest, EncryptedTelegramImportRegressionTest, RarCompatibilityRegressionTest. Два новых теста проверяют отказ от ZIP с несколькими чатами с удалением временной папки, и принятие одного чата с messages.html и messages2.html. Проверка искусственная, данные пользователя не затронуты. Поддержка одновременного импорта нескольких переписок не реализована.
+
+[41942028916](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41942028916), commit 48e74a70, Android 15: те же 18/18 тестов PASS, 0 skipped/fail/error по XML, включая оба теста ZIP. Синтетические данные; не проверка физического телефона.
+
+Широкий Android 11 после двух правок: [41941892493](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41941892493), commit 24551457, на момент записи ещё выполняется.
