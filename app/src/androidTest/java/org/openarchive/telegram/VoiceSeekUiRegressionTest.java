@@ -38,7 +38,7 @@ public class VoiceSeekUiRegressionTest {
         String registry=prefs.getString("archive_registry","[]"),active=prefs.getString("active_archive","default");
         File root=new File(ctx.getCacheDir(),key);assertTrue(root.mkdirs());
         try {
-            try(InputStream in=tests.getAssets().open("voice.ogg");FileOutputStream out=new FileOutputStream(new File(root,"voice.ogg"))) {
+            try(InputStream in=tests.getAssets().open("voice-long.ogg");FileOutputStream out=new FileOutputStream(new File(root,"voice.ogg"))) {
                 byte[] data=new byte[8192];int n;while((n=in.read(data))!=-1)out.write(data,0,n);
             }
             MessageDb db=new MessageDb(ctx,key);
