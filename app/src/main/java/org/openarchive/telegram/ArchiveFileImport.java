@@ -210,14 +210,20 @@ final class ArchiveFileImport {
         return roots.isEmpty()?null:roots.get(0);
     }
     private static void collectChatRoots(File folder,int depth,List<File> roots)throws IOException{
-        if(depth>5)return;
-        File[] items=folder.listFiles();
-        if(items==null)throw new IOException("Не удалось прочитать распакованный архив");
-        for(File f:items)if(f.isFile()&&f.getName().matches("(?i)^messages\\d*\\.html$")){roots.add(folder);break;}
-        if(roots.size()>1)return;
-        for(File f:items)if(f.isDirectory()){
-            collectChatRoots(f,depth+1,roots);
+        // Inspect every extracted directory; a depth cutoff can hide a second chat.
+        ArrayDeque<File> pending=new ArrayDeque<>();
+        pending.add(folder);
+        while(!pending.isEmpty()){
+            File[] items=pending.removeLast().listFiles();
+            if(items==null)throw new IOException("Не удалось прочитать распакованный архив");
+            for(File f:items){
+                if(f.isFile()&&f.getName().matches("(?i)^messages\\d*\\.html$")){
+                    roots.add(f.getParentFile());
+                    break;
+                }
+            }
             if(roots.size()>1)return;
+            for(File f:items)if(f.isDirectory())pending.add(f);
         }
     }
     static void deleteTree(File file){
