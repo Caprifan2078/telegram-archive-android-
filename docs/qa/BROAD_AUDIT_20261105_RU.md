@@ -85,3 +85,6 @@ Android 15: [41940596589](https://github.com/Caprifan2078/telegram-archive-andro
 
 ### Подтверждение перемотки голосовых
 [Android 11: 42028771489](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42028771489), [Android 8: 42028774520](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42028774520), [Android 15: 42028826903](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42028826903): каждый прогон 22/22 PASS, 0 skipped/fail/error по XML. Реальные нажатия в синтетическом чате: запуск 20-секундного OGG/Opus, пауза, перемотка, проверка сохранения паузы, возобновление и индикатор карточки. В этих же прогонах тесты отсутствующих файлов, decoder и lifecycle/navigation. Результаты не доказывают работу других кодеков, доступности, всех размеров экранов или физического устройства. Полный Android 11-регресс на текущем коде запущен: [42030041622](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42030041622), при записи ещё не завершился.
+
+
+После подтверждения трёх версий 98406c2 уточняет отображение: SeekBar создаётся только для kind=voice, для музыки сохранена прежняя графика и запуск отдельного плеера. Повторные Android 8/15 и общий Android 11 после этой правки запущены; при записи их результаты неизвестны.
