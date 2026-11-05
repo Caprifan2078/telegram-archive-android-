@@ -168,6 +168,7 @@ public class MainActivity extends Activity {
     private Runnable progressUpdater;private MessageDb.Attachment playingAttachment;private LinearLayout playerStrip;private TextView playerText;private Button playerPause;private FrameLayout inlineHolder;private int floatingStart=0;
     private RoundControls activeRound;
     private TextView activeAudioButton;
+    private SeekBar activeVoiceSeek;private boolean voiceSeekDragging;
     private static final class RoundControls {
         SeekBar seek;
         TextView timer;
@@ -4122,11 +4123,23 @@ public class MainActivity extends Activity {
         LinearLayout inner=row();outer.addView(inner,p(gallery?98:218,47));
         TextView play=text("▶",23,FG);play.setGravity(Gravity.CENTER);inner.addView(play,p(32,42));
         LinearLayout details=column();details.setPadding(px(5),0,0,0);inner.addView(details,new LinearLayout.LayoutParams(0,-2,1));
-        TextView bars=text("▂▆▃▇▄▅▂▆▃▄▇▂▅",gallery?11:15,ACCENT);bars.setSingleLine(true);details.addView(bars);
+        SeekBar voiceSeek=new SeekBar(this);voiceSeek.setMax(1000);voiceSeek.setEnabled(false);
+        voiceSeek.setContentDescription("Перемотка голосового сообщения");
+        details.addView(voiceSeek,p(-1,25));
+        voiceSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+            @Override public void onProgressChanged(SeekBar bar,int value,boolean user){}
+            @Override public void onStartTrackingTouch(SeekBar bar){voiceSeekDragging=true;}
+            @Override public void onStopTrackingTouch(SeekBar bar){
+                voiceSeekDragging=false;
+                if(player==null||activeVoiceSeek!=bar||!a.path.equals(playingPath))return;
+                try{player.seekTo((int)(Math.max(0,player.getDuration())*(long)bar.getProgress()/1000));}
+                catch(IllegalStateException ignored){}
+            }
+        });
         TextView duration=text("00:00",11,SUB);details.addView(duration);loadDuration(a.path,duration);
         play.setOnClickListener(v->{
             if("audio".equals(a.kind)){openMusicPlayer(a);return;}
-            startAudio(a.path,play,duration);
+            startAudio(a.path,play,duration,voiceSeek);
             playingAttachment=a;
             playerStrip.setVisibility(View.VISIBLE);
             playerText.setText((a.kind.equals("voice")?"Голосовое · ":"Музыка · ")+(a.author==null?"":a.author));
@@ -4738,6 +4751,8 @@ public class MainActivity extends Activity {
         if(progressUpdater!=null){handler.removeCallbacks(progressUpdater);progressUpdater=null;}
         if(playerStrip!=null)playerStrip.setVisibility(View.GONE);
         inlineHolder=null;playingAttachment=null;activeAudioButton=null;
+        if(activeVoiceSeek!=null){activeVoiceSeek.setEnabled(false);activeVoiceSeek.setProgress(0);activeVoiceSeek=null;}
+        voiceSeekDragging=false;
         if(player!=null){
             try{player.stop();}catch(Exception ignored){}
             try{player.release();}catch(Exception ignored){}
@@ -4905,7 +4920,8 @@ public class MainActivity extends Activity {
             }
         });
     }
-    private void startAudio(String path,TextView play,TextView timer){
+    private void startAudio(String path,TextView play,TextView timer){startAudio(path,play,timer,null);}
+    private void startAudio(String path,TextView play,TextView timer,SeekBar voiceSeek){
         if(player!=null&&path.equals(playingPath)&&activeAudioButton==play){
             try{if(player.isPlaying()){player.pause();play.setText("▶");}else{player.start();play.setText("❚❚");}
                 if(playerPause!=null)playerPause.setText(player.isPlaying()?"⏸":"▶");
@@ -4915,14 +4931,17 @@ public class MainActivity extends Activity {
         stopPlayback();final int request=playbackGeneration;resolveMedia(path,uri->{
             if(request!=playbackGeneration||isFinishing()||isDestroyed()||!play.isAttachedToWindow())return;
             try{
-                MediaPlayer p=new MediaPlayer();player=p;playingPath=path;activeAudioButton=play;
+                MediaPlayer p=new MediaPlayer();player=p;playingPath=path;activeAudioButton=play;activeVoiceSeek=voiceSeek;
                 p.setDataSource(this,uri);
                 p.setOnPreparedListener(mp->{if(mp!=player)return;mp.start();play.setText("❚❚");
+                    if(activeVoiceSeek!=null)activeVoiceSeek.setEnabled(true);
                     if(playerPause!=null)playerPause.setText("⏸");
                     progressUpdater=new Runnable(){@Override public void run(){
                         if(mp!=player)return;
                         try{int seconds=mp.getCurrentPosition()/1000;
-                            int len=mp.getDuration()/1000;
+                            int durationMs=mp.getDuration();int len=durationMs/1000;
+                            if(activeVoiceSeek!=null&&!voiceSeekDragging&&durationMs>0)
+                                activeVoiceSeek.setProgress((int)(1000L*mp.getCurrentPosition()/durationMs));
                             timer.setText(formatTime(seconds)+" / "+formatTime(len));
                             handler.postDelayed(this,500);
                         }catch(Exception ignored){}
