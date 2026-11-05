@@ -37,6 +37,8 @@ public class VoiceSeekUiRegressionTest {
         boolean hadRegistry=prefs.contains("archive_registry"),hadActive=prefs.contains("active_archive");
         String registry=prefs.getString("archive_registry","[]"),active=prefs.getString("active_archive","default");
         File root=new File(ctx.getCacheDir(),key);assertTrue(root.mkdirs());
+        androidx.test.uiautomator.Configurator config=androidx.test.uiautomator.Configurator.getInstance();
+        long oldIdleTimeout=config.getWaitForIdleTimeout();config.setWaitForIdleTimeout(100);
         try {
             try(InputStream in=tests.getAssets().open("voice-long.ogg");FileOutputStream out=new FileOutputStream(new File(root,"voice.ogg"))) {
                 byte[] data=new byte[8192];int n;while((n=in.read(data))!=-1)out.write(data,0,n);
@@ -77,6 +79,7 @@ public class VoiceSeekUiRegressionTest {
                 assertNotNull("Voice did not resume",device.wait(Until.findObject(By.text("❚❚")),5000));
             }
         } finally {
+            config.setWaitForIdleTimeout(oldIdleTimeout);
             ctx.deleteDatabase("telegram_"+key+".db");ArchiveFileImport.deleteTree(root);
             SharedPreferences.Editor edit=prefs.edit();
             if(hadRegistry)edit.putString("archive_registry",registry);else edit.remove("archive_registry");
