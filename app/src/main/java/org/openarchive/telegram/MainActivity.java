@@ -4123,19 +4123,26 @@ public class MainActivity extends Activity {
         LinearLayout inner=row();outer.addView(inner,p(gallery?98:218,47));
         TextView play=text("▶",23,FG);play.setGravity(Gravity.CENTER);inner.addView(play,p(32,42));
         LinearLayout details=column();details.setPadding(px(5),0,0,0);inner.addView(details,new LinearLayout.LayoutParams(0,-2,1));
-        SeekBar voiceSeek=new SeekBar(this);voiceSeek.setMax(1000);voiceSeek.setEnabled(false);
-        voiceSeek.setContentDescription("Перемотка голосового сообщения");
-        details.addView(voiceSeek,p(-1,25));
-        voiceSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
-            @Override public void onProgressChanged(SeekBar bar,int value,boolean user){}
-            @Override public void onStartTrackingTouch(SeekBar bar){voiceSeekDragging=true;}
-            @Override public void onStopTrackingTouch(SeekBar bar){
-                voiceSeekDragging=false;
-                if(player==null||activeVoiceSeek!=bar||!a.path.equals(playingPath))return;
-                try{player.seekTo((int)(Math.max(0,player.getDuration())*(long)bar.getProgress()/1000));}
-                catch(IllegalStateException ignored){}
-            }
-        });
+        final SeekBar voiceSeek;
+        if("voice".equals(a.kind)){
+            voiceSeek=new SeekBar(this);voiceSeek.setMax(1000);voiceSeek.setEnabled(false);
+            voiceSeek.setContentDescription("Перемотка голосового сообщения");
+            details.addView(voiceSeek,p(-1,25));
+            voiceSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+                @Override public void onProgressChanged(SeekBar bar,int value,boolean user){}
+                @Override public void onStartTrackingTouch(SeekBar bar){voiceSeekDragging=true;}
+                @Override public void onStopTrackingTouch(SeekBar bar){
+                    voiceSeekDragging=false;
+                    if(player==null||activeVoiceSeek!=bar||!a.path.equals(playingPath))return;
+                    try{player.seekTo((int)(Math.max(0,player.getDuration())*(long)bar.getProgress()/1000));}
+                    catch(IllegalStateException ignored){}
+                }
+            });
+        }else{
+            voiceSeek=null;
+            TextView bars=text("▂▆▃▇▄▅▂▆▃▄▇▂▅",gallery?11:15,ACCENT);
+            bars.setSingleLine(true);details.addView(bars);
+        }
         TextView duration=text("00:00",11,SUB);details.addView(duration);loadDuration(a.path,duration);
         play.setOnClickListener(v->{
             if("audio".equals(a.kind)){openMusicPlayer(a);return;}
