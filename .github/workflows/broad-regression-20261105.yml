@@ -70,3 +70,5 @@ jobs:
 # Full regression with multi-chat import safeguard.
 
 # Full synthetic regression after voice seek changes.
+
+# Verify voice-only control rendering.
