@@ -43,7 +43,7 @@ jobs:
           emulator-boot-timeout: 420
           script: |
             mkdir -p qa-output
-            if ! gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.VoiceSeekUiRegressionTest'; then touch qa-output/failed.marker; fi
+            if ! gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.VoiceSeekUiRegressionTest,org.openarchive.telegram.MediaAssetsRegressionTest,org.openarchive.telegram.MissingMediaPlaybackRegressionTest,org.openarchive.telegram.PlaybackLifecycleTest,org.openarchive.telegram.Qa00MediaLifecycleTest'; then touch qa-output/failed.marker; fi
             adb logcat -d -t 400 > qa-output/logcat.txt || true
       - name: Require passing Android tests
         if: always()
@@ -68,3 +68,5 @@ jobs:
 # Include direct image import regression.
 
 # Validate deterministic seek completion.
+
+# Validate voice seek and surrounding playback/navigation.
