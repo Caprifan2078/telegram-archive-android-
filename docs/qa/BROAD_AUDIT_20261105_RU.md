@@ -51,3 +51,7 @@ Android 15: [41940596589](https://github.com/Caprifan2078/telegram-archive-andro
 ## Медиа и аналитика на Android 15
 
 [41943538341](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41943538341), commit c747b633: 21/21 PASS, 0 skipped/fail/error по XML, Android 15/API35. Классы MediaPlaybackTest, RoundPlayerActivityTest, PlaybackLifecycleTest, MediaAssetsRegressionTest, Qa00MediaLifecycleTest, AnalyticsIntegrationTest, LightAnalyticsVisualTest, RelationshipAnalyticsExplanationUiTest. Синтетические медиа и данные; результаты не покрывают все кодеки, все разделы аналитики, физическое устройство или большой пользовательский архив.
+
+## Основные сценарии на Android 8
+
+[42017298021](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42017298021), commit 816daa16: Android 8/API26, 42/42 PASS, 0 skipped/fail/error по XML. ImportRollbackRegressionTest, BackupDryRunRegressionTest, SearchLifecycleRegressionTest, MediaClassifierTest, MissingMediaPlaybackRegressionTest и ConversationPdfExporterTest. Только синтетические данные на эмуляторе; проверку остальных функций и физического телефона это не заменяет.
