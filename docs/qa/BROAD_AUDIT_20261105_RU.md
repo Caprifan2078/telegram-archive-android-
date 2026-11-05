@@ -55,3 +55,9 @@ Android 15: [41940596589](https://github.com/Caprifan2078/telegram-archive-andro
 ## Основные сценарии на Android 8
 
 [42017298021](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42017298021), commit 816daa16: Android 8/API26, 42/42 PASS, 0 skipped/fail/error по XML. ImportRollbackRegressionTest, BackupDryRunRegressionTest, SearchLifecycleRegressionTest, MediaClassifierTest, MissingMediaPlaybackRegressionTest и ConversationPdfExporterTest. Только синтетические данные на эмуляторе; проверку остальных функций и физического телефона это не заменяет.
+
+## 05.11 — ZIP и медиатест Android 8
+
+[42021377244](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42021377244): Android 11, 19/19 PASS по XML, 0 skipped/errors/failures. Новый ArchiveEndToEndRegressionTest создаёт синтетический ZIP с одним чатом и двумя HTML, распаковывает и импортирует, проверяет поиск по тексту и разрешение файла-вложения. Файл-вложение содержит тестовые байты; реальное декодирование фото и реальный архив пользователя не проверены. UI выбора архива этим тестом не покрыт.
+
+[42021276342](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42021276342): Android 8, XML 20 PASS, 1 FAIL, 0 skipped. MediaAssetsRegressionTest.voiceOpusSeekPauseResume: после seekTo(500), ожидания 80 мс и pause позиция оказалась ниже 350 мс. Это framework MediaPlayer test, не проверка экранного плеера; возможна асинхронность seek, пока не доказана причина или дефект приложения. Сохранить FAIL. Диагностика OpusSeekDiagnosticTest ожидает onSeekComplete и повторяет исходные медиа-тесты; её результат ещё не установлен. Проверки выполняются на синтетике.
