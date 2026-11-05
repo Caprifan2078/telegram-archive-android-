@@ -72,3 +72,5 @@ jobs:
 # Validate voice seek and surrounding playback/navigation.
 
 # Use long synthetic Opus for UI interaction.
+
+# Keep playback active during UI automation.
