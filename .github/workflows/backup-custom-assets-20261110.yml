@@ -1,4 +1,4 @@
-name: QA full-backup custom image integrity
+name: QA full-backup custom images and adjacent regressions
 on:
   push:
     branches: [qa/backup-custom-assets-20261110]
@@ -44,7 +44,7 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 420
           script: |
-            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.FullBackupCustomAssetSafetyRegressionTest'
+            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.FullBackupCustomAssetSafetyRegressionTest,org.openarchive.telegram.FullBackupSourceAccessRegressionTest,org.openarchive.telegram.BackupSafReadbackRegressionTest,org.openarchive.telegram.BackupDryRunRegressionTest,org.openarchive.telegram.PortableRestoreRegressionTest,org.openarchive.telegram.ZipFooterIntegrityRegressionTest,org.openarchive.telegram.ArchiveEndToEndRegressionTest'
       - name: Upload synthetic results
         if: always()
         uses: actions/upload-artifact@v4
