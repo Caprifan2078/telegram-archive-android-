@@ -4,7 +4,7 @@
 
 - `BackupExportGate`: после полной записи вновь открывает URI назначения и проверяет поток целиком; без второй гигантской копии архива на телефоне. Сохранение не считается подтверждённым при обрезке ZIP, отсутствующей финальной GCM-аутентификации или отсутствии доступа на чтение.
 - `MainActivity.backupAction`: успешное сообщение только после read-back; снимок FULL/COMPACT и имени в начале операции; предупреждение о неполном документе при сбое; очистка пароля при отмене системного пикера. Автоматическое удаление пользовательских URI не выполняется.
-- Добавлен `BackupSafReadbackRegressionTest`. [RED](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42615754883) 7 ожидаемых FAIL; [GREEN](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42617337252) 7/7 Android 11 PASS, build/JVM PASS. [Смежный регресс](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42618114889) ожидается.
+- Добавлен `BackupSafReadbackRegressionTest`. [RED](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42615754883) 7 ожидаемых FAIL; [GREEN](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42617337252) 7/7 Android 11 PASS, build/JVM PASS. [Смежный регресс](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42618114889): 45 тестов завершены, CI SUCCESS, Gradle/JVM PASS.
 - Версия 0.51 QA, main и подпись не менялись. Физическое устройство и обновление поверх установленной APK не проверены.
 
 ## 09.11.2026 — fail-closed ZIP footer in backup verification and restore
