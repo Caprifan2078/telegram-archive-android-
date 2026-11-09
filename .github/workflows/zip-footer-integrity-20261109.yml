@@ -1,9 +1,12 @@
-name: QA ZIP footer integrity
+name: QA ZIP footer and restore integrity
 on:
   push:
     branches: [qa/zip-footer-integrity-20261109]
     paths:
       - 'app/src/main/java/org/openarchive/telegram/BackupVerifier.java'
+      - 'app/src/main/java/org/openarchive/telegram/ArchiveBackup.java'
+      - 'app/src/main/java/org/openarchive/telegram/FullBackup.java'
+      - 'app/src/test/java/org/openarchive/telegram/ZipEndGuardTest.java'
       - 'app/src/main/java/org/openarchive/telegram/ZipEndGuard.java'
       - 'app/src/androidTest/java/org/openarchive/telegram/ZipFooterIntegrityRegressionTest.java'
       - '.github/workflows/zip-footer-integrity-20261109.yml'
@@ -45,7 +48,7 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 420
           script: |
-            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.ZipFooterIntegrityRegressionTest'
+            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.ZipFooterIntegrityRegressionTest,org.openarchive.telegram.BackupDryRunRegressionTest,org.openarchive.telegram.PortableRestoreRegressionTest,org.openarchive.telegram.RestoreRecoveryTest,org.openarchive.telegram.BackupIntegrityAndroid15RegressionTest,org.openarchive.telegram.ArchiveEndToEndRegressionTest,org.openarchive.telegram.ImportRollbackRegressionTest'
       - name: Upload synthetic results
         if: always()
         uses: actions/upload-artifact@v4
