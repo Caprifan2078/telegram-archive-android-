@@ -1,3 +1,15 @@
+## 09.11.2026 — ZIP footer integrity: текущая контрольная точка
+
+**Рабочая QA-ветка:** `qa/zip-footer-integrity-20261109`; основание: `qa/backup-unreadable-source-20261109` `466266f2`. Не изменять `main`. Версия `0.51 QA`.
+
+**RED подтверждён** [42546181515](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42546181515): компактный и полный бэкап с обрезанным EOCD раньше принимались быстрой проверкой, 2 ожидаемых FAIL. **GREEN подтверждён** [42546892000](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42546892000): 2/2 PASS, build/JVM PASS. Изменены `BackupVerifier.java`, добавлены `ZipEndGuard.java` и синтетические Android/JVM тесты.
+
+**Ожидает проверки:** изменение прямых `ArchiveBackup.restore` / `FullBackup.restore` и дополнительные тесты. Расширенный [run 42547506039](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42547506039) — состояние проверить по окончании, не заявлять PASS без логов/XML. Не выпускать новый APK без совместимого ключа подписи и проверки миграции. Следующий P0 — безопасность экспорта на SAF при отмене/ошибке записи.
+
+Подробности: `docs/qa/RECOVERY_VERIFIED_20261109_RU.md`.
+
+---
+
 ## 09.11.2026 — текущая QA-итерация: недоступная папка медиа при полном бэкапе
 
 **Рабочая ветка:** `qa/backup-unreadable-source-20261109`, основана на `qa/recovery-audit-20261109` (`22e4a5de`). `main` не изменять. Код фикса `8c837008` в `DocumentFolder.children`: `File.listFiles()==null` и `ContentResolver.query()==null` более не превращаются в «пустую папку», чтобы полный архив не терял медиа молча. Код и тест `FullBackupSourceAccessRegressionTest` в ветке сохранены; версия Gradle остаётся **0.51 QA**.
