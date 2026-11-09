@@ -1,4 +1,4 @@
-name: QA backup SAF read-back
+name: QA backup SAF read-back and adjacent UI
 on:
   push:
     branches: [qa/backup-saf-readback-20261109]
@@ -45,7 +45,7 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 420
           script: |
-            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.BackupSafReadbackRegressionTest'
+            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.BackupSafReadbackRegressionTest,org.openarchive.telegram.BackupDryRunRegressionTest,org.openarchive.telegram.FullBackupSourceAccessRegressionTest,org.openarchive.telegram.ZipFooterIntegrityRegressionTest,org.openarchive.telegram.PortableRestoreRegressionTest,org.openarchive.telegram.UiMenuTourRegressionTest,org.openarchive.telegram.UiSmokeTest'
       - name: Store synthetic reports
         if: always()
         uses: actions/upload-artifact@v4
