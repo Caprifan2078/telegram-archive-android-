@@ -3,6 +3,8 @@ package org.openarchive.telegram;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.database.sqlite.SQLiteDatabase;
+import android.net.Uri;
+import android.provider.DocumentsContract;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import java.io.ByteArrayInputStream;
@@ -71,6 +73,18 @@ public final class FullBackupSourceAccessRegressionTest {
             db.close();
             ctx.deleteDatabase("telegram_" + key + ".db");
             prefs.edit().clear().commit();
+        }
+    }
+
+    @Test public void inaccessibleSafTreeMustNotLookLikeAnEmptyFolder() {
+        String authority = "org.openarchive.no.provider." + UUID.randomUUID().toString().replace("-", "");
+        Uri tree = DocumentsContract.buildTreeDocumentUri(authority, "missing");
+        DocumentFolder folder = new DocumentFolder(ctx.getContentResolver(), tree);
+        try {
+            folder.children(folder.rootId());
+            fail("Unavailable SAF document provider must not look like an empty directory");
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage() != null && expected.getMessage().contains("папк"));
         }
     }
 
