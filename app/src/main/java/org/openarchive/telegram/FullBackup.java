@@ -182,7 +182,8 @@ final class FullBackup {
             // must not strand gigabytes of unregistered media on the next launch.
             journal=RestoreJournal.begin(ctx,staging);
             {
-                try(ZipInputStream zip=new ZipInputStream(new BufferedInputStream(streamed,128*1024))){
+                ZipEndGuard guarded=new ZipEndGuard(streamed);
+                try(ZipInputStream zip=new ZipInputStream(new BufferedInputStream(guarded,128*1024))){
                     ZipEntry entry;
                     while((entry=zip.getNextEntry())!=null){
                         if(++count>BackupEntryPolicy.MAX_ENTRIES)throw new IOException("Превышен лимит элементов ZIP");
@@ -230,7 +231,7 @@ final class FullBackup {
                     }
                     // Validate an encrypted source's final authenticated record
                     // before publishing any restored databases or settings.
-                    byte[] trailer=new byte[65536];while(streamed.read(trailer)!=-1){}
+                    guarded.requireComplete(count);
                 }
             }
             if(manifest==null||!"telegram-archive-full".equals(manifest.optString("format"))||
