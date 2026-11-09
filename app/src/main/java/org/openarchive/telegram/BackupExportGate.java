@@ -48,6 +48,12 @@ final class BackupExportGate {
                     throw new IOException("Тип записанной резервной копии не совпадает с выбранным");
                 return result;
             }
+        } catch(Exception readbackFailure) {
+            // Providers and crypto streams can throw EOFException without a
+            // message. Always give the user an actionable failure instead of
+            // incorrectly treating an unverified document as a valid backup.
+            throw new IOException("Проверка записанной резервной копии не пройдена. " +
+                "Файл может быть неполным или недоступным для чтения.",readbackFailure);
         }
     }
 }
