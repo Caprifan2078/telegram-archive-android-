@@ -1,5 +1,13 @@
 # История изменений этого этапа
 
+## 09.11.2026 — fail-closed ZIP footer in backup verification and restore
+
+- Добавлен `ZipEndGuard`: потоковая валидация EOCD/ZIP64 и каталога без полной буферизации ZIP.
+- Быстрый `BackupVerifier.verifyStream` и `scanBackup` теперь отклоняют неполный ZIP; прямые `ArchiveBackup.restore` и `FullBackup.restore` делают это до публикации восстановленных данных.
+- Новые synthetic-тесты `ZipFooterIntegrityRegressionTest` и JVM `ZipEndGuardTest`.
+- [RED](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42546181515) 2/2 ожидаемых FAIL; [GREEN](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42547455526) 6/6 PASS; [смежный регресс](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42547506039) 40 тестов завершены, CI SUCCESS.
+- Версия `0.51 QA` без изменения `main` и подписи. Совместимое обновление и физическое устройство не проверены.
+
 ## 03.11.2026 — возврат к позиции чата после справки
 
 Синтетический чат: реальная прокрутка, меню ≡ → Все инструменты → Помощь, Back. [RED](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41617845006): прежнее сообщение QA_LIFE_013 исчезало после возврата. Причина: при открытии справки текущий якорь чата не готовился для восстановления после перерисовки. Исправление `c1067b25e9a6158dbb384764c1b91fb1cba55a06` сохраняет видимую позицию перед справкой; общий помощник применяется также к переходу в медиа и не перезаписывает ожидающий якорь, если строки чата ещё не готовы. [GREEN](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/41618783622): 15/15 PASS, 0 пропусков, Android 11 360×720 dp / 100%; сборка и JVM PASS. Проверены новое возвращение из справки, соседние маршруты справки/медиа и изоляция позиций чатов.
