@@ -1,5 +1,9 @@
 # Результаты тестирования
 
+## 09.11.2026 — проверка SAF-резервной копии после записи
+
+Синтетический Android 11, класс `BackupSafReadbackRegressionTest`, 7 сценариев: full/compact ZIP с обрезанным хвостом; encrypted full с обрезанной аутентификацией; SAF read denied; валидные full/compact ZIP и encrypted full. [RED 42615754883](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42615754883): 7/7 ожидаемых FAIL на write-only стратегии, но Gradle/JVM PASS. [Промежуточный run 42616102201](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42616102201): 6 PASS, 1 FAIL из-за отсутствующего текста исключения `EOFException`. [GREEN 42617337252](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42617337252): 7/7 PASS, 0 reported FAILED, Gradle/build и JVM PASS. Проверка выполняется в памяти над реальными синтетическими бэкапами; экспорт Android UI через физический системный пикер не проверен. [Смежный регресс 42618114889](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42618114889) — результат ожидается, не заявлять PASS раньше CI.
+
 ## 09.11.2026 — ZIP/ZIP64 footer, отказ и сохранность при восстановлении
 
 **RED:** [42546181515](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42546181515), Android 11 — полная и компактная резервные копии без EOCD принимались; 2 ожидаемых FAIL, JVM/build PASS. Первая попытка исправления [42546570963](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42546570963): компиляция FAIL (локальный счётчик за пределами области видимости), исправлено `2f898ed`.
