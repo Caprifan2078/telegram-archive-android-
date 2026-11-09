@@ -80,4 +80,61 @@ public final class ZipFooterIntegrityRegressionTest {
     @Test public void fullBackupWithoutZipEndRecordMustFailVerification()throws Exception {
         rejectMissingEndRecord(true);
     }
+
+    private void rejectIncompleteDirectRestore(boolean full)throws Exception {
+        try(Fixture f=new Fixture()) {
+            String original=f.prefs.getString("archive_registry","");
+            byte[] complete=f.backup(full);
+            byte[] truncated=Arrays.copyOf(complete,complete.length-22);
+            try {
+                if(full) FullBackup.restore(ctx,f.prefs,
+                    new ByteArrayInputStream(truncated),ignored->{});
+                else ArchiveBackup.restore(ctx,f.prefs,
+                    new ByteArrayInputStream(truncated),ignored->{});
+                fail("A truncated ZIP must never publish restored chats");
+            }catch(IOException expected) {
+                assertNotNull(expected.getMessage());
+                assertTrue(expected.getMessage(),expected.getMessage().contains("ZIP"));
+            }
+            assertEquals("Existing registry must not change on error",
+                original,f.prefs.getString("archive_registry",""));
+            assertEquals(1,f.db.totalMessages());
+        }
+    }
+
+    @Test public void compactRestoreRejectsTruncatedZipBeforeRegistryCommit()throws Exception {
+        rejectIncompleteDirectRestore(false);
+    }
+    @Test public void fullRestoreRejectsTruncatedZipBeforeRegistryCommit()throws Exception {
+        rejectIncompleteDirectRestore(true);
+    }
+
+    private void rejectIncompleteDryRun(boolean full)throws Exception {
+        try(Fixture f=new Fixture()) {
+            String original=f.prefs.getString("archive_registry","");
+            byte[] complete=f.backup(full);
+            File broken=new File(ctx.getCacheDir(),"footer-broken-"+f.key+".zip");
+            try {
+                try(FileOutputStream output=new FileOutputStream(broken)) {
+                    output.write(complete,0,complete.length-22);
+                }
+                try {
+                    BackupVerifier.simulate(ctx,android.net.Uri.fromFile(broken),null,ignored->{});
+                    fail("Read-only dry-run must reject truncated ZIP");
+                }catch(IOException expected) {
+                    assertNotNull(expected.getMessage());
+                    assertTrue(expected.getMessage(),expected.getMessage().contains("ZIP"));
+                }
+                assertEquals(original,f.prefs.getString("archive_registry",""));
+                assertEquals(1,f.db.totalMessages());
+            }finally{broken.delete();}
+        }
+    }
+    @Test public void compactDryRunRejectsTruncatedZip()throws Exception {
+        rejectIncompleteDryRun(false);
+    }
+    @Test public void fullDryRunRejectsTruncatedZip()throws Exception {
+        rejectIncompleteDryRun(true);
+    }
+
 }
