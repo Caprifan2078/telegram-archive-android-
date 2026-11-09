@@ -2226,6 +2226,11 @@ public class MainActivity extends Activity {
         if((request==60||request==61||request==62)&&result==RESULT_OK&&data!=null&&data.getData()!=null){applyPersonalImage(data.getData(),request);return;}
         if(request==44&&result==RESULT_OK&&data!=null&&data.getData()!=null){dryRunSelected(data.getData());return;}
         if(request==43&&result==RESULT_OK&&data!=null&&data.getData()!=null){verifyBackup(data.getData());return;}
+        if(request==41&&(result!=RESULT_OK||data==null||data.getData()==null)){
+            if(backupPassword!=null)java.util.Arrays.fill(backupPassword,(char)0);
+            backupPassword=null;selectedBackupName="";
+            return;
+        }
         if((request==41||request==42)&&result==RESULT_OK&&data!=null&&data.getData()!=null){
             if(request==42)askRestorePassword(data.getData());else{
                 selectedBackupName=displayDocumentName(data.getData());
@@ -5472,10 +5477,17 @@ public class MainActivity extends Activity {
         }catch(Exception error){status.setText("Не удалось прочитать архив: "+error.getMessage());}
     }
     private void backupAction(Uri uri,boolean restore){
-        if(restoringBackup||importing)return;
+        if(restoringBackup||importing){
+            if(!restore&&backupPassword!=null){
+                java.util.Arrays.fill(backupPassword,(char)0);backupPassword=null;
+            }
+            return;
+        }
         final char[] password=backupPassword;
+        final boolean exportFull=fullBackupMode;
+        final String exportName=selectedBackupName;
         backupPassword=null;restoringBackup=true;
-        status.setText(restore?"Проверяю архив перед восстановлением…":"Создаю архив в выбранном расположении…");
+        status.setText(restore?"Проверяю архив перед восстановлением…":"Создаю и проверяю резервную копию…");
         worker.execute(()->{
             try{
                 SharedPreferences prefs=getPreferences(MODE_PRIVATE);
@@ -5491,16 +5503,23 @@ public class MainActivity extends Activity {
                     final int count=restored;
                     runOnUiThread(()->{restoringBackup=false;loadArchiveRegistry();home=true;screen="chat";showPage();toast("Проверено и восстановлено чатов: "+count);});
                 }else{
-                    try(OutputStream raw=getContentResolver().openOutputStream(uri,"w")){
-                        if(raw==null)throw new IOException("Нет доступа к месту сохранения");
-                        OutputStream dest=password==null?raw:SecureArchive.encryptedOutput(raw,password);
-                        if(fullBackupMode)FullBackup.export(this,prefs,dest,msg->runOnUiThread(()->status.setText(msg)));
-                        else ArchiveBackup.write(this,prefs,dest,msg->runOnUiThread(()->status.setText(msg)));
-                    }
-                    runOnUiThread(()->{restoringBackup=false;status.setText("Сохранено: «"+selectedBackupName+"». Папка выбрана в системном окне Android. Проверь архив перед удалением исходников.");toast("Экспорт завершён");});
+                    BackupVerifier.Result checked=BackupExportGate.saveAndVerify(
+                        this,prefs,uri,exportFull,password,
+                        msg->runOnUiThread(()->status.setText(msg)));
+                    runOnUiThread(()->{
+                        restoringBackup=false;
+                        status.setText("Копия «"+exportName+"» записана и прочитана обратно. Проверено ZIP-файлов: "+
+                            checked.files+". Перед удалением оригиналов проверь восстановление.");
+                        toast("Резервная копия проверена");
+                    });
                 }
             }catch(Exception error){
-                runOnUiThread(()->{restoringBackup=false;status.setText("Ошибка: "+error.getMessage());});
+                runOnUiThread(()->{
+                    restoringBackup=false;
+                    status.setText(restore?"Ошибка восстановления: "+error.getMessage():
+                        "Экспорт не подтверждён: "+error.getMessage()+
+                        ". Выбранный файл может быть неполным. Не удаляй предыдущую резервную копию.");
+                });
             }finally{if(password!=null)java.util.Arrays.fill(password,(char)0);}
         });
     }
