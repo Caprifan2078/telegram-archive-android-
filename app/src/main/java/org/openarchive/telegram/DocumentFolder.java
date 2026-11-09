@@ -30,13 +30,25 @@ class DocumentFolder {
         resolver=r;tree=null;localRoot=root;rootId=root.getAbsolutePath();folderIds.put("",rootId);
     }
     List<Entry> children(String parentId) {
-        if(localRoot!=null){ArrayList<Entry> out=new ArrayList<>();java.io.File[] files=new java.io.File(parentId).listFiles();if(files!=null)for(java.io.File f:files)out.add(new Entry(f.getAbsolutePath(),f.getName(),f.isDirectory()?DocumentsContract.Document.MIME_TYPE_DIR:"application/octet-stream"));return out;}
+        if(localRoot!=null){
+            java.io.File[] files=new java.io.File(parentId).listFiles();
+            // A missing or unreadable source is NOT an empty folder. In particular,
+            // full backups must never silently omit its media tree.
+            if(files==null)throw new IllegalStateException("Не удалось прочитать исходную папку архива");
+            ArrayList<Entry> out=new ArrayList<>();
+            for(java.io.File f:files)
+                out.add(new Entry(f.getAbsolutePath(),f.getName(),
+                        f.isDirectory()?DocumentsContract.Document.MIME_TYPE_DIR:"application/octet-stream"));
+            return out;
+        }
         ArrayList<Entry> result=new ArrayList<>();
         Uri uri=DocumentsContract.buildChildDocumentsUriUsingTree(tree,parentId);
         String[] columns={DocumentsContract.Document.COLUMN_DOCUMENT_ID,
                 DocumentsContract.Document.COLUMN_DISPLAY_NAME,DocumentsContract.Document.COLUMN_MIME_TYPE};
         try(Cursor c=resolver.query(uri,columns,null,null,null)) {
-            if(c!=null)while(c.moveToNext())result.add(new Entry(c.getString(0),c.getString(1),c.getString(2)));
+            if(c==null)throw new IllegalStateException("Не удалось прочитать исходную папку архива через Android");
+            while(c.moveToNext())
+                result.add(new Entry(c.getString(0),c.getString(1),c.getString(2)));
         }
         return result;
     }
