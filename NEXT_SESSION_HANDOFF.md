@@ -4,7 +4,7 @@
 
 **RED подтверждён** [42546181515](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42546181515): компактный и полный бэкап с обрезанным EOCD раньше принимались быстрой проверкой, 2 ожидаемых FAIL. **GREEN подтверждён** [42546892000](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42546892000): 2/2 PASS, build/JVM PASS. Изменены `BackupVerifier.java`, добавлены `ZipEndGuard.java` и синтетические Android/JVM тесты.
 
-**Ожидает проверки:** изменение прямых `ArchiveBackup.restore` / `FullBackup.restore` и дополнительные тесты. Расширенный [run 42547506039](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42547506039) — состояние проверить по окончании, не заявлять PASS без логов/XML. Не выпускать новый APK без совместимого ключа подписи и проверки миграции. Следующий P0 — безопасность экспорта на SAF при отмене/ошибке записи.
+**Прямое восстановление проверено:** [run 42547455526](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42547455526), 6/6 Android PASS, JVM/build PASS. **Расширенный набор:** [42547506039](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42547506039), 40 Android тестов завершено, job SUCCESS, JVM/build PASS; точный skipped отдельно не разобран. Кодовая база подтверждена на синтетике Android 11, не на физическом телефоне. Следующий P0: исследовать SAF при неполной записи/отмене экспорта, без удаления предыдущей пользовательской копии. Не выпускать новый APK без совместимого ключа подписи и проверки миграции. Следующий P0 — безопасность экспорта на SAF при отмене/ошибке записи.
 
 Подробности: `docs/qa/RECOVERY_VERIFIED_20261109_RU.md`.
 
