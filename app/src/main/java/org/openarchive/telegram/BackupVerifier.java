@@ -44,7 +44,8 @@ final class BackupVerifier {
         Map<String,Long> databaseLengths=new HashMap<>();
         Map<String,String> databaseDigests=new HashMap<>();
         java.util.HashSet<String> entries=new java.util.HashSet<>();
-        InputStream keep=new FilterInputStream(source){@Override public void close()throws IOException{}};
+        ZipEndGuard guarded=new ZipEndGuard(source);
+        InputStream keep=new FilterInputStream(guarded){@Override public void close()throws IOException{}};
         try(ZipInputStream zip=new ZipInputStream(new BufferedInputStream(keep,128*1024))){
             ZipEntry entry;int count=0;
             while((entry=zip.getNextEntry())!=null){
@@ -118,7 +119,7 @@ final class BackupVerifier {
         }
         // ZIP parsing may stop before the encrypted stream's authenticated end marker.
         // Force an EOF read so tampered/truncated .tgar trailers cannot pass dry-run.
-        byte[] trailer=new byte[128*1024];while(source.read(trailer)!=-1){}
+        guarded.requireComplete(count);
         BackupEnvelopePolicy.requireValid(full,permitsFull,permitsCompact,
             inner!=null,hasFullManifest,hasCompactManifest,hasNotesDb);
         if(!full){
@@ -245,7 +246,8 @@ final class BackupVerifier {
     }
     static Result verifyStream(InputStream source,Progress progress)throws Exception{
         Result result=new Result();boolean metadata=false,manifest=false;
-        InputStream keep=new FilterInputStream(source){@Override public void close()throws IOException{}};
+        ZipEndGuard guarded=new ZipEndGuard(source);
+        InputStream keep=new FilterInputStream(guarded){@Override public void close()throws IOException{}};
         MediaIntegrity mediaHash=new MediaIntegrity();
         MediaIntegrity customHash=new MediaIntegrity();
         MediaIntegrity noteHash=new MediaIntegrity();
@@ -313,7 +315,7 @@ final class BackupVerifier {
                 if(result.files%200==0)progress.onProgress("Проверяю: "+result.files+" файлов");
             }
         }
-        byte[] remaining=new byte[128*1024];while(source.read(remaining)!=-1){}
+        guarded.requireComplete(result.files);
         if(result.files==0)throw new IOException("Пустой ZIP");
         BackupEnvelopePolicy.requireValid(result.full,permitsFull,permitsCompact,
             metadata,manifest,hasCompactManifest,hasNotesDb);
