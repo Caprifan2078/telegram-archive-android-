@@ -1,4 +1,4 @@
-name: QA backup source access regression
+name: QA backup and import adjacent regression
 on:
   push:
     branches: [qa/backup-unreadable-source-20261109]
@@ -44,12 +44,12 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 420
           script: |
-            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.FullBackupSourceAccessRegressionTest'
+            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.BackupDryRunRegressionTest,org.openarchive.telegram.ArchiveEndToEndRegressionTest,org.openarchive.telegram.ImportRollbackRegressionTest,org.openarchive.telegram.PortableRestoreRegressionTest,org.openarchive.telegram.SevenZTelegramImportRegressionTest,org.openarchive.telegram.EncryptedTelegramImportRegressionTest'
       - name: Save synthetic test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: backup-source-access-synthetic-results
+          name: backup-adjacent-synthetic-results
           retention-days: 3
           path: |
             app/build/outputs/androidTest-results/
