@@ -54,8 +54,19 @@ final class FullBackup {
                         traverse(ctx,source,source.rootId(),"","media/chat-"+i+"/",zip,progress,total,files,mediaHash,0);
                     }
                     File custom=new File(ctx.getFilesDir(),"personal_images");
-                    File[] photos=custom.listFiles();
-                    if(photos!=null)for(File asset:photos){
+                    // Absence is legitimate on a fresh install. An existing but
+                    // unreadable source is not empty: never publish a "full"
+                    // backup while silently omitting the user's custom images.
+                    File[] photos;
+                    if(!custom.exists())photos=new File[0];
+                    else{
+                        if(!custom.isDirectory())
+                            throw new IOException("Папка пользовательских изображений недоступна");
+                        photos=custom.listFiles();
+                        if(photos==null)
+                            throw new IOException("Не удалось прочитать папку пользовательских изображений");
+                    }
+                    for(File asset:photos){
                         if(asset.isFile()&&asset.getName().matches("[a-zA-Z0-9_-]{1,96}\\.jpg"))
                             writeZipFile(zip,asset,"custom/"+asset.getName(),customHash);
                     }
