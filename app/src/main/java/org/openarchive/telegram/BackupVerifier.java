@@ -46,8 +46,9 @@ final class BackupVerifier {
         java.util.HashSet<String> entries=new java.util.HashSet<>();
         ZipEndGuard guarded=new ZipEndGuard(source);
         InputStream keep=new FilterInputStream(guarded){@Override public void close()throws IOException{}};
+        int count=0;
         try(ZipInputStream zip=new ZipInputStream(new BufferedInputStream(keep,128*1024))){
-            ZipEntry entry;int count=0;
+            ZipEntry entry;
             while((entry=zip.getNextEntry())!=null){
                 if(++count>BackupEntryPolicy.MAX_ENTRIES)throw new IOException("Превышен лимит элементов ZIP");
                 String name=entry.getName();
