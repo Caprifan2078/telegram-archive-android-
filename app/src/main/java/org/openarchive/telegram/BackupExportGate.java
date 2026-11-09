@@ -36,7 +36,18 @@ final class BackupExportGate {
             if(full) FullBackup.export(context,prefs,output,progress::update);
             else ArchiveBackup.write(context,prefs,output,progress::update);
         }
-        // Deliberately the legacy write-only behavior for RED QA: no read-back yet.
-        return new BackupVerifier.Result();
+        // A successful close does not prove that a SAF/cloud provider persisted the
+        // bytes intact. Read the destination itself and check ZIP CRC, the final
+        // ZIP/ZIP64 directory record and encrypted authentication when applicable.
+        progress.update("Проверяю записанную резервную копию…");
+        try (InputStream raw=target.openRead()) {
+            if(raw==null)throw new IOException("Сохранённый файл недоступен для проверки");
+            try (InputStream stream=SecureArchive.decryptedInput(raw,password)) {
+                BackupVerifier.Result result=BackupVerifier.verifyStream(stream,progress::update);
+                if(result.full!=full)
+                    throw new IOException("Тип записанной резервной копии не совпадает с выбранным");
+                return result;
+            }
+        }
     }
 }
