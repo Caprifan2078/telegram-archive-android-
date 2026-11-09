@@ -2,7 +2,7 @@
 
 **Рабочая ветка:** `qa/backup-unreadable-source-20261109`, основана на `qa/recovery-audit-20261109` (`22e4a5de`). `main` не изменять. Код фикса `8c837008` в `DocumentFolder.children`: `File.listFiles()==null` и `ContentResolver.query()==null` более не превращаются в «пустую папку», чтобы полный архив не терял медиа молча. Код и тест `FullBackupSourceAccessRegressionTest` в ветке сохранены; версия Gradle остаётся **0.51 QA**.
 
-**Доказательство:** [RED run 42537920307](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42537920307) — Android 11, 2 ожидаемых FAIL и 1 PASS; [GREEN run 42538012659](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42538012659) — 4/4 PASS и build/JVM PASS. [Смежный регресс 42538744939](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42538744939) — результат проверить.
+**Доказательство:** [RED run 42537920307](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42537920307) — Android 11, 2 ожидаемых FAIL и 1 PASS; [GREEN run 42538012659](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42538012659) — 4/4 PASS и build/JVM PASS. [Смежный регресс 42538744939](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42538744939) — Android 11, **35/35 PASS, 0 skipped/failed**, build/JVM PASS. Следующая P0: безопасный реальный update и backup/restore; оригинальный ключ подписи не подтверждён.
 
 **Граница:** Android-эмулятор, синтетика; выпуск APK не произведён, оригинальный сертификат и сохранность обновления на реальном устройстве не подтверждены. Исторические P0 подписи и real-device backup/restore остаются. Подробности и ссылки — `docs/qa/RECOVERY_VERIFIED_20261109_RU.md`.
 
