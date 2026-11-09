@@ -165,7 +165,8 @@ final class ArchiveBackup {
         RestoreJournal journal=callerJournal==null?RestoreJournal.begin(ctx,null):callerJournal;
         try{
             {
-                try(ZipInputStream zip=new ZipInputStream(new BufferedInputStream(streamed))){
+                ZipEndGuard guarded=new ZipEndGuard(streamed);
+                try(ZipInputStream zip=new ZipInputStream(new BufferedInputStream(guarded))){
                     ZipEntry entry;int entries=0;long stagedBytes=0;
                     while((entry=zip.getNextEntry())!=null){
                         if(++entries>3000)throw new IOException("Слишком много файлов в архиве");
@@ -184,7 +185,7 @@ final class ArchiveBackup {
                     // ZIP can stop at the central directory without consuming the
                     // authenticated final record of the encrypted source. Drain it
                     // before any database or registry changes are published.
-                    byte[] trailer=new byte[65536];while(streamed.read(trailer)!=-1){}
+                    guarded.requireComplete(entries);
                 }
             }
             if(manifest==null||!"telegram-archive-metadata".equals(manifest.optString("format"))||
