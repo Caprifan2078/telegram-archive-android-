@@ -1,5 +1,14 @@
 # Результаты тестирования
 
+## 10.11.2026 — FullBackupCustomAssetSafetyRegressionTest
+
+**Сценарии:** personal_images не существует; personal_images — пустая папка; personal_images — обычный файл; реальный файл synthetic.jpg включается в full backup с совпадающими байтами. Тест использует `ContextWrapper` с временным изолированным `getFilesDir()`, не заменяет пользовательские аватары. Проверяет сохранность прежних сообщений, избранного и реестра чатов.
+
+**RED:** [42722512993](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42722512993) — Android 11, 4 теста, 1 ожидаемый FAIL (неправильный тип папки), 3 успешных, build/JVM PASS. **GREEN:** [42722616280](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42722616280) — Android 11, 4/4 PASS, build/JVM PASS; код `FullBackup.java` commit `1db4c1519434d7972a004b90caf439d0842e3d59`. **Смежная регрессия:** [42724116441](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42724116441) — Android 11, 43 теста завершены, job SUCCESS, сборка/JVM PASS; точное число skipped из XML не извлечено. Тестовые классы: FullBackupCustomAssetSafetyRegressionTest, FullBackupSourceAccessRegressionTest, BackupSafReadbackRegressionTest, BackupDryRunRegressionTest, PortableRestoreRegressionTest, ZipFooterIntegrityRegressionTest, ArchiveEndToEndRegressionTest.
+
+**Не проверено:** реальный SAF-провайдер/физический Android и совместимая подпись. Версия остаётся 0.51 QA, новая APK не выпускалась.
+
+
 ## 09.11.2026 — проверка SAF-резервной копии после записи
 
 Синтетический Android 11, класс `BackupSafReadbackRegressionTest`, 7 сценариев: full/compact ZIP с обрезанным хвостом; encrypted full с обрезанной аутентификацией; SAF read denied; валидные full/compact ZIP и encrypted full. [RED 42615754883](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42615754883): 7/7 ожидаемых FAIL на write-only стратегии, но Gradle/JVM PASS. [Промежуточный run 42616102201](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42616102201): 6 PASS, 1 FAIL из-за отсутствующего текста исключения `EOFException`. [GREEN 42617337252](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42617337252): 7/7 PASS, 0 reported FAILED, Gradle/build и JVM PASS. Проверка выполняется в памяти над реальными синтетическими бэкапами; экспорт Android UI через физический системный пикер не проверен. [Смежный регресс 42618114889](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/42618114889) — **45 Android 11 тестов завершены, CI SUCCESS**, Gradle/JVM PASS, в логах нет ошибок тестов; точное число SKIPPED по XML не проверялось. Включены BackupDryRunRegressionTest, FullBackupSourceAccessRegressionTest, ZipFooterIntegrityRegressionTest, PortableRestoreRegressionTest, UiMenuTourRegressionTest и UiSmokeTest вместе с новым тестом read-back.
