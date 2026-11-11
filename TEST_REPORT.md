@@ -1,5 +1,15 @@
 # Результаты тестирования
 
+## 11.11.2026 — signed upgrade preflight и сохранение частных данных
+
+**Фактический успешный CI:** [43013394656](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43013394656), Android 11 google_apis emulator, SUCCESS. `python3 -m unittest discover ...` — **12/12 PASS**. Три последовательные подписанные синтетическими ключами A/B сборки Gradle — SUCCESS. Отдельная read-only утилита `check_apk_upgrade.py` допускает A (versionCode 301) → A (302), блокирует A (301) → B (302) и равный versionCode. `apksigner verify` и `aapt dump badging` реально использованы при сравнении собранных APK.
+
+**Реальное поведение Android Package Manager на эмуляторе:** установлен A/301; `SignedUpgradeSentinelTest` в фазе seed — `OK (1 test)`; `adb install -r` B/302 отклонён как `INSTALL_FAILED_UPDATE_INCOMPATIBLE`; verify старой A/301 — `OK (1 test)` и сохранены сообщения, избранное, локальный профиль, настройки, личная заметка, цитата и байты частного синтетического изображения; затем `adb install -r` A/302 прошёл, повторный verify — `OK (1 test)`. Итого **3/3 PASS** инструмента `SignedUpgradeSentinelTest` в одном непрерывном пользовательском профиле эмулятора.
+
+**Неудачные ранние прогоны:** [43012085958](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43012085958) и [43012404472](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43012404472) — ошибка исполнения многострочного `if` в action runner (`Syntax error: end of file unexpected`), не продуктовая ошибка. Исправлено выделенным `scripts/test_synthetic_upgrade_on_emulator.sh`; при успешном повторе [43013394656](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43013394656) эта проблема отсутствует.
+
+**Ограничения:** всё на синтетических данных и одноразовых CI keystore. Нет полного 18-модульного аудита, проверки установленной пользовательской APK, реального устройства, доступа к оригинальной подписи и нового релизного APK. Разрешение preflight — НЕ абсолютная гарантия отсутствия проблем миграции при реальном обновлении.
+
 ## 10.11.2026 — FullBackupCustomAssetSafetyRegressionTest
 
 **Сценарии:** personal_images не существует; personal_images — пустая папка; personal_images — обычный файл; реальный файл synthetic.jpg включается в full backup с совпадающими байтами. Тест использует `ContextWrapper` с временным изолированным `getFilesDir()`, не заменяет пользовательские аватары. Проверяет сохранность прежних сообщений, избранного и реестра чатов.
