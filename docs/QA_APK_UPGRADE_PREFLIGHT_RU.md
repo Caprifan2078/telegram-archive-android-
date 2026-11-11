@@ -10,7 +10,7 @@
 - встроенной метаинформацией исходного git-commit `9cbb121d93a8c4c39ee2fa11d82d98bb1e3d36e3`;
 - старым `workQa` вариантом приложения (по Gradle: ID `org.openarchive.telegram.qa.workqa20261028`, `versionCode=51` без override).
 
-ZIP `TelegramArchive_Latest_QA_2026-11-05.zip` содержит точно такой же `app-workQa.apk`; SHA-256 ZIP `c27ad14a0577e2e5396490eb86b3c4de3e7055fc8dae3e73449b5227777b237f`. CRC ZIP и APK проверены локально. SHA-сертификат извлечён из APK v2 signing block и декодирован как X.509; независимая полная проверка APK подписи `apksigner verify` в текущем локальном контейнере не выполнялась.
+ZIP `TelegramArchive_Latest_QA_2026-11-05.zip` содержит точно такой же `app-workQa.apk`; SHA-256 ZIP `c27ad14a0577e2e5396490eb86b3c4de3e7055fc8dae3e73449b5227777b237f`. CRC ZIP и APK проверены локально. SHA-сертификат извлечён из APK v2 signing block и декодирован как X.509. **Независимо проверены RSA PKCS#1 v1.5 / SHA-256 подпись signed-data и APK v2 chunked content digest**: фактически пересчитанный SHA-256 содержимого `bdcc2fba8caadf585d45d34eb814d2e08a1dc5cf34d4011d3341f1dbc48866f8` совпал с digest в APK Signing Block (6 чанков). Это не подтверждает установку на устройстве и не заменяет `apksigner verify` при сравнении новой APK.
 
 **Эти факты подтверждают байты предоставленного файла, но НЕ то, какая версия действительно установлена на телефоне.** Для безопасной проверки обновления необходимо сравнить *точный установленный APK* с кандидатом.
 
