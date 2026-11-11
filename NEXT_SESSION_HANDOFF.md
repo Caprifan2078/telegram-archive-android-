@@ -1,3 +1,17 @@
+## 11.11.2026 — проверенный preflight APK и тест сохранности при обновлении
+
+**Рабочая ветка:** `qa/signed-upgrade-preflight-20261111`, создана от `qa/backup-custom-assets-20261110` commit `3c35388fba0e4ac866b7c40b4f8893b0322322fb`. `main` не менять. Версия по-прежнему `0.51 QA`. Отдельной новой APK пользователю не выпускали.
+
+**Историческая APK проверена непосредственно:** две APK от 05.11 побайтово равны (SHA-256 `af5093da…af54d2`), внутри ZIP та же APK. Manifest подтверждает `org.openarchive.telegram.qa.workqa20261028`, `versionCode=51`. Подпись APK v2: X.509 `CN=Android Debug`, cert SHA-256 `d6b1491fb5b4a57b643cb3e8142486ec9082f145cbd539273e6b8bed55f81d48`; **RSA SHA256 подпись и content digest проверены криптографически**. Это сертификат архива файлов, а НЕ подтверждённый сертификат фактически установленной версии.
+
+**Добавлено:** `scripts/check_apk_upgrade.py` — только чтение двух APK и отказ при несовпадающем package ID, сертификате или `versionCode`, использует Android SDK `apksigner verify` + `aapt dump badging`; `tests/test_check_apk_upgrade.py` — 12 офлайн тестов. `scripts/test_synthetic_upgrade_on_emulator.sh` и `.github/workflows/upgrade-preflight-20261111.yml` — две временные пары ключей A/B, отказ установки `-r` с B, успех с A; расширен `SignedUpgradeSentinelTest` на заметки, цитаты и байты частного синтетического изображения.
+
+**Доказательство:** [run 43013394656](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43013394656) — CI SUCCESS, unit **12/12 PASS**, три сборки Gradle SUCCESS, эмулятор Android 11: **3 последовательных PASS (seed, verify после отказа B, verify после upgrade A)**. В логах `PASS: mismatched signature rejected, private data preserved; matching signature upgraded, private data preserved`. Неудачные [43012085958](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43012085958) и [43012404472](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43012404472) связаны с многострочным shell-синтаксисом параметра `script` emulator runner, а НЕ тестом данных; исправлено в отдельном `scripts/test_synthetic_upgrade_on_emulator.sh`.
+
+**Открытые P0:** сертификат и package ID реально установленного на пользовательском устройстве приложения ещё не сравнивались; старый `workQa` подписан debug-ключом; `stableQa` имеет отдельный package ID; установка/миграции на реальном телефоне не проверены. Для реального обновления нельзя удалять старую APK и данные, нужен оригинальный установленный APK, совместимая подпись и предварительно проверенная полная резервная копия. Инструкция: `docs/QA_APK_UPGRADE_PREFLIGHT_RU.md`. Следующий безопасный этап — проверить реальные файлы и сценарии сохранности на физическом телефоне только с согласия владельца; продолжать независимый аудит QA-00…QA-17 на эмуляторах без опасной переустановки.
+
+---
+
 ## 10.11.2026 — P0 полная копия и каталог изображений: проверенная точка
 
 **Рабочая ветка:** `qa/backup-custom-assets-20261110`, основание `qa/backup-saf-readback-20261109` на SHA `54de581090e2f292852aacf611bd5624cb8a3a87`. **Не менять `main` и не удалять ранее установленную APK.** Версия Gradle — `0.51 QA`.
