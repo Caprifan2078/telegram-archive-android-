@@ -1,0 +1,113 @@
+name: QA signed APK upgrade preflight and data retention
+on:
+  push:
+    branches: [qa/signed-upgrade-preflight-20261111]
+    paths:
+      - 'scripts/check_apk_upgrade.py'
+      - 'tests/test_check_apk_upgrade.py'
+      - 'app/src/androidTest/java/org/openarchive/telegram/SignedUpgradeSentinelTest.java'
+      - '.github/workflows/upgrade-preflight-20261111.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      # Disposable emulated-test keystores only; never a user key or release key.
+      ARCHIVE_QA_STORE_PASSWORD: synthetic-upgrade-only-2026
+      ARCHIVE_QA_KEY_ALIAS: synthetic-qa
+      ARCHIVE_QA_KEY_PASSWORD: synthetic-upgrade-only-2026
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Offline preflight tests
+        run: python3 -m unittest discover -s tests -p test_check_apk_upgrade.py -v
+      - name: Install Android build tools
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: Create two unrelated disposable signing keys
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          keytool -genkeypair -noprompt -keystore /tmp/qa-upgrade-A.jks -storepass "$ARCHIVE_QA_STORE_PASSWORD" -keypass "$ARCHIVE_QA_KEY_PASSWORD" -alias "$ARCHIVE_QA_KEY_ALIAS" -keyalg RSA -keysize 2048 -validity 2 -dname "CN=Synthetic Signing A"
+          keytool -genkeypair -noprompt -keystore /tmp/qa-upgrade-B.jks -storepass "$ARCHIVE_QA_STORE_PASSWORD" -keypass "$ARCHIVE_QA_KEY_PASSWORD" -alias "$ARCHIVE_QA_KEY_ALIAS" -keyalg RSA -keysize 2048 -validity 2 -dname "CN=Synthetic Signing B"
+      - name: Build old and new APKs signed with A
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ARCHIVE_QA_KEYSTORE=/tmp/qa-upgrade-A.jks
+          gradle --no-daemon --max-workers=2 assembleStableQa assembleStableQaAndroidTest testCompactQaUnitTest -PqaStableInstrumentation=true -PqaVersionCode=301
+          mkdir -p qa-upgrade
+          cp app/build/outputs/apk/stableQa/app-stableQa.apk qa-upgrade/old-A-301.apk
+          cp app/build/outputs/apk/androidTest/stableQa/app-stableQa-androidTest.apk qa-upgrade/test.apk
+          gradle --no-daemon --max-workers=2 assembleStableQa -PqaVersionCode=302
+          cp app/build/outputs/apk/stableQa/app-stableQa.apk qa-upgrade/new-A-302.apk
+      - name: Build incompatible replacement signed with B
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ARCHIVE_QA_KEYSTORE=/tmp/qa-upgrade-B.jks
+          gradle --no-daemon --max-workers=2 clean assembleStableQa -PqaVersionCode=302
+          cp app/build/outputs/apk/stableQa/app-stableQa.apk qa-upgrade/new-B-302.apk
+      - name: Preflight accepts A-to-A, blocks A-to-B and same-version
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          python3 scripts/check_apk_upgrade.py qa-upgrade/old-A-301.apk qa-upgrade/new-A-302.apk --build-tools "$tools" > qa-upgrade/accepted.txt
+          if python3 scripts/check_apk_upgrade.py qa-upgrade/old-A-301.apk qa-upgrade/new-B-302.apk --build-tools "$tools" > qa-upgrade/mismatch.txt 2>&1; then
+            echo "ERROR: incompatible certificate was approved"; exit 1
+          fi
+          grep -q "Разные сертификаты" qa-upgrade/mismatch.txt
+          if python3 scripts/check_apk_upgrade.py qa-upgrade/old-A-301.apk qa-upgrade/old-A-301.apk --build-tools "$tools" > qa-upgrade/equal-version.txt 2>&1; then
+            echo "ERROR: same versionCode was approved"; exit 1
+          fi
+          grep -q "versionCode" qa-upgrade/equal-version.txt
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: |
+            set -e
+            adb install qa-upgrade/old-A-301.apk
+            adb install qa-upgrade/test.apk
+            adb shell am instrument -w -r -e class org.openarchive.telegram.SignedUpgradeSentinelTest -e upgradePhase seed org.openarchive.telegram.qa.previewstable.test/androidx.test.runner.AndroidJUnitRunner | tee qa-upgrade/seed.txt
+            grep -q "OK (1 test)" qa-upgrade/seed.txt
+            if adb install -r qa-upgrade/new-B-302.apk > qa-upgrade/rejected-on-device.txt 2>&1; then
+              echo "ERROR: device accepted incompatible cert"; exit 1
+            fi
+            grep -q "INSTALL_FAILED_UPDATE_INCOMPATIBLE" qa-upgrade/rejected-on-device.txt
+            adb shell am instrument -w -r -e class org.openarchive.telegram.SignedUpgradeSentinelTest -e upgradePhase verify org.openarchive.telegram.qa.previewstable.test/androidx.test.runner.AndroidJUnitRunner | tee qa-upgrade/retained-after-reject.txt
+            grep -q "OK (1 test)" qa-upgrade/retained-after-reject.txt
+            adb install -r qa-upgrade/new-A-302.apk
+            adb shell am instrument -w -r -e class org.openarchive.telegram.SignedUpgradeSentinelTest -e upgradePhase verify org.openarchive.telegram.qa.previewstable.test/androidx.test.runner.AndroidJUnitRunner | tee qa-upgrade/retained-after-update.txt
+            grep -q "OK (1 test)" qa-upgrade/retained-after-update.txt
+      - name: Upload synthetic text results only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-synthetic-upgrade-preflight-results
+          retention-days: 7
+          path: qa-upgrade/*.txt
+      - name: Delete disposable signing keys
+        if: always()
+        run: rm -f /tmp/qa-upgrade-A.jks /tmp/qa-upgrade-B.jks
