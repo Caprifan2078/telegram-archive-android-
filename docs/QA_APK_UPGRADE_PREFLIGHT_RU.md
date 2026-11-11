@@ -8,7 +8,7 @@
 - размером 3 617 276 байт и SHA-256 `af5093dabdc1b48f8ef950da2970038882fbbfa9e6f710a597703b1ca6af54d2`;
 - APK Signature Scheme v2 и сертификатом `C=US,O=Android,CN=Android Debug`, SHA-256 `d6b1491fb5b4a57b643cb3e8142486ec9082f145cbd539273e6b8bed55f81d48`;
 - встроенной метаинформацией исходного git-commit `9cbb121d93a8c4c39ee2fa11d82d98bb1e3d36e3`;
-- старым `workQa` вариантом приложения (по Gradle: ID `org.openarchive.telegram.qa.workqa20261028`, `versionCode=51` без override).
+- старым `workQa` вариантом приложения: из **скомпилированного AndroidManifest.xml** независимо извлечены package ID `org.openarchive.telegram.qa.workqa20261028`, `versionCode=51`, `versionName=0.51` (совпадают с Gradle).
 
 ZIP `TelegramArchive_Latest_QA_2026-11-05.zip` содержит точно такой же `app-workQa.apk`; SHA-256 ZIP `c27ad14a0577e2e5396490eb86b3c4de3e7055fc8dae3e73449b5227777b237f`. CRC ZIP и APK проверены локально. SHA-сертификат извлечён из APK v2 signing block и декодирован как X.509. **Независимо проверены RSA PKCS#1 v1.5 / SHA-256 подпись signed-data и APK v2 chunked content digest**: фактически пересчитанный SHA-256 содержимого `bdcc2fba8caadf585d45d34eb814d2e08a1dc5cf34d4011d3341f1dbc48866f8` совпал с digest в APK Signing Block (6 чанков). Это не подтверждает установку на устройстве и не заменяет `apksigner verify` при сравнении новой APK.
 
