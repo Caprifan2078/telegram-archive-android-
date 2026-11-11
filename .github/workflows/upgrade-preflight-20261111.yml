@@ -4,6 +4,7 @@ on:
     branches: [qa/signed-upgrade-preflight-20261111]
     paths:
       - 'scripts/check_apk_upgrade.py'
+      - 'scripts/test_synthetic_upgrade_on_emulator.sh'
       - 'tests/test_check_apk_upgrade.py'
       - 'app/src/androidTest/java/org/openarchive/telegram/SignedUpgradeSentinelTest.java'
       - '.github/workflows/upgrade-preflight-20261111.yml'
@@ -86,21 +87,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-boot-timeout: 420
-          script: |
-            set -e
-            adb install qa-upgrade/old-A-301.apk
-            adb install qa-upgrade/test.apk
-            adb shell am instrument -w -r -e class org.openarchive.telegram.SignedUpgradeSentinelTest -e upgradePhase seed org.openarchive.telegram.qa.previewstable.test/androidx.test.runner.AndroidJUnitRunner | tee qa-upgrade/seed.txt
-            grep -q "OK (1 test)" qa-upgrade/seed.txt
-            if adb install -r qa-upgrade/new-B-302.apk > qa-upgrade/rejected-on-device.txt 2>&1; then
-              echo "ERROR: device accepted incompatible cert"; exit 1
-            fi
-            grep -q "INSTALL_FAILED_UPDATE_INCOMPATIBLE" qa-upgrade/rejected-on-device.txt
-            adb shell am instrument -w -r -e class org.openarchive.telegram.SignedUpgradeSentinelTest -e upgradePhase verify org.openarchive.telegram.qa.previewstable.test/androidx.test.runner.AndroidJUnitRunner | tee qa-upgrade/retained-after-reject.txt
-            grep -q "OK (1 test)" qa-upgrade/retained-after-reject.txt
-            adb install -r qa-upgrade/new-A-302.apk
-            adb shell am instrument -w -r -e class org.openarchive.telegram.SignedUpgradeSentinelTest -e upgradePhase verify org.openarchive.telegram.qa.previewstable.test/androidx.test.runner.AndroidJUnitRunner | tee qa-upgrade/retained-after-update.txt
-            grep -q "OK (1 test)" qa-upgrade/retained-after-update.txt
+          script: bash scripts/test_synthetic_upgrade_on_emulator.sh
       - name: Upload synthetic text results only
         if: always()
         uses: actions/upload-artifact@v4
