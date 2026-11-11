@@ -1,5 +1,13 @@
 # История изменений этого этапа
 
+## 11.11.2026 — предварительная проверка обновления APK и тест сохранения данных
+
+- Новый read-only `scripts/check_apk_upgrade.py`: `apksigner verify` + `aapt dump badging`, точный package ID, SHA-256 signer и строго растущий versionCode; при сомнениях не допускает обновление.
+- 12 автономных unittest; отдельный тест Android-обновления с одноразовыми сертификатами A/B; `SignedUpgradeSentinelTest` дополнен личными заметками, цитатами и байтами личного изображения.
+- [CI 43013394656](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43013394656): SUCCESS, 12/12 offline PASS, синтетические `seed -> reject mismatched cert -> retained -> matching update -> retained`, все 3 Android проверки данных PASS, три Gradle build SUCCESS.
+- Две первоначальные CI-попытки с ошибкой многострочного shell в emulator-runner были исправлены скриптом `scripts/test_synthetic_upgrade_on_emulator.sh`, не считать их продуктовым GREEN.
+- Не трогали `main`, package ID, версию `0.51 QA` и пользовательские базы; новый релиз и APK для установки не выпускались.
+
 ## 10.11.2026 — полный бэкап больше не пропускает недоступные аватары
 
 - `FullBackup.export`: если `personal_images` отсутствует, это допустимый пустой источник; если путь существует, но не является читаемым каталогом, экспорт останавливается с ошибкой вместо молчаливого пропуска изображений.
