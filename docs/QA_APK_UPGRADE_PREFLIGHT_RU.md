@@ -50,3 +50,10 @@ adb shell pm path org.openarchive.telegram.qa.workqa20261028
 - Тестовые ключи в GitHub Actions создаются *исключительно для синтетического сценария* и не подходят для установки реальным владельцам.
 
 **Не удалять старое приложение с пользовательскими данными; не использовать `adb uninstall` ради обхода отказа Android.** `main` и выпуск Stable не изменять до получения реальных подтверждений.
+
+
+## Результаты синтетической проверки 11.11.2026
+
+[GitHub Actions 43013394656](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43013394656): SUCCESS. Запущено 12 Python unit-tests (12 PASS). На Android 11 emulator собраны три тестовые подписанные APK и реально проверены: A/301 → B/302 запрещено до установки и отклонено Package Manager при `adb install -r`; оставшаяся установка сохранила chat DB, избранное, настройки, заметки, ссылки на цитаты и байты частного синтетического изображения; A/301 → A/302 принято Android, данные сохранены снова. Три последовательных запуска `SignedUpgradeSentinelTest` — `OK (1 test)` каждый. Исходный пакет пользователя **не устанавливался** на этот эмулятор, настоящая совместимость на реальном телефоне не подтверждена.
+
+Ранние CI [43012085958](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43012085958) и [43012404472](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43012404472) завершились FAIL из-за обработки многострочного shell-кода в emulator runner. Исправлено выделением `scripts/test_synthetic_upgrade_on_emulator.sh` с единым вызовом `bash`. Не трактовать старые FAIL как результат сравнения подписи или сохранения данных.
