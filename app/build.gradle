@@ -53,7 +53,16 @@ android {
             signingConfig signingConfigs.stableQa
         }
     }
-    testBuildType (project.findProperty('qaStableInstrumentation') == 'true' ? 'stableQa' : 'compactQa')
+    // Isolated handoff preview: never attempts to replace an installed user APK.
+    // Ephemeral CI debug signing is fine only because this is a separate package.
+    buildTypes {
+        handoffQa {
+            initWith compactQa
+            applicationIdSuffix '.handoff20261115'
+            signingConfig signingConfigs.debug
+        }
+    }
+    testBuildType (project.findProperty('qaHandoffInstrumentation') == 'true' ? 'handoffQa' : (project.findProperty('qaStableInstrumentation') == 'true' ? 'stableQa' : 'compactQa'))
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
