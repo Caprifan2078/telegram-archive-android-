@@ -47,12 +47,13 @@ public final class ArchiveZipFooterImportRegressionTest {
         return file;
     }
 
-    private void accepted(byte[] bytes)throws Exception {
+    private void accepted(byte[] bytes)throws Exception { accepted(bytes,null); }
+    private void accepted(byte[] bytes,char[] password)throws Exception {
         String key=UUID.randomUUID().toString().replace("-","");
         File original=source(bytes,key);
         File extracted=new File(new File(ctx.getFilesDir(),"telegram_imports"),key);
         try {
-            File selected=ArchiveFileImport.extract(ctx,Uri.fromFile(original),"zip",key,ignored->{});
+            File selected=ArchiveFileImport.extract(ctx,Uri.fromFile(original),"zip",key,password,ignored->{});
             assertEquals(new File(extracted,"chat").getCanonicalPath(),selected.getCanonicalPath());
             assertTrue(new File(selected,"messages.html").isFile());
             assertTrue(new File(selected,"photos/synthetic.jpg").isFile());
@@ -62,7 +63,8 @@ public final class ArchiveZipFooterImportRegressionTest {
         }
     }
 
-    private void rejected(byte[] bytes)throws Exception {
+    private void rejected(byte[] bytes)throws Exception { rejected(bytes,null); }
+    private void rejected(byte[] bytes,char[] password)throws Exception {
         String key=UUID.randomUUID().toString().replace("-","");
         File original=source(bytes,key);
         File extracted=new File(new File(ctx.getFilesDir(),"telegram_imports"),key);
@@ -80,6 +82,35 @@ public final class ArchiveZipFooterImportRegressionTest {
             ArchiveFileImport.deleteTree(extracted);
             original.delete();
         }
+    }
+
+    private byte[] encryptedArchive() throws Exception {
+        File html=File.createTempFile("encrypted-telegram-", ".html",ctx.getCacheDir());
+        File zip=File.createTempFile("encrypted-telegram-", ".zip",ctx.getCacheDir());
+        char[] password="synthetic-test-password".toCharArray();
+        try {
+            try(FileOutputStream out=new FileOutputStream(html)){out.write(HTML);}
+            try(net.lingala.zip4j.ZipFile writer=new net.lingala.zip4j.ZipFile(zip,password)){
+                net.lingala.zip4j.model.ZipParameters p=new net.lingala.zip4j.model.ZipParameters();
+                p.setFileNameInZip("chat/messages.html");
+                p.setEncryptFiles(true);
+                p.setEncryptionMethod(net.lingala.zip4j.model.enums.EncryptionMethod.AES);
+                p.setAesKeyStrength(net.lingala.zip4j.model.enums.AesKeyStrength.KEY_STRENGTH_256);
+                writer.addFile(html,p);
+            }
+            return java.nio.file.Files.readAllBytes(zip.toPath());
+        }finally{html.delete();zip.delete();java.util.Arrays.fill(password,'\0');}
+    }
+
+    @Test public void encryptedTelegramZipWithFooterStillImports()throws Exception {
+        accepted(encryptedArchive(),"synthetic-test-password".toCharArray());
+    }
+
+    @Test public void encryptedTelegramZipMissingFooterIsRejected()throws Exception {
+        byte[] complete=encryptedArchive();
+        assertTrue(complete.length>22);
+        rejected(Arrays.copyOf(complete,complete.length-22),
+            "synthetic-test-password".toCharArray());
     }
 
     @Test public void truncatedEndOfCentralDirectoryIsRejected()throws Exception {
