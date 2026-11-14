@@ -1,0 +1,80 @@
+name: QA APK handoff 2026-11-15
+on:
+  push:
+    branches: [qa/apk-handoff-20261115]
+    paths:
+      - 'app/build.gradle'
+      - '.github/workflows/apk-handoff-20261115.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  make-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: Compile, run JVM tests and package QA APK
+        run: |
+          gradle --no-daemon --max-workers=2 assembleHandoffQa assembleHandoffQaAndroidTest testHandoffQaUnitTest -PqaHandoffInstrumentation=true
+      - name: Verify exact APK identity and signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa-handoff
+          apk=app/build/outputs/apk/handoffQa/app-handoffQa.apk
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | grep 'Signer #1 certificate SHA-256 digest'
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep '^package:'
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -q "package: name='org.openarchive.telegram.qa.handoff20261115'"
+          ! "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$apk" | grep -q 'android.permission.INTERNET'
+          sha256sum "$apk" | tee qa-handoff/SHA256SUMS.txt
+          cp "$apk" qa-handoff/TelegramArchiveViewer_0.51_QA_2026-11-15.apk
+      - name: Enable KVM for Android test
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Android 11 install + targeted smoke tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: |
+            adb install qa-handoff/TelegramArchiveViewer_0.51_QA_2026-11-15.apk
+            gradle --no-daemon --max-workers=2 connectedHandoffQaAndroidTest -PqaHandoffInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.UiSmokeTest,org.openarchive.telegram.BackupSafReadbackRegressionTest,org.openarchive.telegram.FullBackupCustomAssetSafetyRegressionTest'
+      - name: Upload installable QA APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TelegramArchiveViewer-0.51-QA-2026-11-15
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            qa-handoff/TelegramArchiveViewer_0.51_QA_2026-11-15.apk
+            qa-handoff/SHA256SUMS.txt
+      - name: Upload QA test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-handoff-instrumentation-results
+          retention-days: 7
+          path: |
+            app/build/outputs/androidTest-results/
+            app/build/reports/androidTests/
