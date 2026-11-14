@@ -1,5 +1,9 @@
 # Результаты тестирования
 
+## 15.11.2026 — исправление Telegram ZIP EOCD, контроль валидных архивов
+
+На старом коде [43651578262](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43651578262) Android 11: 4 сценария, **2 ожидаемых FAIL** на ZIP без EOCD (обычный и с комментарием), два корректных архива прошли. На первом исправленном коде [43651879557](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43651879557) 5/6 тестов прошли; один тест ошибочно ожидал фото в AES ZIP, который содержал только messages.html. После исправления фикстуры [финальный Android CI 43652574529](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43652574529): **47 tests, 0 failures, 0 errors, 0 skipped** по XML, build/JVM SUCCESS на Android 11. Тесты охватили обычный/парольный ZIP, EOCD, многочастные чаты, ZIP/7z/RAR импорт, откат, read-only preview и проверку ZIP бэкапов. Физический телефон и стабильная APK не проверены.
+
 ## 11.11.2026 — signed upgrade preflight и сохранение частных данных
 
 **Фактический успешный CI:** [43013394656](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43013394656), Android 11 google_apis emulator, SUCCESS. `python3 -m unittest discover ...` — **12/12 PASS**. Три последовательные подписанные синтетическими ключами A/B сборки Gradle — SUCCESS. Отдельная read-only утилита `check_apk_upgrade.py` допускает A (versionCode 301) → A (302), блокирует A (301) → B (302) и равный versionCode. `apksigner verify` и `aapt dump badging` реально использованы при сравнении собранных APK.
