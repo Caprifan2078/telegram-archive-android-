@@ -1,5 +1,12 @@
 # История изменений этого этапа
 
+## 15.11.2026 — Telegram ZIP footer import validation
+
+- Обычный и парольный `ArchiveFileImport` требуют целостного ZIP/ZIP64 central directory footer через `ZipEndGuard`, отклоняют неполный ZIP, не оставляя временную распаковку.
+- Синтетические тесты для EOCD без комментария, с комментарием и AES. [RED 43651578262](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43651578262) подтвердил прежний дефект.
+- [GREEN 43652574529](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43652574529): **47/47 Android PASS, 0 skipped/fail/errors**, build/JVM PASS; данные из XML.
+- Только QA-ветка; пользовательская APK ещё содержит старую реализацию. `main` и версия не изменялись.
+
 ## 11.11.2026 — предварительная проверка обновления APK и тест сохранения данных
 
 - Новый read-only `scripts/check_apk_upgrade.py`: `apksigner verify` + `aapt dump badging`, точный package ID, SHA-256 signer и строго растущий versionCode; при сомнениях не допускает обновление.
