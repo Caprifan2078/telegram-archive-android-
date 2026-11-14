@@ -70,7 +70,7 @@ public final class ArchiveZipFooterImportRegressionTest {
         File extracted=new File(new File(ctx.getFilesDir(),"telegram_imports"),key);
         try {
             try {
-                ArchiveFileImport.extract(ctx,Uri.fromFile(original),"zip",key,ignored->{});
+                ArchiveFileImport.extract(ctx,Uri.fromFile(original),"zip",key,password,ignored->{});
                 fail("Truncated ZIP was imported despite missing its central-directory footer");
             }catch(IOException expected){
                 assertNotNull(expected.getMessage());
