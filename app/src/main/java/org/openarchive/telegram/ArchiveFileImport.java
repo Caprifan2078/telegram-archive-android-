@@ -110,9 +110,13 @@ final class ArchiveFileImport {
             Budget budget,Progress progress)throws Exception{
         try(InputStream source=ctx.getContentResolver().openInputStream(uri)){
             if(source==null)throw new IOException("Нет доступа к ZIP");
+            // Password-aware ZIP streaming also needs the central-directory
+            // footer; successfully decrypting local entries is not enough.
+            ZipEndGuard guarded=new ZipEndGuard(source);
+            InputStream keep=new FilterInputStream(guarded){@Override public void close()throws IOException{}};
             try(net.lingala.zip4j.io.inputstream.ZipInputStream zip=
                     new net.lingala.zip4j.io.inputstream.ZipInputStream(
-                        new BufferedInputStream(source,128*1024),password)){
+                        new BufferedInputStream(keep,128*1024),password)){
                 net.lingala.zip4j.model.LocalFileHeader entry;
                 byte[] bytes=new byte[128*1024];
                 while((entry=zip.getNextEntry())!=null){
@@ -134,6 +138,7 @@ final class ArchiveFileImport {
                     emit(budget,progress);
                 }
             }
+            guarded.requireComplete(budget.count);
         }
     }
     private static void extractSevenZ(Context ctx,Uri uri,File root,char[] password,
