@@ -56,7 +56,8 @@ public final class ArchiveZipFooterImportRegressionTest {
             File selected=ArchiveFileImport.extract(ctx,Uri.fromFile(original),"zip",key,password,ignored->{});
             assertEquals(new File(extracted,"chat").getCanonicalPath(),selected.getCanonicalPath());
             assertTrue(new File(selected,"messages.html").isFile());
-            assertTrue(new File(selected,"photos/synthetic.jpg").isFile());
+            // Only the plain fixture includes a photo. AES fixture contains messages.html.
+            if(password==null)assertTrue(new File(selected,"photos/synthetic.jpg").isFile());
         }finally{
             ArchiveFileImport.deleteTree(extracted);
             original.delete();
