@@ -1,0 +1,50 @@
+name: QA Telegram ZIP import final regression
+on:
+  push:
+    branches: [qa/import-zip-footer-20261115]
+    paths:
+      - '.github/workflows/import-zip-final-20261115.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  import-final:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build and JVM tests
+        run: gradle --no-daemon --max-workers=2 assembleCompactQa assembleCompactQaAndroidTest testCompactQaUnitTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: |
+            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.ArchiveZipFooterImportRegressionTest,org.openarchive.telegram.ArchiveEndToEndRegressionTest,org.openarchive.telegram.MultipleChatArchiveRegressionTest,org.openarchive.telegram.EncryptedTelegramImportRegressionTest,org.openarchive.telegram.SevenZTelegramImportRegressionTest,org.openarchive.telegram.RarCompatibilityRegressionTest,org.openarchive.telegram.ImportRollbackRegressionTest,org.openarchive.telegram.ZipFooterIntegrityRegressionTest,org.openarchive.telegram.ArchivePreviewIntegrationTest'
+      - name: Upload test XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: import-zip-footer-final-xml
+          retention-days: 7
+          path: |
+            app/build/outputs/androidTest-results/
+            app/build/reports/androidTests/
