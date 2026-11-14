@@ -1,5 +1,9 @@
 # Реестр дефектов
 
+## 15.11.2026 — P1: Telegram ZIP без завершающего каталога считался полноценным импортом
+
+`ArchiveFileImport.extractZip` и парольный путь `extractZipWithPassword` ранее доверяли `ZipInputStream`, который не требует EOCD: ZIP после удаления последних 22 байт принимался при корректных локальных CRC. **RED:** [43651578262](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43651578262), Android 11, 2 ожидаемых FAIL/4. Исправлено применением `ZipEndGuard` к обычному и AES ZIP после окончания извлечения. При ошибке частичная временная распаковка удаляется без изменения исходного ZIP. **GREEN:** [43652574529](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43652574529), Android 11, **47/47 PASS, 0 skipped, 0 errors**, JVM/build PASS, оригинальный XML проинспектирован. **Ограничение:** код находится только в QA-ветке `qa/import-zip-footer-20261115`, скачанная APK `0.51 QA` с коммита `60dc82ee` ещё не содержит исправление; real-device не проверен. Подробный отчёт: `docs/qa/IMPORT_ZIP_FOOTER_20261115_RU.md`.
+
 ## 11.11.2026 — P0: несовместимые подписи QA APK (остаётся до проверки фактической установки)
 
 Файлы от 05.11: package `org.openarchive.telegram.qa.workqa20261028`, versionCode `51`, cert SHA-256 `d6b1491fb5b4a57b643cb3e8142486ec9082f145cbd539273e6b8bed55f81d48` (Android Debug). V2 RSA signature и digest байтов подтверждены локально. В конфигурации проекта `workQa` обычно подписывается временным debug-сертификатом; `stableQa` имеет другой package ID. **Реальный сертификат установленной версии пользователя недоступен, P0 НЕ закрыт для реального обновления.**
