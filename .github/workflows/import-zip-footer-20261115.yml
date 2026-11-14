@@ -43,7 +43,7 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 420
           script: |
-            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.ArchiveZipFooterImportRegressionTest'
+            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.ArchiveZipFooterImportRegressionTest,org.openarchive.telegram.ArchiveEndToEndRegressionTest,org.openarchive.telegram.MultipleChatArchiveRegressionTest,org.openarchive.telegram.EncryptedTelegramImportRegressionTest,org.openarchive.telegram.SevenZTelegramImportRegressionTest,org.openarchive.telegram.RarCompatibilityRegressionTest,org.openarchive.telegram.ImportRollbackRegressionTest,org.openarchive.telegram.ZipFooterIntegrityRegressionTest,org.openarchive.telegram.ArchivePreviewIntegrationTest'
       - name: Upload emulator test XML
         if: always()
         uses: actions/upload-artifact@v4
