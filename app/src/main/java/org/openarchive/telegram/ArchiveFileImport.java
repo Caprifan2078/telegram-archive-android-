@@ -72,7 +72,12 @@ final class ArchiveFileImport {
     private static void extractZip(Context ctx,Uri uri,File root,Budget budget,Progress progress) throws Exception{
         try(InputStream source=ctx.getContentResolver().openInputStream(uri)){
             if(source==null)throw new IOException("Не удалось открыть ZIP");
-            try(ZipInputStream zip=new ZipInputStream(new BufferedInputStream(source,128*1024))){
+            // ZipInputStream checks local entry CRCs but does not require a
+            // central-directory footer. Never treat a truncated Telegram export
+            // as complete. The guard stores only a bounded ZIP/ZIP64 tail.
+            ZipEndGuard guarded=new ZipEndGuard(source);
+            InputStream keep=new FilterInputStream(guarded){@Override public void close()throws IOException{}};
+            try(ZipInputStream zip=new ZipInputStream(new BufferedInputStream(keep,128*1024))){
                 ZipEntry entry;byte[] bytes=new byte[128*1024];
                 while((entry=zip.getNextEntry())!=null){
                     String name=entry.getName();
@@ -95,6 +100,10 @@ final class ArchiveFileImport {
                     zip.closeEntry();emit(budget,progress);
                 }
             }
+            // Only after every member is extracted: enforce EOCD, central
+            // directory offsets and the exact local entry count. Any failure
+            // propagates to extract(), which deletes temporary extraction.
+            guarded.requireComplete(budget.count);
         }
     }
     private static void extractZipWithPassword(Context ctx,Uri uri,File root,char[] password,
