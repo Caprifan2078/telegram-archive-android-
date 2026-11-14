@@ -1,5 +1,17 @@
 ## 11.11.2026 — проверенный preflight APK и тест сохранности при обновлении
 
+## 15.11.2026 — импорт Telegram ZIP: зафиксированное P1-исправление
+
+**Текущая QA-ветка:** `qa/import-zip-footer-20261115` от `qa/apk-handoff-20261115` SHA `60dc82ee209bdb2ab6b791b07864715608be3b43`. `main` не изменён. Версия `0.51 QA`. **Новая пользовательская APK с фиксом не выпущена.** Предыдущая скачанная `handoff20261115` APK не содержит новый код.
+
+**Факт:** `ArchiveFileImport.extractZip` принимал Telegram ZIP после удаления 22-байтовой EOCD-записи: `ZipInputStream` читает локальные записи, но не проверяет каталог. Добавлен `ArchiveZipFooterImportRegressionTest`. [RED 43651578262](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43651578262): два ожидаемых FAIL из четырёх. Исправлены обычный и парольный (AES) ZIP через `ZipEndGuard.requireComplete(budget.count)`. Действующий обработчик отказа очищает только временную папку импорта.
+
+**Проверено:** [финальный run 43652574529](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43652574529), **47/47 Android PASS, 0 skipped/fail/errors**, JVM/build SUCCESS. XML скачан и разобран. Более ранний green [43651879557](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/43651879557) имел тестовую ошибку ожидания фото в AES-файле без фото; исправлено. Подробности: `docs/qa/IMPORT_ZIP_FOOTER_20261115_RU.md`.
+
+**Дальше:** при запросе APK собрать отдельный `handoffQa` вариант из **текущей QA-ветки**, подтвердить package ID/подпись, эмуляторные тесты и SHA-256, затем передавать проверенный файл. Никогда не устанавливать несовместимую подпись поверх существующей с данными. Продолжать QA без заявлений о 100% готовности; физическая установка и исходная подпись P0 открыты.
+
+---
+
 **Рабочая ветка:** `qa/signed-upgrade-preflight-20261111`, создана от `qa/backup-custom-assets-20261110` commit `3c35388fba0e4ac866b7c40b4f8893b0322322fb`. `main` не менять. Версия по-прежнему `0.51 QA`. Отдельной новой APK пользователю не выпускали.
 
 **Историческая APK проверена непосредственно:** две APK от 05.11 побайтово равны (SHA-256 `af5093da…af54d2`), внутри ZIP та же APK. Manifest подтверждает `org.openarchive.telegram.qa.workqa20261028`, `versionCode=51`. Подпись APK v2: X.509 `CN=Android Debug`, cert SHA-256 `d6b1491fb5b4a57b643cb3e8142486ec9082f145cbd539273e6b8bed55f81d48`; **RSA SHA256 подпись и content digest проверены криптографически**. Это сертификат архива файлов, а НЕ подтверждённый сертификат фактически установленной версии.
