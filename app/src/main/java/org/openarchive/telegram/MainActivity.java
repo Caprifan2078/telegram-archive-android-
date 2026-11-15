@@ -1370,7 +1370,7 @@ public class MainActivity extends Activity {
         LinearLayout hero=column();hero.setPadding(px(18),px(19),px(17),px(19));
         hero.setBackground(gradient(themeIndex==2?0xffd5e8f7:0xff244b68,themeIndex==2?0xffe9f2fa:0xff163750,22));
         LinearLayout.LayoutParams heroParams=p(-1,-2);heroParams.setMargins(px(2),px(10),px(2),px(14));list.addView(hero,heroParams);
-        TextView heading=text("Всего переписок: "+archives.length(),19,FG);heading.setTypeface(null,Typeface.BOLD);hero.addView(heading);
+        TextView heading=text("Всего чатов: "+archives.length(),19,FG);heading.setTypeface(null,Typeface.BOLD);hero.addView(heading);
         TextView description=text("Локально · все данные только на устройстве",12,themeIndex==2?SUB:0xffc8e2f1);
         description.setPadding(0,px(9),0,0);hero.addView(description);
         if(archives.length()>=2){
@@ -1857,7 +1857,7 @@ public class MainActivity extends Activity {
             else if(action.contains("Анализ")){screen="analytics";showPage();}
             else if(action.contains("Хронология")){screen="relationships";showPage();}
             else if(action.contains("Кинолента")){screen="cinema";showPage();}
-            else if(action.contains("Настроить"))settingsMenu();
+            else if(action.contains("Настроить"))showConversationInfo();
             else if(action.contains("Медиатека")){screen="media";showPage();}
             else if(action.contains("Закреплённые"))showPinList();
             else if(action.contains("PDF"))chooseConversationPdf();
@@ -1983,12 +1983,13 @@ public class MainActivity extends Activity {
         subtitle.setSingleLine(true);subtitle.setEllipsize(TextUtils.TruncateAt.END);headings.addView(subtitle,p(-1,19));
         pdfButton=btn("PDF");pdfButton.setTextSize(11);pdfButton.setContentDescription("Сохранить переписку в PDF");
         head.addView(pdfButton,p(42,42));pdfButton.setOnClickListener(v->chooseConversationPdf());
-        headerActions=btn("⋯");headerActions.setContentDescription("Настройки и действия переписки");head.addView(headerActions,p(42,42));
-        headerActions.setOnClickListener(v->showConversationInfo());
+        headerActions=btn("≡");headerActions.setContentDescription("Меню переписки и настройки");head.addView(headerActions,p(42,42));
+        headerActions.setOnClickListener(v->showConversationMenu(headerActions));
         title.setOnClickListener(v->{
             if(!home&&!"saved".equals(screen)&&!"help".equals(screen)){rememberChatPositionForReturn();screen="media";showPage();}
         });
         title.setContentDescription("Открыть медиа переписки");
+        title.setOnLongClickListener(v->{if(!home){showConversationInfo();return true;}return false;});
         folderButton=btn("＋");folderButton.setTextSize(22);head.addView(folderButton,p(41,42));
         folderButton.setOnClickListener(v->chooseFolder());
         playerStrip=row();playerStrip.setVisibility(View.GONE);
@@ -2004,7 +2005,7 @@ public class MainActivity extends Activity {
         bottomNav=row();bottomNav.setPadding(px(4),px(3),px(4),px(3));
         bottomNav.setBackground(glass(PANEL,17));
         LinearLayout.LayoutParams navBounds=p(-1,53);navBounds.bottomMargin=px(7);base.addView(bottomNav,navBounds);
-        addTab("Переписка","chat");addTab("Медиа","media");
+        addTab("💬 Переписка","chat");addTab("▦ Медиа","media");
         toolArea=column();base.addView(toolArea,p(-1,-2));
         pinnedBar=row();base.addView(pinnedBar,p(-1,-2));
         filterBar=column();toolArea.addView(filterBar,p(-1,-2));
