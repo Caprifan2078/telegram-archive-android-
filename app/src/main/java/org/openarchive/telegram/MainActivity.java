@@ -148,7 +148,7 @@ public class MainActivity extends Activity {
     private VerticalTimeline verticalTimeline;
     private final int[] participantColors={0xff315c79,0xff665184,0xff326c65,0xff75513f,0xff5d607f,0xff724d68,0xff52683a,0xff426884};
     private LinearLayout base,list,filterBar,bottomNav,searchArea,toolArea,savedComposer;
-    private ScrollView scroll;private TextView title,subtitle,status,pageLabel;private Button navBack,menuButton;private String lastRenderedDay="";
+    private ScrollView scroll;private TextView title,subtitle,status,pageLabel,headerAvatar;private Button navBack,menuButton;private String lastRenderedDay="";
     private EditText searchInput,authorInput;private CheckBox mediaOnly;
     private String restoredQueryDraft=null,restoredAuthorDraft=null;private Boolean restoredMediaDraft=null;
     private Button backPage,nextPage,quickButton,deepButton,folderButton,backButton,headerActions,pdfButton;
@@ -1389,6 +1389,8 @@ public class MainActivity extends Activity {
         if(pdfButton!=null)pdfButton.setVisibility(View.GONE);
         if(folderButton!=null)folderButton.setVisibility(View.GONE); // Only the large bottom Add Chat button.
         title.setText("Мои переписки");subtitle.setText("Твои сообщения · в одном месте");
+        headerAvatar.setText("◇");headerAvatar.setTextColor(ACCENT);
+        headerAvatar.setBackground(shape(Color.TRANSPARENT,100));
         status.setText("Личный архив  ·  Данные на устройстве");
         LinearLayout hero=column();hero.setPadding(px(18),px(19),px(17),px(19));
         hero.setBackground(gradient(themeIndex==2?0xffd5e8f7:0xff244b68,themeIndex==2?0xffe9f2fa:0xff163750,22));
@@ -2019,7 +2021,14 @@ public class MainActivity extends Activity {
             // follow the same path rather than unexpectedly throwing users home.
             if(!returnScreen.isEmpty()){restoreReturn();return;}
             if(!home){saveReadingProgress();home=true;screen="chat";returnScreen="";searchReturnsToAnalytics=false;showPage();}});
-        TextView logo=text("◇",29,ACCENT);logo.setGravity(Gravity.CENTER);logo.setContentDescription("Локальный архив");head.addView(logo,p(34,42));
+        headerAvatar=text("◇",23,ACCENT);headerAvatar.setGravity(Gravity.CENTER);
+        headerAvatar.setContentDescription("Аватар текущей переписки; открыть медиа");
+        head.addView(headerAvatar,p(34,42));
+        headerAvatar.setOnClickListener(v->{
+            if(!home&&!"help".equals(screen)&&!"saved".equals(screen)){
+                rememberChatPositionForReturn();screen="media";showPage();
+            }
+        });
         LinearLayout headings=column();headings.setGravity(Gravity.CENTER_VERTICAL);
         head.addView(headings,new LinearLayout.LayoutParams(0,px(50),1));
         title=text("Telegram Archive",17,FG);title.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
@@ -2100,6 +2109,17 @@ public class MainActivity extends Activity {
         if(pdfButton!=null)pdfButton.setVisibility(View.VISIBLE);
         if(folderButton!=null)folderButton.setVisibility(View.GONE);
         title.setText(activeName);
+        Bitmap chatIcon=PersonalImages.load(this,getPreferences(MODE_PRIVATE)
+            .getString(PersonalImages.chatAvatarKey(activeKey),""));
+        if(chatIcon!=null){
+            headerAvatar.setText("");
+            headerAvatar.setBackground(new android.graphics.drawable.BitmapDrawable(
+                getResources(),PersonalImages.circular(chatIcon,px(34))));
+        }else{
+            headerAvatar.setText(initial(activeName));
+            headerAvatar.setTextColor(FG);
+            headerAvatar.setBackground(shape(participantColors[(activeKey.hashCode()&Integer.MAX_VALUE)%participantColors.length],100));
+        }
         subtitle.setText(screen.equals("chat")?"История сообщений · локально":screen.equals("media")?"Фото, видео, голосовые и файлы":screen.equals("favorites")?"Твои сохранённые сообщения":screen.equals("analytics")?"Статистика · полностью офлайн":screen.equals("relationships")?"Личные события и этапы":screen.equals("echo")?"Повторяющиеся фразы":screen.equals("chronology")?"Периоды истории · вручную":screen.equals("cinema")?"Медиа по годам · офлайн":"Найди любое сообщение");
     }
     private void configureBars(){
