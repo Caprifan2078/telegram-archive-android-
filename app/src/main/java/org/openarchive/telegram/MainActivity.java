@@ -1520,7 +1520,7 @@ public class MainActivity extends Activity {
     private void showChatActions(String key){
         JSONObject chat=archiveByKey(key);if(chat==null)return;
         String name=chat.optString("name","Переписка");
-        String pin=isChatPinned(key)?"Открепить от верха":"Закрепить наверху";
+        String pin=isChatPinned(key)?"Открепить чат":"Закрепить чат";
         new FontDialog.Builder(this).setTitle(name).setItems(
             new String[]{"Открыть переписку","Переименовать","Установить аватар","Открыть медиа",pin,"Скрыть переписку","Удалить из списка (в корзину)"},
             (d,which)->{
@@ -2022,7 +2022,7 @@ public class MainActivity extends Activity {
         subtitle.setSingleLine(true);subtitle.setEllipsize(TextUtils.TruncateAt.END);headings.addView(subtitle,p(-1,19));
         pdfButton=btn("PDF");pdfButton.setTextSize(11);pdfButton.setContentDescription("Сохранить переписку в PDF");
         head.addView(pdfButton,p(42,42));pdfButton.setOnClickListener(v->chooseConversationPdf());
-        headerActions=btn("≡");headerActions.setContentDescription("Меню переписки и настройки");head.addView(headerActions,p(42,42));
+        headerActions=btn("≡");headerActions.setContentDescription("Меню переписки");head.addView(headerActions,p(42,42));
         headerActions.setOnClickListener(v->showConversationMenu(headerActions));
         title.setOnClickListener(v->{
             if(!home&&!"saved".equals(screen)&&!"help".equals(screen)){rememberChatPositionForReturn();screen="media";showPage();}
