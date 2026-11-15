@@ -1428,6 +1428,7 @@ public class MainActivity extends Activity {
             }
         }
         orderedChats.sort((a,b)->Boolean.compare(isChatPinned(b.optString("key")),isChatPinned(a.optString("key"))));
+        heading.setText("Всего чатов: "+orderedChats.size());
         for(int i=0;i<orderedChats.size();i++){
             JSONObject chat=orderedChats.get(i);
             String key=chat.optString("key"),name=chat.optString("name","Переписка");
@@ -1776,6 +1777,19 @@ public class MainActivity extends Activity {
     }
     private void loadArchiveRegistry(){
         try{archives=new JSONArray(getPreferences(MODE_PRIVATE).getString("archive_registry","[]"));}catch(Exception e){archives=new JSONArray();}
+        // Older builds stored auto-generated ZIP names as user-facing chat titles.
+        // Migrate only that exact default pattern; never overwrite a personal title.
+        boolean renamed=false;
+        for(int i=0;i<archives.length();i++){
+            JSONObject old=archives.optJSONObject(i);
+            if(old==null)continue;
+            String label=old.optString("name","");
+            if(TelegramImportSource.isGeneratedArchiveLabel(label)){
+                try{old.put("name",TelegramImportSource.suggestedChatName(label));renamed=true;}
+                catch(Exception ignored){}
+            }
+        }
+        if(renamed)getPreferences(MODE_PRIVATE).edit().putString("archive_registry",archives.toString()).apply();
         activeKey=getPreferences(MODE_PRIVATE).getString("active_archive","default");
         if(archives.length()==0){
             String old=getPreferences(MODE_PRIVATE).getString("tree",null);
