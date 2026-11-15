@@ -26,7 +26,6 @@ import static org.junit.Assert.*;
 @RunWith(AndroidJUnit4.class)
 public final class UnifiedImportScreenRegressionTest {
     @Rule public ActivityTestRule<MainActivity> activity=new ActivityTestRule<>(MainActivity.class);
-    private final androidx.test.platform.app.InstrumentationRegistry unused=null;
 
     private SharedPreferences prefs(Context context){
         String name=new ComponentName(context,MainActivity.class).getShortClassName();
@@ -74,7 +73,7 @@ public final class UnifiedImportScreenRegressionTest {
                 assertEquals("HTML chat was not registered",previous+1,after.length());
                 JSONObject chat=after.getJSONObject(after.length()-1);
                 key=chat.getString("key");
-                assertEquals("Переписка",chat.getString("name"));
+                assertEquals("Переписка · 23.10.2026",chat.getString("name"));
                 MessageDb imported=new MessageDb(ctx,key);
                 try {
                     assertEquals(1,imported.totalMessages());
