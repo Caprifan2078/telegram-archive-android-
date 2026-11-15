@@ -7,6 +7,7 @@ on:
       - 'app/src/main/java/org/openarchive/telegram/TelegramImportSource.java'
       - 'app/src/test/java/org/openarchive/telegram/TelegramImportSourceTest.java'
       - 'app/src/androidTest/java/org/openarchive/telegram/UnifiedImportScreenRegressionTest.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/Qa00NavigationCoreTest.java'
       - '.github/workflows/ux-chat-import-20261115.yml'
   workflow_dispatch:
 permissions:
@@ -45,7 +46,7 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 420
           script: |
-            gradle --no-daemon --max-workers=2 connectedHandoffQaAndroidTest -PqaHandoffInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.UnifiedImportScreenRegressionTest,org.openarchive.telegram.Qa01ChatListSizeTest,org.openarchive.telegram.Qa01TwoChatsTest,org.openarchive.telegram.UiSmokeTest,org.openarchive.telegram.ArchiveEndToEndRegressionTest,org.openarchive.telegram.ArchiveZipFooterImportRegressionTest,org.openarchive.telegram.MultipleChatArchiveRegressionTest,org.openarchive.telegram.ImportRollbackRegressionTest,org.openarchive.telegram.MediaTabsIsolationTest'
+            gradle --no-daemon --max-workers=2 connectedHandoffQaAndroidTest -PqaHandoffInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.UnifiedImportScreenRegressionTest,org.openarchive.telegram.Qa00NavigationCoreTest,org.openarchive.telegram.Qa00MediaFilterTest,org.openarchive.telegram.Qa00MediaLifecycleTest,org.openarchive.telegram.Qa01ChatListSizeTest,org.openarchive.telegram.Qa01TwoChatsTest,org.openarchive.telegram.UiSmokeTest,org.openarchive.telegram.ArchiveEndToEndRegressionTest,org.openarchive.telegram.ArchiveZipFooterImportRegressionTest,org.openarchive.telegram.MultipleChatArchiveRegressionTest,org.openarchive.telegram.ImportRollbackRegressionTest,org.openarchive.telegram.MediaTabsIsolationTest'
       - name: Synthetic XML and screenshots
         if: always()
         uses: actions/upload-artifact@v4
