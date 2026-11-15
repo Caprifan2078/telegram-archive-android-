@@ -30,6 +30,7 @@ final class TelegramImportSource {
         if(file==null)return "Переписка";
         String result=file.replace('\\','/');result=result.substring(result.lastIndexOf('/')+1);
         result=result.replaceFirst("(?i)\\.(zip|7z|rar|html|htm)$","").trim();
+        result=result.replaceAll("^[. _-]+|[. _-]+$","");
         if(result.matches("(?i)chat[ _-]?export[ _-]?\\d{4}[-_]\\d{2}[-_]\\d{2}") ||
            result.matches("(?i)messages\\d*"))return "Переписка";
         if(result.isEmpty())return "Переписка";
