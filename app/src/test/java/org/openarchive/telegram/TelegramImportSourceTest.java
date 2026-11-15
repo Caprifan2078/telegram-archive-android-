@@ -24,7 +24,9 @@ public class TelegramImportSourceTest {
         assertEquals(TelegramImportSource.Kind.ZIP,TelegramImportSource.detect("chat.html",new byte[]{'P','K',3,4}));
     }
     @Test public void noUnexpectedFilenameLeakIntoChatTitle() {
-        assertEquals("Переписка",TelegramImportSource.suggestedChatName("ChatExport_2026-10-23.zip"));
+        assertTrue(TelegramImportSource.isGeneratedArchiveLabel("ChatExport_2026-10-23.zip"));
+        assertFalse(TelegramImportSource.isGeneratedArchiveLabel("Моя переписка.zip"));
+        assertEquals("Переписка · 23.10.2026",TelegramImportSource.suggestedChatName("ChatExport_2026-10-23.zip"));
         assertEquals("Переписка",TelegramImportSource.suggestedChatName("messages2.html"));
         assertEquals("Семья",TelegramImportSource.suggestedChatName("Семья.zip"));
         assertEquals("Переписка",TelegramImportSource.suggestedChatName("...zip"));
