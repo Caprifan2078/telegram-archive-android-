@@ -77,7 +77,13 @@ public final class UnifiedImportScreenRegressionTest {
                 MessageDb imported=new MessageDb(ctx,key);
                 try {
                     assertEquals(1,imported.totalMessages());
-                    assertEquals(1,imported.count("Standalone HTML sentinel",false,"",false,false));
+                    String body=imported.page(0,1,"",false,"",false,false).get(0).body;
+                    assertNotNull("Imported HTML body was null",body);
+                    assertTrue("Imported HTML text was lost: "+body,body.contains("Standalone HTML sentinel"));
+                    assertEquals("Deep text search must find imported HTML",1,
+                        imported.count("Standalone HTML sentinel",true,"",false,false));
+                    assertEquals("Single-word FTS search must find imported HTML",1,
+                        imported.count("sentinel",false,"",false,false));
                 }finally{imported.close();}
             }else{
                 assertEquals("Invalid HTML must not register a chat",previous,after.length());
