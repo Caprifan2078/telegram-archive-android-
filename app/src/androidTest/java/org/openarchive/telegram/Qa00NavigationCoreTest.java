@@ -124,12 +124,14 @@ public class Qa00NavigationCoreTest {
         }
     }
 
-    @Test public void emptyHomeOpensImportDialogAndClosesDrawerByTouchOutside() {
+    @Test public void emptyHomeOpensSingleFilePickerAndClosesDrawerByTouchOutside() {
         shown("Мои переписки");
         shown("Добавить переписку");
         tap("Добавить переписку");
-        shown("Добавить переписку"); // chooser is a real Android AlertDialog
-        shown("Выбрать папку Telegram");
+        // One primary action opens Android's real document picker. The folder
+        // alternative is a long-press or an explicit drawer action.
+        assertTrue("System document picker did not open",device.wait(
+            Until.hasObject(By.pkg(java.util.regex.Pattern.compile(".*documentsui"))),10000));
         device.pressBack();
         device.waitForIdle();
         shown("Мои переписки");
