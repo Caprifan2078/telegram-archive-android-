@@ -62,7 +62,16 @@ android {
             signingConfig signingConfigs.debug
         }
     }
-    testBuildType (project.findProperty('qaHandoffInstrumentation') == 'true' ? 'handoffQa' : (project.findProperty('qaStableInstrumentation') == 'true' ? 'stableQa' : 'compactQa'))
+    // A new isolated preview ID protects previous QA builds with ephemeral debug certs.
+    // Existing user chats and applications must NEVER be replaced by this APK.
+    buildTypes {
+        uxQa {
+            initWith compactQa
+            applicationIdSuffix '.uxpreview20261115'
+            signingConfig signingConfigs.debug
+        }
+    }
+    testBuildType (project.findProperty('qaUxInstrumentation') == 'true' ? 'uxQa' : (project.findProperty('qaHandoffInstrumentation') == 'true' ? 'handoffQa' : (project.findProperty('qaStableInstrumentation') == 'true' ? 'stableQa' : 'compactQa')))
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
