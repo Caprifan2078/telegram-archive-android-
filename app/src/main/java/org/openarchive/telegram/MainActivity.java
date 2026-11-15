@@ -1285,6 +1285,7 @@ public class MainActivity extends Activity {
         menuButton.setVisibility(View.GONE);navBack.setVisibility(View.VISIBLE);
         bottomNav.setVisibility(View.GONE);bottomPager.setVisibility(View.GONE);
         if(headerActions!=null)headerActions.setVisibility(View.GONE);
+        if(pdfButton!=null)pdfButton.setVisibility(View.GONE);
         savedComposer.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
         playerStrip.setVisibility(View.GONE);pinnedBar.removeAllViews();
         filterBar.removeAllViews();searchArea.removeAllViews();
@@ -1617,6 +1618,8 @@ public class MainActivity extends Activity {
         list.setBackgroundColor(BG);
         ++loadToken;home=false;screen="saved";list.removeAllViews();filterBar.removeAllViews();searchArea.removeAllViews();pinnedBar.removeAllViews();bottomNav.setVisibility(View.GONE);bottomPager.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
         menuButton.setVisibility(View.GONE);navBack.setVisibility(View.VISIBLE);title.setText("★ Избранное");subtitle.setText("Локальные заметки и сохранённые сообщения");
+        if(pdfButton!=null)pdfButton.setVisibility(View.GONE);
+        if(headerActions!=null)headerActions.setVisibility(View.GONE);
         savedComposer.removeAllViews();savedComposer.setVisibility(View.VISIBLE);
         LinearLayout compose=row();savedComposer.addView(compose,p(-1,-2));
         EditText input=new EditText(this);input.setHint("Написать заметку…");input.setTextColor(FG);input.setHintTextColor(SUB);compose.addView(input,new LinearLayout.LayoutParams(0,-2,1));
@@ -1904,6 +1907,9 @@ public class MainActivity extends Activity {
         });popup.show();
     }
     private void chooseConversationPdf(){
+        if(home||db==null||"help".equals(screen)||"saved".equals(screen)){
+            toast("Сначала открой переписку");return;
+        }
         new FontDialog.Builder(this).setTitle("Сохранить переписку в PDF")
             .setMessage("В PDF войдут текст, авторы и даты всех сообщений. Вложения будут обозначены текстом, без самих файлов. Для очень больших переписок действует ограничение: 250 страниц.")
             .setNegativeButton("Отмена",null).setPositiveButton("Выбрать файл",(dialog,which)->{
@@ -2372,7 +2378,11 @@ public class MainActivity extends Activity {
             return;
         }
         if(request==WRAPPED_PNG_REQUEST&&result==RESULT_OK&&data!=null&&data.getData()!=null){exportWrappedTo(data.getData());return;}
-        if((request==60||request==61||request==62)&&result==RESULT_OK&&data!=null&&data.getData()!=null){applyPersonalImage(data.getData(),request);return;}
+        if(request==60||request==61||request==62){
+            if(result==RESULT_OK&&data!=null&&data.getData()!=null)applyPersonalImage(data.getData(),request);
+            else{pendingImageChatKey="";pendingAvatarUsers.clear();}
+            return;
+        }
         if(request==44&&result==RESULT_OK&&data!=null&&data.getData()!=null){dryRunSelected(data.getData());return;}
         if(request==43&&result==RESULT_OK&&data!=null&&data.getData()!=null){verifyBackup(data.getData());return;}
         if(request==41&&(result!=RESULT_OK||data==null||data.getData()==null)){
