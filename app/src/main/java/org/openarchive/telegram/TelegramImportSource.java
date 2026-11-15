@@ -26,13 +26,21 @@ final class TelegramImportSource {
         return Kind.PREVIEW;
     }
 
+    /** Only auto-generated old Telegram export labels are migrated; user names stay unchanged. */
+    static boolean isGeneratedArchiveLabel(String name){
+        return name!=null && name.matches(
+            "(?i)^chat[ _-]?export[ _-]?\\d{4}[-_]\\d{2}[-_]\\d{2}\\.(zip|7z|rar|html|htm)$");
+    }
+
     static String suggestedChatName(String file){
         if(file==null)return "Переписка";
         String result=file.replace('\\','/');result=result.substring(result.lastIndexOf('/')+1);
         result=result.replaceFirst("(?i)\\.(zip|7z|rar|html|htm)$","").trim();
         result=result.replaceAll("^[. _-]+|[. _-]+$","");
-        if(result.matches("(?i)chat[ _-]?export[ _-]?\\d{4}[-_]\\d{2}[-_]\\d{2}") ||
-           result.matches("(?i)messages\\d*"))return "Переписка";
+        java.util.regex.Matcher auto=java.util.regex.Pattern.compile(
+            "(?i)^chat[ _-]?export[ _-]?(\\d{4})[-_](\\d{2})[-_](\\d{2})$").matcher(result);
+        if(auto.matches())return "Переписка · "+auto.group(3)+"."+auto.group(2)+"."+auto.group(1);
+        if(result.matches("(?i)messages\\d*"))return "Переписка";
         if(result.isEmpty())return "Переписка";
         return result.length()>80?result.substring(0,80):result;
     }
