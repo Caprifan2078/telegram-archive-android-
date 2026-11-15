@@ -2109,15 +2109,14 @@ public class MainActivity extends Activity {
         if(pdfButton!=null)pdfButton.setVisibility(View.VISIBLE);
         if(folderButton!=null)folderButton.setVisibility(View.GONE);
         title.setText(activeName);
-        Bitmap chatIcon=PersonalImages.load(this,getPreferences(MODE_PRIVATE)
-            .getString(PersonalImages.chatAvatarKey(activeKey),""));
+        String chatAvatarFile=getPreferences(MODE_PRIVATE).getString(PersonalImages.chatAvatarKey(activeKey),"");
+        Bitmap chatIcon=PersonalImages.circularCached(this,chatAvatarFile,px(34));
         if(chatIcon!=null){
             headerAvatar.setText("");
-            headerAvatar.setBackground(new android.graphics.drawable.BitmapDrawable(
-                getResources(),PersonalImages.circular(chatIcon,px(34))));
+            headerAvatar.setBackground(new android.graphics.drawable.BitmapDrawable(getResources(),chatIcon));
         }else{
             headerAvatar.setText(initial(activeName));
-            headerAvatar.setTextColor(FG);
+            headerAvatar.setTextColor(0xffffffff);
             headerAvatar.setBackground(shape(participantColors[(activeKey.hashCode()&Integer.MAX_VALUE)%participantColors.length],100));
         }
         subtitle.setText(screen.equals("chat")?"История сообщений · локально":screen.equals("media")?"Фото, видео, голосовые и файлы":screen.equals("favorites")?"Твои сохранённые сообщения":screen.equals("analytics")?"Статистика · полностью офлайн":screen.equals("relationships")?"Личные события и этапы":screen.equals("echo")?"Повторяющиеся фразы":screen.equals("chronology")?"Периоды истории · вручную":screen.equals("cinema")?"Медиа по годам · офлайн":"Найди любое сообщение");
