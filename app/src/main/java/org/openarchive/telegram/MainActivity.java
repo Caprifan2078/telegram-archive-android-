@@ -2426,14 +2426,17 @@ public class MainActivity extends Activity {
         Uri uri=data.getData();
         try{getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);}
         catch(Exception e){status.setText("Нет доступа к папке: "+e.getMessage());return;}
-        EditText chatName=new EditText(this);chatName.setSingleLine(true);chatName.setHint("Например, переписка с Ваней");
-        new FontDialog.Builder(this).setTitle("Название чата").setView(chatName).setPositiveButton("Добавить",(dd,ww)->{
-        String name=chatName.getText().toString().trim();if(name.isEmpty())name="Чат "+(archives.length()+1);
-        registerArchive(name,uri.toString());
-        new FontDialog.Builder(this).setTitle("Импортировать экспорт Telegram?")
-                .setMessage("Будут проиндексированы все messages*.html. Фото, видео и голосовые останутся в этой папке. Текущие сообщения заменятся только после успешного импорта. Избранное по возможности сохранится.")
-                .setPositiveButton("Импортировать",(d,w)->importArchive()).setNegativeButton("Отмена",null).show();
-        }).setNegativeButton("Отмена",null).show();
+        EditText chatName=new EditText(this);chatName.setSingleLine(true);
+        chatName.setHint("Как назвать эту переписку?");
+        chatName.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(80)});
+        new FontDialog.Builder(this).setTitle("Импорт папки Telegram")
+            .setMessage("Приложение прочитает messages*.html. Фото и другие файлы останутся в этой папке. Чат появится в списке только после успешного импорта.")
+            .setView(chatName)
+            .setPositiveButton("Импортировать",(d,w)->{
+                String name=chatName.getText().toString().trim();
+                if(name.isEmpty())name="Переписка "+(archives.length()+1);
+                importSelectedFolder(uri,name);
+            }).setNegativeButton("Отмена",null).show();
     }
     private void routePickedFile(Uri source,String name,TelegramImportSource.Kind kind){
         if(kind==TelegramImportSource.Kind.PREVIEW){showReadOnlyPreview(source,name);return;}
@@ -2458,6 +2461,36 @@ public class MainActivity extends Activity {
             importCompressed(source,ext,name,password);
             archivePassword.setText("");
         }).show();
+    }
+    private void importSelectedFolder(Uri uri,String name){
+        if(importing){toast("Дождись завершения предыдущего импорта");return;}
+        importing=true;folderButton.setEnabled(false);
+        status.setText("Проверяю папку Telegram…");
+        String key=UUID.randomUUID().toString().replace("-","");
+        worker.execute(()->{
+            try{
+                DocumentFolder selected=new DocumentFolder(getContentResolver(),uri);
+                MessageDb fresh=new MessageDb(this,key);
+                try{TelegramImporter.importFiles(getContentResolver(),selected,fresh,
+                    msg->runOnUiThread(()->status.setText(msg)));}
+                finally{fresh.close();}
+                runOnUiThread(()->{
+                    importing=false;folderButton.setEnabled(true);
+                    try{
+                        JSONObject chat=new JSONObject();chat.put("key",key);
+                        chat.put("name",name);chat.put("tree",uri.toString());
+                        archives.put(chat);activateArchive(key);
+                        status.setText("Папка Telegram импортирована");
+                    }catch(Exception error){toast("Не удалось сохранить переписку: "+error.getMessage());}
+                });
+            }catch(Exception error){
+                deleteDatabase("telegram_"+key+".db");
+                runOnUiThread(()->{
+                    importing=false;folderButton.setEnabled(true);
+                    status.setText("Не удалось импортировать папку: "+error.getMessage());
+                });
+            }
+        });
     }
     private void importStandaloneHtml(Uri source,String name){
         if(importing)return;
