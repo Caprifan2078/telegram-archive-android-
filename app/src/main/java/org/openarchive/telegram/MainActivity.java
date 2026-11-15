@@ -73,6 +73,7 @@ import org.json.JSONObject;
 import java.util.UUID;
 import android.widget.MediaController;
 import android.webkit.MimeTypeMap;
+import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.IOException;
@@ -1081,13 +1082,34 @@ public class MainActivity extends Activity {
         });
         space(group,5);
     }
+    private int drawerIconFor(String label){
+        if(label.contains("Импорт")||label.contains("Добавить")||label.contains("Подключить"))return android.R.drawable.ic_menu_add;
+        if(label.contains("копи")||label.contains("Восстановить")||label.contains("Сохранить"))return android.R.drawable.ic_menu_save;
+        if(label.contains("Поиск"))return android.R.drawable.ic_menu_search;
+        if(label.contains("Медиа")||label.contains("Аватар")||label.contains("Кинолента"))return android.R.drawable.ic_menu_gallery;
+        if(label.contains("Хронолог")||label.contains("истории")||label.contains("В этот день")||label.contains("Воспоминани"))return android.R.drawable.ic_menu_recent_history;
+        if(label.contains("Заметки")||label.contains("Шрифты")||label.contains("Настройки")||label.contains("Оформление"))return android.R.drawable.ic_menu_edit;
+        if(label.contains("Помощь"))return android.R.drawable.ic_menu_help;
+        if(label.contains("Диагностика")||label.contains("Здоровье"))return android.R.drawable.ic_menu_info_details;
+        if(label.contains("Сравнение")||label.contains("Анализ"))return android.R.drawable.ic_menu_sort_by_size;
+        return android.R.drawable.ic_menu_manage;
+    }
     private void sideMenuItem(LinearLayout parent,Dialog dialog,View pane,
                               String heading,String detail,Runnable action){
-        LinearLayout item=column();item.setPadding(px(13),px(11),px(9),px(11));
+        int separator=heading.indexOf("  ");
+        String label=separator>=0?heading.substring(separator+2).trim():heading.trim();
+        LinearLayout item=row();item.setGravity(Gravity.CENTER_VERTICAL);
+        item.setPadding(px(10),px(11),px(10),px(11));
         item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2e5aaad8),outlined(PANEL,15,false),null));
         LinearLayout.LayoutParams params=p(-1,-2);params.bottomMargin=px(5);parent.addView(item,params);
-        TextView name=text(heading,15,FG);name.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));item.addView(name);
-        TextView summary=text(detail,12,SUB);summary.setPadding(0,px(4),0,0);item.addView(summary);
+        ImageView icon=new ImageView(this);
+        icon.setImageResource(drawerIconFor(label));icon.setColorFilter(ACCENT);
+        icon.setPadding(px(9),px(9),px(9),px(9));icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        icon.setBackground(shape(CHIP,13));
+        item.addView(icon,p(40,40));
+        LinearLayout copy=column();copy.setPadding(px(12),0,0,0);item.addView(copy,new LinearLayout.LayoutParams(0,-2,1));
+        TextView name=text(label,15,FG);name.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));copy.addView(name);
+        TextView summary=text(detail,12,SUB);summary.setPadding(0,px(4),0,0);copy.addView(summary);
         item.setOnClickListener(v->closeDrawer(dialog,pane,action));
     }
     private void glassDialog(){
