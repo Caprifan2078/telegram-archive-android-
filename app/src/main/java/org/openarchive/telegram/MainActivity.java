@@ -1444,7 +1444,10 @@ public class MainActivity extends Activity {
             TextView nameLabel=text((isChatPinned(key)?"📌  ":"")+name,16,FG);nameLabel.setTypeface(null,Typeface.BOLD);nameLabel.setSingleLine(true);
             nameLabel.setEllipsize(TextUtils.TruncateAt.END);info.addView(nameLabel);
             info.addView(text("Переписка на устройстве · офлайн",12,SUB));
-            TextView arrow=text("›",25,ACCENT);item.addView(arrow);
+            TextView actions=text("⋯",26,ACCENT);actions.setGravity(Gravity.CENTER);
+            actions.setContentDescription("Действия с перепиской: "+name);
+            actions.setBackground(shape(CHIP,12));item.addView(actions,p(42,42));
+            actions.setOnClickListener(v->showChatActions(key));
             item.setOnClickListener(v->{item.animate().alpha(.75f).setDuration(90).withEndAction(()->{item.setAlpha(1);activateArchive(key);}).start();});
             item.setOnLongClickListener(v->{showChatActions(key);return true;});
         }
