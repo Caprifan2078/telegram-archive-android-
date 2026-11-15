@@ -3852,23 +3852,31 @@ public class MainActivity extends Activity {
         int token=++loadToken;
         if(home){screen="chat";showPage();return;}
         bottomNav.setVisibility(View.VISIBLE);refreshTabs();
-        title.setText("Хронология");subtitle.setText("Периоды истории · вручную");
+        title.setText("Хронология");subtitle.setText("Периоды и памятные моменты");
         filterBar.removeAllViews();searchArea.removeAllViews();
         bottomPager.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
-        list.removeAllViews();list.setBackgroundColor(BG);status.setText("Загружаю твою хронологию…");
-        TextView heading=text("◷  Хронология истории",21,FG);heading.setTypeface(null,Typeface.BOLD);
+        list.removeAllViews();list.setBackgroundColor(BG);status.setText("Загружаю историю…");
+        TextView heading=text("Твоя хронология",21,FG);heading.setTypeface(null,Typeface.BOLD);
         heading.setPadding(px(12),px(12),px(12),px(10));list.addView(heading);
-        analyticsText(list,"Этот раздел включается только вручную. Ты сам задаёшь названия и границы, даже посередине сообщения. Импортированный текст не меняется.",SUB,13);
-        Button back=btn("‹ К разделу «Хронология»");list.addView(back,p(-1,46));
-        back.setOnClickListener(v->{screen="relationships";showPage();});
-        Button chat=btn("↗ К переписке");list.addView(chat,p(-1,46));
-        chat.setOnClickListener(v->{screen="chat";showPage();});
-        Button twoChats=btn("◷ Показать две переписки на общей временной линии");
-        list.addView(twoChats,p(-1,48));twoChats.setOnClickListener(v->chooseDualChat("dual_memories"));
-        TextView how=text("Как создать этап: открой «Переписка» → удерживай первое сообщение → «Отметить начало периода». Затем отметь конец в другом сообщении, придумай название и сохрани.",14,FG);
-        how.setPadding(px(12),px(15),px(12),px(15));how.setBackground(glass(PANEL,14));list.addView(how,p(-1,-2));
-        Button addCalendar=btn("+ Календарный период · любые даты");list.addView(addCalendar,p(-1,-2));addCalendar.setOnClickListener(v->editCalendarPeriod(null));
+        analyticsText(list,"Сохраняй важные этапы вашей истории. Они видны только тебе и не изменяют исходные сообщения.",SUB,13);
+        Button chat=btn("1. Отметить период по сообщениям");
+        list.addView(chat,p(-1,48));chat.setOnClickListener(v->{
+            screen="chat";showPage();
+            new FontDialog.Builder(this).setTitle("Как отметить этап")
+                .setMessage("Удерживай первое сообщение → «Начало периода», затем последнее сообщение → «Конец периода». Дай этапу название и сохрани.")
+                .setPositiveButton("Понятно",null).show();
+        });
+        Button addCalendar=btn("2. Добавить период по датам");
+        list.addView(addCalendar,p(-1,48));addCalendar.setOnClickListener(v->editCalendarPeriod(null));
+        Button memories=btn("Мои события и воспоминания");
+        list.addView(memories,p(-1,45));memories.setOnClickListener(v->{screen="relationships";showPage();});
+        Button twoChats=btn("Дополнительно · сравнить две переписки");
+        list.addView(twoChats,p(-1,45));twoChats.setOnClickListener(v->chooseDualChat("dual_memories"));
+        TextView calendarTitle=text("Периоды по датам",16,FG);
+        calendarTitle.setTypeface(null,Typeface.BOLD);calendarTitle.setPadding(px(10),px(18),0,px(9));list.addView(calendarTitle);
         LinearLayout calendar=column();list.addView(calendar,p(-1,-2));renderCalendarPeriods(calendar,db,activeKey,token);
+        TextView stagesTitle=text("Периоды из переписки",16,FG);stagesTitle.setTypeface(null,Typeface.BOLD);
+        stagesTitle.setPadding(px(10),px(20),0,px(9));list.addView(stagesTitle);
         final MessageDb source=db, initial=db;final String archive=activeKey;
         worker.execute(()->{
             try{
@@ -3879,7 +3887,7 @@ public class MainActivity extends Activity {
                 for(ConversationPeriods.Chapter stage:stages)phaseMedia.put(stage.id,source.relationshipMedia(-stage.id));
                 runOnUiThread(()->{
                     if(isFinishing()||token!=loadToken||!archive.equals(activeKey)||db!=initial)return;
-                    if(stages.isEmpty())analyticsText(list,"Периодов пока нет. Отметь начало и конец через долгое нажатие на сообщения.",ACCENT,14);
+                    if(stages.isEmpty())analyticsText(list,"Пока нет этапов. Нажми «Отметить период по сообщениям» выше — приложение покажет, как начать.",SUB,13);
                     long peak=1;for(ConversationPeriods.Stats st:stats.values())for(long n:st.bins)peak=Math.max(peak,n);
                     final long maximum=peak;
                     renderPeriodOverlay(stages,stats);
@@ -3887,22 +3895,29 @@ public class MainActivity extends Activity {
                     for(ConversationPeriods.Chapter stage:stages){
                         ConversationPeriods.Stats st=stats.get(stage.id);
                         LinearLayout card=analyticsCard((++index)+". "+stage.name);
-                        analyticsText(card,"Сообщения "+stage.start.messageId+" : "+stage.start.offset+
-                            " — "+stage.end.messageId+" : "+stage.end.offset,SUB,11);
-                        if(!stage.note.isEmpty())analyticsText(card,"Заметка: "+stage.note,FG,13);
-                        analyticsText(card,"Сообщений: "+st.messages+" · медиа: "+st.media+
-                            " · активных дней: "+st.activeDays+" · сообщений/активный день: "+
-                            String.format(Locale.ROOT,"%.1f",st.dailyAverage()),FG,13);
-                        analyticsText(card,"Даты: "+st.firstDate+" — "+st.lastDate+
-                            " · график: 12 равных частей этого периода, общая шкала для всех этапов",SUB,11);
-                        renderPeriodBars(card,st,maximum);
+                        analyticsText(card,st.firstDate+" — "+st.lastDate,ACCENT,13);
+                        if(!stage.note.isEmpty())analyticsText(card,stage.note,FG,13);
+                        analyticsText(card,st.messages+" сообщений · "+st.media+" медиа · "+st.activeDays+" активных дней",FG,13);
+                        LinearLayout details=column();details.setVisibility(View.GONE);card.addView(details,p(-1,-2));
+                        analyticsText(details,"Сообщения #"+stage.start.messageId+" — #"+stage.end.messageId+
+                            " · границы текста: "+stage.start.offset+" / "+stage.end.offset,SUB,11);
+                        analyticsText(details,"Сообщений за активный день: "+
+                            String.format(Locale.ROOT,"%.1f",st.dailyAverage())+
+                            " · график из 12 частей, единая шкала для всех этапов",SUB,11);
+                        renderPeriodBars(details,st,maximum);
                         List<MessageDb.Attachment> phaseAttachments=phaseMedia.get(stage.id);
                         if(phaseAttachments!=null)for(MessageDb.Attachment a:phaseAttachments){
-                            Button media=btn("▣ "+mediaLabel(a.kind)+" · открыть вложение");
-                            card.addView(media,p(-1,42));media.setOnClickListener(v->openMedia(a));
+                            Button media=btn("Открыть медиа · "+mediaLabel(a.kind));
+                            details.addView(media,p(-1,42));media.setOnClickListener(v->openMedia(a));
                         }
-                        Button link=btn("+ Прикрепить фото, кружок или файл к этапу");card.addView(link,p(-1,46));
+                        Button link=btn("Прикрепить медиа к этапу");details.addView(link,p(-1,44));
                         link.setOnClickListener(v->chooseRelationshipAttachment(-stage.id,0));
+                        Button showDetails=btn("Подробнее об этапе ▾");card.addView(showDetails,p(-1,42));
+                        showDetails.setOnClickListener(v->{
+                            boolean open=details.getVisibility()!=View.VISIBLE;
+                            details.setVisibility(open?View.VISIBLE:View.GONE);
+                            showDetails.setText(open?"Свернуть подробности ▴":"Подробнее об этапе ▾");
+                        });
                         LinearLayout buttons=row();card.addView(buttons,p(-1,42));
                         Button jump=btn("↗ Начало");buttons.addView(jump,new LinearLayout.LayoutParams(0,-1,1));
                         jump.setOnClickListener(v->jump(stage.start.messageId,"chronology"));
