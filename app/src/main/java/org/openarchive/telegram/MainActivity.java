@@ -147,7 +147,7 @@ public class MainActivity extends Activity {
     private VerticalTimeline verticalTimeline;
     private final int[] participantColors={0xff315c79,0xff665184,0xff326c65,0xff75513f,0xff5d607f,0xff724d68,0xff52683a,0xff426884};
     private LinearLayout base,list,filterBar,bottomNav,searchArea,toolArea,savedComposer;
-    private ScrollView scroll;private TextView title,subtitle,status,pageLabel;private Button navBack,menuButton;private String lastRenderedDay="";
+    private ScrollView scroll;private TextView title,subtitle,status,pageLabel,headerLogo;private Button pdfButton;private Button navBack,menuButton;private String lastRenderedDay="";
     private EditText searchInput,authorInput;private CheckBox mediaOnly;
     private String restoredQueryDraft=null,restoredAuthorDraft=null;private Boolean restoredMediaDraft=null;
     private Button backPage,nextPage,quickButton,deepButton,folderButton,backButton,headerActions;
@@ -1262,6 +1262,7 @@ public class MainActivity extends Activity {
         menuButton.setVisibility(View.GONE);navBack.setVisibility(View.VISIBLE);
         bottomNav.setVisibility(View.GONE);bottomPager.setVisibility(View.GONE);
         if(headerActions!=null)headerActions.setVisibility(View.GONE);
+        if(pdfButton!=null)pdfButton.setVisibility(View.GONE);
         savedComposer.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
         playerStrip.setVisibility(View.GONE);pinnedBar.removeAllViews();
         filterBar.removeAllViews();searchArea.removeAllViews();
@@ -1362,6 +1363,8 @@ public class MainActivity extends Activity {
         verticalTimeline.setVisibility(View.GONE);bottomPager.setVisibility(View.GONE);bottomNav.setVisibility(View.GONE);
         menuButton.setVisibility(View.VISIBLE);navBack.setVisibility(View.GONE);
         if(headerActions!=null)headerActions.setVisibility(View.GONE);
+        if(pdfButton!=null)pdfButton.setVisibility(View.GONE);
+        if(headerLogo!=null)headerLogo.setVisibility(View.VISIBLE);
         if(folderButton!=null)folderButton.setVisibility(View.GONE); // Only the large bottom Add Chat button.
         title.setText("Мои переписки");subtitle.setText("Твои сообщения · в одном месте");
         status.setText("Личный архив  ·  Данные на устройстве");
@@ -1727,6 +1730,11 @@ public class MainActivity extends Activity {
             else if(x.contains("Цвета"))participantSettings();else chatPicker();return true;
         });menu.show();
     }
+    private void openChatMediaFromHeader(){
+        if(home||"saved".equals(screen)||"help".equals(screen)||importing)return;
+        rememberChatPositionForReturn();
+        screen="media";returnScreen="";searchReturnsToAnalytics=false;showPage();
+    }
     private void showConversationInfo(){
         new FontDialog.Builder(this).setTitle(activeName)
             .setItems(new String[]{"▦ Медиатека","⌕ Поиск сообщений","▥ Анализ переписки","⚙ Оформление переписки","Локальный профиль и заметка"},(d,i)->{
@@ -1746,7 +1754,7 @@ public class MainActivity extends Activity {
         popup.getMenu().add("⌕ Поиск");popup.getMenu().add("▥ Анализ переписки");popup.getMenu().add("♡ Хронология");popup.getMenu().add("▤ Кинолента медиа");
         popup.getMenu().add("⚙ Настроить чат");popup.getMenu().add("▦ Медиатека");
         popup.getMenu().add("📌 Закреплённые сообщения");
-        popup.getMenu().add("⇩ Сохранить переписку в PDF");
+        // PDF is a separate button in the chat header.
         popup.setOnMenuItemClickListener(item->{
             String action=item.getTitle().toString();
             if(action.contains("Все инструменты"))showSideMenu();
@@ -1757,7 +1765,6 @@ public class MainActivity extends Activity {
             else if(action.contains("Настроить"))settingsMenu();
             else if(action.contains("Медиатека")){screen="media";showPage();}
             else if(action.contains("Закреплённые"))showPinList();
-            else if(action.contains("PDF"))chooseConversationPdf();
             return true;
         });popup.show();
     }
@@ -1871,16 +1878,20 @@ public class MainActivity extends Activity {
             // follow the same path rather than unexpectedly throwing users home.
             if(!returnScreen.isEmpty()){restoreReturn();return;}
             if(!home){saveReadingProgress();home=true;screen="chat";returnScreen="";searchReturnsToAnalytics=false;showPage();}});
-        TextView logo=text("◇",29,ACCENT);logo.setGravity(Gravity.CENTER);logo.setContentDescription("Локальный архив");head.addView(logo,p(34,42));
+        headerLogo=text("◇",29,ACCENT);headerLogo.setGravity(Gravity.CENTER);headerLogo.setContentDescription("Локальный архив");head.addView(headerLogo,p(34,42));
         LinearLayout headings=column();headings.setGravity(Gravity.CENTER_VERTICAL);
         head.addView(headings,new LinearLayout.LayoutParams(0,px(50),1));
         title=text("Telegram Archive",17,FG);title.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
         title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.END);headings.addView(title,p(-1,26));
         subtitle=text("Личный архив · офлайн",11,SUB);
         subtitle.setSingleLine(true);subtitle.setEllipsize(TextUtils.TruncateAt.END);headings.addView(subtitle,p(-1,19));
-        headerActions=btn("≡");headerActions.setContentDescription("Меню переписки");head.addView(headerActions,p(42,42));
+        pdfButton=btn("PDF");pdfButton.setContentDescription("Сохранить переписку в PDF");head.addView(pdfButton,p(44,42));
+        pdfButton.setOnClickListener(v->{if(!home&&"chat".equals(screen))chooseConversationPdf();});
+        headerActions=btn("≡");headerActions.setContentDescription("Другие инструменты переписки");head.addView(headerActions,p(42,42));
         headerActions.setOnClickListener(v->showConversationMenu(headerActions));
-        title.setOnClickListener(v->{if(!home&& !"saved".equals(screen)&&!"help".equals(screen))showConversationInfo();});
+        title.setOnClickListener(v->openChatMediaFromHeader());
+        headings.setOnClickListener(v->openChatMediaFromHeader());
+        headings.setContentDescription("Открыть медиатеку переписки");
         folderButton=btn("＋");folderButton.setTextSize(22);head.addView(folderButton,p(41,42));
         folderButton.setOnClickListener(v->chooseFolder());
         playerStrip=row();playerStrip.setVisibility(View.GONE);
@@ -1943,6 +1954,8 @@ public class MainActivity extends Activity {
         }
         menuButton.setVisibility(View.GONE);navBack.setVisibility(View.VISIBLE);
         if(headerActions!=null)headerActions.setVisibility(View.VISIBLE);
+        if(pdfButton!=null)pdfButton.setVisibility("chat".equals(screen)?View.VISIBLE:View.GONE);
+        if(headerLogo!=null)headerLogo.setVisibility(View.GONE);
         if(folderButton!=null)folderButton.setVisibility(View.GONE);
         title.setText(activeName);
         subtitle.setText(screen.equals("chat")?"История сообщений · локально":screen.equals("media")?"Фото, видео, голосовые и файлы":screen.equals("favorites")?"Твои сохранённые сообщения":screen.equals("analytics")?"Статистика · полностью офлайн":screen.equals("relationships")?"Личные события и этапы":screen.equals("echo")?"Повторяющиеся фразы":screen.equals("chronology")?"Периоды истории · вручную":screen.equals("cinema")?"Медиа по годам · офлайн":"Найди любое сообщение");
@@ -2341,7 +2354,7 @@ public class MainActivity extends Activity {
         if("cinema".equals(screen)){renderCinemaPage();return;}
         if(savedComposer!=null&&!screen.equals("saved"))savedComposer.setVisibility(View.GONE);
         if(scheduledPrefetch!=null){handler.removeCallbacks(scheduledPrefetch);scheduledPrefetch=null;}
-        if(screen.equals("saved")){renderSaved();return;}
+        if(screen.equals("saved")){if(pdfButton!=null)pdfButton.setVisibility(View.GONE);renderSaved();return;}
         if(!home)bottomNav.setVisibility(View.VISIBLE);
         if(importing)return;if(floatingPanel==null)stopPlayback();refreshTabs();configureBars();renderPinnedBar();int token=++loadToken;
         loadingMore=false; // A stale asynchronous page must not block the new tab.
