@@ -62,6 +62,25 @@ public final class QaVisualAuditScreenshotsTest {
         File png=new File(folder,name+".png");
         assertTrue("Screenshot failed: "+name,device.takeScreenshot(png));
         assertTrue("Screenshot too small: "+name,png.length()>12000);
+        // Scoped storage hides Android/data from host ADB. Publish ONLY synthetic
+        // emulator captures to MediaStore Pictures, which survives test-app uninstall.
+        android.content.ContentValues values=new android.content.ContentValues();
+        values.put(android.provider.MediaStore.Images.Media.DISPLAY_NAME,name+".png");
+        values.put(android.provider.MediaStore.Images.Media.MIME_TYPE,"image/png");
+        values.put(android.provider.MediaStore.Images.Media.RELATIVE_PATH,"Pictures/TelegramViewerVisualAudit");
+        values.put(android.provider.MediaStore.Images.Media.IS_PENDING,1);
+        android.net.Uri saved=a.getContentResolver().insert(
+            android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,values);
+        assertNotNull("MediaStore did not create screenshot",saved);
+        try(java.io.InputStream in=new java.io.FileInputStream(png);
+            java.io.OutputStream out=a.getContentResolver().openOutputStream(saved)){
+            assertNotNull("MediaStore output stream unavailable",out);
+            byte[] buffer=new byte[32768];int count;
+            while((count=in.read(buffer))!=-1)out.write(buffer,0,count);
+        }
+        android.content.ContentValues ready=new android.content.ContentValues();
+        ready.put(android.provider.MediaStore.Images.Media.IS_PENDING,0);
+        a.getContentResolver().update(saved,ready,null,null);
         System.out.println("VISUAL_CAPTURE "+name+" "+png.getAbsolutePath()+" bytes="+png.length());
     }
 
@@ -158,8 +177,7 @@ public final class QaVisualAuditScreenshotsTest {
                 catch(Exception e){throw new AssertionError(e);}
             });
             shot(a,"11-analytics");
-            // Keep app-private screenshots available briefly for the CI ADB poller.
-            Thread.sleep(12000);
+            // MediaStore screenshots stay available to CI after app uninstall.
         }finally{
             idle(a);
             inst.runOnMainSync(()->{
