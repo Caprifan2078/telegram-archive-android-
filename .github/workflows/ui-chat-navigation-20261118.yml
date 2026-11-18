@@ -5,6 +5,7 @@ on:
     paths:
       - 'app/src/main/java/org/openarchive/telegram/MainActivity.java'
       - 'app/src/androidTest/java/org/openarchive/telegram/QaUiChatNavigationRegressionTest.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/QaStandaloneHtmlImportRegressionTest.java'
       - '.github/workflows/ui-chat-navigation-20261118.yml'
   workflow_dispatch:
 permissions:
@@ -40,7 +41,7 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 420
           script: |
-            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.QaUiChatNavigationRegressionTest,org.openarchive.telegram.UiSmokeTest'
+            gradle --no-daemon --max-workers=2 connectedCompactQaAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.QaUiChatNavigationRegressionTest,org.openarchive.telegram.QaStandaloneHtmlImportRegressionTest,org.openarchive.telegram.UiSmokeTest,org.openarchive.telegram.Qa00NavigationCoreTest'
       - name: Save synthetic UI test XML
         if: always()
         uses: actions/upload-artifact@v4
