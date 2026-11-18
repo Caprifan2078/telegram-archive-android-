@@ -1014,8 +1014,8 @@ public class MainActivity extends Activity {
         sideMenuSection(items,"Инструменты переписки",false,group->{
             sideMenuItem(group,dialog,pane,"▤  Кинолента медиа","По годам и месяцам, без сетевых запросов",()->{
                 if(home){toast("Сначала открой переписку");return;}screen="cinema";showPage();});
-            sideMenuItem(group,dialog,pane,"◷  Хронология отношений","Твои этапы и сравнение активности · вручную",()->{
-                if(home){toast("Сначала открой переписку");return;}screen="chronology";showPage();});
+            sideMenuItem(group,dialog,pane,"◷  Хронология","События, периоды и воспоминания",()->{
+                if(home){toast("Сначала открой переписку");return;}screen="relationships";showPage();});
             sideMenuItem(group,dialog,pane,"⇄  Сравнение диалогов","Два чата · месяцы, медиа, участники",()->{
                 if(home){toast("Сначала открой переписку");return;}chooseDualChat("dual_compare");});
             sideMenuItem(group,dialog,pane,"◷  Воспоминания двух чатов","Общая временная линия двух переписок",()->{
@@ -1852,10 +1852,18 @@ public class MainActivity extends Activity {
         else showPage();
     }
     private void chatPicker(){
-        String[] labels=new String[archives.length()+1];for(int i=0;i<archives.length();i++){JSONObject o=archives.optJSONObject(i);labels[i]=o==null?"Чат":o.optString("name","Чат");}
-        labels[archives.length()]="＋ Добавить чат";
+        ArrayList<JSONObject> choices=new ArrayList<>();
+        boolean reveal=getPreferences(MODE_PRIVATE).getBoolean("show_hidden_chats",false);
+        for(int i=0;i<archives.length();i++){
+            JSONObject chat=archives.optJSONObject(i);
+            if(chat!=null&&(!isChatHidden(chat.optString("key"))||reveal))choices.add(chat);
+        }
+        String[] labels=new String[choices.size()+1];
+        for(int i=0;i<choices.size();i++)labels[i]=choices.get(i).optString("name","Чат");
+        labels[choices.size()]="Добавить переписку";
         new FontDialog.Builder(this).setTitle("Мои архивы").setItems(labels,(d,i)->{
-            if(i==archives.length())chooseFolder();else{JSONObject o=archives.optJSONObject(i);if(o!=null)activateArchive(o.optString("key"));}
+            if(i==choices.size())chooseFolder();
+            else activateArchive(choices.get(i).optString("key"));
         }).show();
     }
     private void moreMenu(View anchor){
