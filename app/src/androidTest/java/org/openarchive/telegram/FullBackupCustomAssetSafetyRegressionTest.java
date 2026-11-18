@@ -128,4 +128,32 @@ public final class FullBackupCustomAssetSafetyRegressionTest {
             f.verifyUnchanged();
         }
     }
+    @Test public void trashedChatBlocksFullAndMetadataBackupWithoutDataLoss()throws Exception {
+        try(Fixture f=new Fixture()){
+            String recycle=new JSONArray().put(new JSONObject()
+                .put("key",f.key+"_removed")
+                .put("name","Recoverable QA archive")
+                .put("tree","local:/synthetic-only")).toString();
+            assertTrue(f.prefs.edit().putString("archive_trash",recycle).commit());
+            ByteArrayOutputStream full=new ByteArrayOutputStream();
+            try{
+                FullBackup.export(f.isolated,f.prefs,full,ignored->{});
+                fail("Full backup must never omit recoverable chat databases");
+            }catch(IOException expected){
+                assertTrue(expected.getMessage(),expected.getMessage().contains("корзин"));
+            }
+            assertEquals("Full backup must fail before producing bytes",0,full.size());
+            ByteArrayOutputStream metadata=new ByteArrayOutputStream();
+            try{
+                ArchiveBackup.write(f.isolated,f.prefs,metadata,ignored->{});
+                fail("Metadata backup must not omit trashed chat indexes");
+            }catch(IOException expected){
+                assertTrue(expected.getMessage(),expected.getMessage().contains("корзин"));
+            }
+            assertEquals("Metadata backup must fail before producing bytes",0,metadata.size());
+            assertEquals(recycle,f.prefs.getString("archive_trash",null));
+            f.verifyUnchanged();
+        }
+    }
+
 }
