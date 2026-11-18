@@ -1086,6 +1086,12 @@ public class MainActivity extends Activity {
         String low=label.toLowerCase(Locale.ROOT);
         if(low.contains("импорт")||low.contains("добавить"))return android.R.drawable.ic_menu_add;
         if(low.contains("поиск")||low.contains("найти"))return android.R.drawable.ic_menu_search;
+        if(low.contains("дате")||low.contains("календар")||low.contains("день"))
+            return android.R.drawable.ic_menu_today;
+        if(low.contains("управлен")||low.contains("чатом"))
+            return android.R.drawable.ic_menu_manage;
+        if(low.contains("все инструменты")||low.contains("инструменты"))
+            return android.R.drawable.ic_menu_more;
         if(low.contains("медиа")||low.contains("кино")||low.contains("аватар")||low.contains("обои"))
             return android.R.drawable.ic_menu_gallery;
         if(low.contains("резерв")||low.contains("копию")||low.contains("капсула"))
@@ -3231,9 +3237,12 @@ public class MainActivity extends Activity {
             bubble.setPadding(px(roundOnly?0:bubbleInset()),px(roundOnly?0:densityIndex==0?3:densityIndex==2?8:5),
                 px(roundOnly?0:bubbleInset()),px(roundOnly?0:densityIndex==0?3:densityIndex==2?8:5));
             int chosenColor=authorColor(m.author);
+            // Colored avatars remain a useful sender cue; huge saturated message
+            // backgrounds are tiring to read. Use muted author-tinted slate bubbles.
+            int bubbleColor=mixColors(0xff24394d,chosenColor,.32f);
             if(roundOnly)bubble.setBackgroundColor(Color.TRANSPARENT);
-            else bubble.setBackground(gradient(m.id==highlightId?HIGHLIGHT:chosenColor,
-                m.id==highlightId?HIGHLIGHT:darken(chosenColor),bubbleRadius));
+            else bubble.setBackground(gradient(m.id==highlightId?HIGHLIGHT:bubbleColor,
+                m.id==highlightId?HIGHLIGHT:darken(bubbleColor),bubbleRadius));
             if(m.id==highlightId){glowBubble=bubble;glowBase=chosenColor;glowId=m.id;line.setBackground(shape(0x443ad0fc,12));}
             LinearLayout.LayoutParams bp=p(-2,-2);line.addView(bubble,bp);
             if(own){
@@ -3966,7 +3975,8 @@ public class MainActivity extends Activity {
         title.setText("Хронология");subtitle.setText("Периоды истории · вручную");
         filterBar.removeAllViews();searchArea.removeAllViews();
         bottomPager.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
-        list.removeAllViews();list.setBackgroundColor(BG);status.setText("Загружаю твою хронологию…");
+        list.removeAllViews();list.setBackgroundColor(BG);
+        status.setVisibility(View.VISIBLE);status.setText("Загружаю периоды…");
         TextView heading=text("Периоды истории",21,FG);heading.setTypeface(null,Typeface.BOLD);
         heading.setPadding(px(12),px(11),px(12),px(6));list.addView(heading);
         analyticsText(list,"Отмечай важные этапы по сообщениям или задавай даты вручную.",SUB,13);
@@ -3999,7 +4009,8 @@ public class MainActivity extends Activity {
                 for(ConversationPeriods.Chapter stage:stages)phaseMedia.put(stage.id,source.relationshipMedia(-stage.id));
                 runOnUiThread(()->{
                     if(isFinishing()||token!=loadToken||!archive.equals(activeKey)||db!=initial)return;
-                    if(stages.isEmpty())analyticsText(list,"Периодов пока нет. Отметь начало и конец через долгое нажатие на сообщения.",ACCENT,14);
+                    // The calendar section already contains a single empty-state hint.
+                    // Do not repeat another paragraph below the primary actions.
                     long peak=1;for(ConversationPeriods.Stats st:stats.values())for(long n:st.bins)peak=Math.max(peak,n);
                     final long maximum=peak;
                     renderPeriodOverlay(stages,stats);
@@ -4033,7 +4044,7 @@ public class MainActivity extends Activity {
                                 source.removePeriod(stage.id);runOnUiThread(()->{if(archive.equals(activeKey))renderChronologyPage();});
                             })).show());
                     }
-                    status.setText("Этапов: "+stages.size()+" · сравнение по общей числовой шкале");
+                    status.setText("");status.setVisibility(View.GONE);
                 });
             }catch(Exception e){runOnUiThread(()->{if(token==loadToken)status.setText("Ошибка хронологии: "+e.getMessage());});}
         });
