@@ -1,3 +1,13 @@
+## 18.11.2026 — UI чат/импорт и изолированная сборка APK
+
+[CI 44216022009](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/44216022009): Android 11 emulator, 15 тестов, **0 skipped/failed**, compile/JVM PASS. Классы: `QaUiChatNavigationRegressionTest`, `QaStandaloneHtmlImportRegressionTest`, `UiSmokeTest`, `Qa00NavigationCoreTest`. Воспроизведённые RED и их исправления задокументированы в `NEXT_SESSION_HANDOFF.md` и логе CI.
+
+[CI 44216969150](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/44216969150): собран отдельный variant `uiReviewQa`, пакет `org.openarchive.telegram.qa.uichat20261118`. Установлен на Android 11, **6/6 тестов PASS** (QaUiChatNavigationRegressionTest, QaStandaloneHtmlImportRegressionTest, UiSmokeTest), 0 skipped/failed. APK signature validated via `apksigner verify`, пакет/версия через `aapt`, INTERNET permission отсутствует. Контрольная сумма APK `82d94e25394364966c04dd55c715d1046a10fb707c2f1f16ebad3f0833d13b62`, байт 3626320.
+
+**Что не проверено:** установка на реальном смартфоне, визуальная полировка и доступность на разных ширинах, полное покрытие импорта всех нестандартных Telegram форматов/медиа, совместимое обновление старой установленной QA подписи, полное безопасное физическое удаление чата. Релиз Stable не произведён.
+
+---
+
 # Результаты тестирования
 
 ## 11.11.2026 — signed upgrade preflight и сохранение частных данных
