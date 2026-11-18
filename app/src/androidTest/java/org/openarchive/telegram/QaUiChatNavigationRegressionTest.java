@@ -223,4 +223,31 @@ public final class QaUiChatNavigationRegressionTest {
         }
     }
 
+    @Test public void openingChatClearsOldHomeRowsBeforeAsyncMessagesFinish()throws Exception {
+        MainActivity activity=rule.getActivity();
+        boolean originalHome=(boolean)value(activity,"home");
+        Object originalScreen=value(activity,"screen");
+        try{
+            inst.runOnMainSync(()->{
+                try{
+                    set(activity,"home",true);
+                    invoke(activity,"renderHome",new Class<?>[0]);
+                    assertNotNull("Home rows must exist for regression test",
+                        findText(activity.getWindow().getDecorView(),"ПЕРЕПИСКИ"));
+                    set(activity,"home",false);set(activity,"screen","chat");
+                    invoke(activity,"showPage",new Class<?>[0]);
+                    assertNull("Never show the old home list beneath a conversation header",
+                        findText(activity.getWindow().getDecorView(),"ПЕРЕПИСКИ"));
+                }catch(Exception error){throw new AssertionError(error);}
+            });
+        }finally{
+            inst.runOnMainSync(()->{
+                try{
+                    set(activity,"home",originalHome);set(activity,"screen",originalScreen);
+                    invoke(activity,"showPage",new Class<?>[0]);
+                }catch(Exception error){throw new AssertionError(error);}
+            });
+        }
+    }
+
 }
