@@ -1397,7 +1397,7 @@ public class MainActivity extends Activity {
     private void renderHome(){
         list.setBackgroundColor(BG);
         savedComposer.setVisibility(View.GONE);
-        ++loadToken;list.removeAllViews();pinnedBar.removeAllViews();filterBar.removeAllViews();searchArea.removeAllViews();
+        final int homeToken=++loadToken;list.removeAllViews();pinnedBar.removeAllViews();filterBar.removeAllViews();searchArea.removeAllViews();
         verticalTimeline.setVisibility(View.GONE);bottomPager.setVisibility(View.GONE);bottomNav.setVisibility(View.GONE);
         menuButton.setVisibility(View.VISIBLE);navBack.setVisibility(View.GONE);
         if(headerActions!=null)headerActions.setVisibility(View.GONE);
@@ -1405,23 +1405,25 @@ public class MainActivity extends Activity {
         if(headerLogo!=null)headerLogo.setVisibility(View.VISIBLE);
         if(folderButton!=null)folderButton.setVisibility(View.GONE); // Only the large bottom Add Chat button.
         title.setText("Мои переписки");subtitle.setText("Твои сообщения · в одном месте");
-        status.setText("Личный архив  ·  Данные на устройстве");
-        LinearLayout hero=column();hero.setPadding(px(18),px(19),px(17),px(19));
-        hero.setBackground(gradient(themeIndex==2?0xffd5e8f7:0xff244b68,themeIndex==2?0xffe9f2fa:0xff163750,22));
-        LinearLayout.LayoutParams heroParams=p(-1,-2);heroParams.setMargins(px(2),px(10),px(2),px(14));list.addView(hero,heroParams);
+        status.setText("");status.setVisibility(View.GONE);
+        LinearLayout hero=column();hero.setPadding(px(13),px(10),px(13),px(10));
+        hero.setBackground(outlined(PANEL,16,false));
+        LinearLayout.LayoutParams heroParams=p(-1,-2);heroParams.setMargins(px(2),px(5),px(2),px(8));list.addView(hero,heroParams);
         int hiddenChats=0;
         for(int i=0;i<archives.length();i++){
             JSONObject entry=archives.optJSONObject(i);
             if(entry!=null&&isChatHidden(entry.optString("key")))hiddenChats++;
         }
-        TextView heading=text("Всего чатов: "+archives.length()+(hiddenChats>0?" · скрыто: "+hiddenChats:""),19,FG);heading.setTypeface(null,Typeface.BOLD);hero.addView(heading);
-        TextView description=text("Локально · все данные только на устройстве",12,themeIndex==2?SUB:0xffc8e2f1);
-        description.setPadding(0,px(9),0,0);hero.addView(description);
-        if(archives.length()>=2){
-            Button compareFromHome=btn("⇄ Сравнение диалогов");list.addView(compareFromHome,p(-1,49));
-            compareFromHome.setOnClickListener(v->chooseFirstDualChat("dual_compare"));
-            Button memoriesFromHome=btn("◷ Воспоминания двух чатов");list.addView(memoriesFromHome,p(-1,49));
-            memoriesFromHome.setOnClickListener(v->chooseFirstDualChat("dual_memories"));
+        TextView heading=text("Переписки  ·  "+archives.length(),17,FG);
+        heading.setTypeface(null,Typeface.BOLD);hero.addView(heading);
+        TextView description=text(hiddenChats>0?("Скрыто: "+hiddenChats+" · всё хранится локально"):"Твои чаты · офлайн",11,SUB);
+        description.setPadding(0,px(3),0,0);hero.addView(description);
+        JSONArray trash=chatTrash();
+        if(trash==null||trash.length()>0){
+            Button recycle=btn(trash==null?"Корзина · требуется проверка":"Корзина · "+trash.length());
+            LinearLayout.LayoutParams recycleMargin=p(-1,42);recycleMargin.bottomMargin=px(7);
+            list.addView(recycle,recycleMargin);
+            recycle.setOnClickListener(v->showChatTrash());
         }
         // User guide lives in the side drawer; the home screen stays focused on chats.
         TextView section=text("ПЕРЕПИСКИ",11,SUB);section.setTypeface(null,Typeface.BOLD);
@@ -1445,21 +1447,26 @@ public class MainActivity extends Activity {
         for(int i=0;i<orderedChats.size();i++){
             JSONObject chat=orderedChats.get(i);
             String key=chat.optString("key"),name=chat.optString("name","Переписка");
-            LinearLayout item=row();item.setPadding(px(14),px(12),px(12),px(12));
-            item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2e6fc6f4),outlined(PANEL,19,false),null));
-            LinearLayout.LayoutParams margins=p(-1,78);margins.setMargins(px(2),px(3),px(2),px(8));list.addView(item,margins);
+            LinearLayout item=row();item.setPadding(px(12),px(8),px(10),px(8));
+            item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2e6fc6f4),outlined(PANEL,14,false),null));
+            LinearLayout.LayoutParams margins=p(-1,70);margins.setMargins(px(2),px(1),px(2),px(5));list.addView(item,margins);
             String letter=name.isEmpty()?"?":name.substring(0,1).toUpperCase(Locale.ROOT);
-            TextView avatar=text(letter,23,FG);avatar.setTypeface(null,Typeface.BOLD);avatar.setGravity(Gravity.CENTER);
+            TextView avatar=text(letter,20,FG);avatar.setTypeface(null,Typeface.BOLD);avatar.setGravity(Gravity.CENTER);
             avatar.setBackground(gradient(participantColors[i%participantColors.length],0xff294968,100));
             Bitmap picture=PersonalImages.load(this,getPreferences(MODE_PRIVATE).getString(PersonalImages.chatAvatarKey(key),""));
-            if(picture!=null){avatar.setText("");avatar.setBackground(new android.graphics.drawable.BitmapDrawable(getResources(),PersonalImages.circular(picture,px(51))));}
-            item.addView(avatar,p(51,51));
+            if(picture!=null){avatar.setText("");avatar.setBackground(new android.graphics.drawable.BitmapDrawable(getResources(),PersonalImages.circular(picture,px(46))));}
+            item.addView(avatar,p(46,46));
             avatar.setContentDescription("Установить аватар чата "+name);
             avatar.setOnClickListener(v->{pendingImageChatKey=key;pickPersonalImage(62);});
-            LinearLayout info=column();info.setPadding(px(14),0,0,0);item.addView(info,new LinearLayout.LayoutParams(0,-2,1));
-            TextView nameLabel=text((isChatPinned(key)?"📌  ":"")+name,16,FG);nameLabel.setTypeface(null,Typeface.BOLD);nameLabel.setSingleLine(true);
-            nameLabel.setEllipsize(TextUtils.TruncateAt.END);info.addView(nameLabel);
-            info.addView(text(isChatHidden(key)?"Скрытый чат · хранится на устройстве":"Переписка на устройстве · офлайн",12,SUB));
+            LinearLayout info=column();info.setPadding(px(11),0,0,0);item.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+            TextView nameLabel=text((isChatPinned(key)?"★  ":"")+name,15,FG);
+            nameLabel.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+            nameLabel.setSingleLine(true);nameLabel.setEllipsize(TextUtils.TruncateAt.END);
+            info.addView(nameLabel);
+            TextView preview=text(isChatHidden(key)?"Скрытый чат":"Последнее сообщение загружается…",12,SUB);
+            preview.setSingleLine(true);preview.setEllipsize(TextUtils.TruncateAt.END);preview.setPadding(0,px(4),0,0);
+            info.addView(preview);
+            if(!isChatHidden(key))loadHomePreview(key,preview,homeToken);
             Button actions=btn("⋮");actions.setContentDescription("Управление чатом "+name);
             item.addView(actions,p(39,42));
             actions.setOnClickListener(v->showChatActions(key,name));
@@ -1475,7 +1482,52 @@ public class MainActivity extends Activity {
         add.setContentDescription("Добавить переписку из экспорта Telegram");
         LinearLayout.LayoutParams ap=p(-1,60);ap.setMargins(px(2),px(9),px(2),px(8));list.addView(add,ap);
         add.setOnClickListener(v->chooseFolder());
+        if(archives.length()>=2){
+            Button tools=btn("Инструменты для двух переписок  ▾");
+            LinearLayout.LayoutParams outer=p(-1,43);outer.topMargin=px(10);list.addView(tools,outer);
+            LinearLayout advanced=column();advanced.setVisibility(View.GONE);list.addView(advanced,p(-1,-2));
+            Button compare=btn("Сравнение диалогов");advanced.addView(compare,p(-1,45));
+            compare.setOnClickListener(v->chooseFirstDualChat("dual_compare"));
+            Button memories=btn("Общие воспоминания");advanced.addView(memories,p(-1,45));
+            memories.setOnClickListener(v->chooseFirstDualChat("dual_memories"));
+            tools.setOnClickListener(v->{
+                boolean opened=advanced.getVisibility()!=View.VISIBLE;
+                advanced.setVisibility(opened?View.VISIBLE:View.GONE);
+                tools.setText(opened?"Скрыть инструменты  ▴":"Инструменты для двух переписок  ▾");
+            });
+        }
         animateEntrance();scroll.post(()->scroll.scrollTo(0,0));
+    }
+    /** Read-only local preview; no import, mutation or archive database creation. */
+    private void loadHomePreview(String key,TextView target,int requestToken){
+        if(key==null||!key.matches("[a-zA-Z0-9_-]{1,80}")){target.setText("Локальная переписка");return;}
+        worker.execute(()->{
+            String textValue="Нет сообщений";
+            try{
+                String filename="default".equals(key)?"telegram_archive.db":"telegram_"+key+".db";
+                java.io.File file=getDatabasePath(filename);
+                if(file.isFile()){
+                    try(android.database.sqlite.SQLiteDatabase reader=android.database.sqlite.SQLiteDatabase.openDatabase(
+                            file.getAbsolutePath(),null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY);
+                        android.database.Cursor cursor=reader.rawQuery(
+                            "SELECT date_text,body,media FROM messages ORDER BY id DESC LIMIT 1",null)){
+                        if(cursor.moveToFirst()){
+                            String date=cursor.getString(0);
+                            String body=cursor.getString(1);
+                            String media=cursor.getString(2);
+                            String excerpt=(body==null?"":body.trim().replaceAll("\s+"," "));
+                            if(excerpt.isEmpty())excerpt=media!=null&&!media.isEmpty()?"Вложение":"Сообщение без текста";
+                            textValue=clip(excerpt,66)+(date==null||date.isEmpty()?"":" · "+day(date));
+                        }
+                    }
+                }
+            }catch(Exception error){textValue="Нет предпросмотра · открыть чат";}
+            final String preview=textValue;
+            runOnUiThread(()->{
+                if(isFinishing()||!home||loadToken!=requestToken||target.getParent()==null)return;
+                target.setText(preview);
+            });
+        });
     }
     private boolean isChatHidden(String key){
         return getPreferences(MODE_PRIVATE).getBoolean("hidden_chat_"+key,false);
