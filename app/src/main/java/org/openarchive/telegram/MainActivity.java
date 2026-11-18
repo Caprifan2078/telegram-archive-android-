@@ -1002,7 +1002,7 @@ public class MainActivity extends Activity {
         sideMenuItem(items,dialog,pane,"📝  Личные заметки","Заметки из разных переписок",()->{
             home=false;screen="saved";renderSaved();});
         sideMenuSection(items,"Архивы и резервные копии",false,group->{
-            sideMenuItem(group,dialog,pane,"＋  Импортировать чат","Папка Telegram, ZIP, 7z или RAR",this::chooseFolder);
+            if(!home)sideMenuItem(group,dialog,pane,"＋  Импортировать чат","HTML, ZIP, 7z, RAR или папка Telegram",this::chooseFolder);
             sideMenuItem(group,dialog,pane,"⇧  Создать резервную копию","Чаты, настройки и при выборе — медиа",this::backupPicker);
             sideMenuItem(group,dialog,pane,"✓  Проверить копию","Контроль целостности без изменений",this::verifyBackupPicker);
             sideMenuItem(group,dialog,pane,"◈  Пробное восстановление","Тест без изменения переписок",this::dryRunPicker);
@@ -1490,7 +1490,7 @@ public class MainActivity extends Activity {
                     boolean hidden=!isChatHidden(key);
                     getPreferences(MODE_PRIVATE).edit().putBoolean("hidden_chat_"+key,hidden).apply();
                     if(hidden)getPreferences(MODE_PRIVATE).edit().putBoolean("show_hidden_chats",false).apply();
-                    renderHome();
+                    home=true;screen="chat";renderHome();
                     toast(hidden?"Чат скрыт. Его можно вернуть через «Показать скрытые»":"Чат снова виден");
                 }else if(which==4)confirmRemoveChatFromList(key,name);
             }).setNegativeButton("Закрыть",null).show();
@@ -1511,7 +1511,7 @@ public class MainActivity extends Activity {
                         toast("Не удалось сохранить название");return;
                     }
                     if(key.equals(activeKey))activeName=updated;
-                    saveRegistry();renderHome();toast("Название изменено");return;
+                    saveRegistry();if(home)renderHome();else showPage();toast("Название изменено");return;
                 }
                 toast("Чат больше не найден");
             }).show();
@@ -1563,7 +1563,7 @@ public class MainActivity extends Activity {
     private void toggleChatPin(String key){
         boolean next=!isChatPinned(key);
         getPreferences(MODE_PRIVATE).edit().putBoolean("pinned_chat_"+key,next).apply();
-        renderHome();toast(next?"Чат закреплён сверху":"Закрепление снято");
+        if(home)renderHome();else showPage();toast(next?"Чат закреплён сверху":"Закрепление снято");
     }
     /** Find a quote in a registered archive only; never open an arbitrary database name from a restored note. */
     private boolean canOpenQuoteArchive(String key){
@@ -1892,29 +1892,36 @@ public class MainActivity extends Activity {
             }).show();
     }
     private void showConversationMenu(View anchor){
-        PopupMenu popup=new PopupMenu(this,anchor);
-        // All-chat tools live in the drawer, but the ☰ button is hidden
-        // while viewing a chat to make room for the Back button. Expose the
-        // drawer here without making the header too cramped on narrow phones.
-        popup.getMenu().add("☰ Все инструменты");
-        popup.getMenu().add("⌕ Поиск");popup.getMenu().add("▥ Анализ переписки");popup.getMenu().add("♡ Хронология");popup.getMenu().add("▤ Кинолента медиа");
-        popup.getMenu().add("⚙ Настроить чат");popup.getMenu().add("▦ Медиатека");
-        popup.getMenu().add("📌 Закреплённые сообщения");
-        // PDF is a separate button in the chat header.
-        popup.setOnMenuItemClickListener(item->{
-            String action=item.getTitle().toString();
-            if(action.contains("Все инструменты"))showSideMenu();
-            else if(action.contains("Поиск")){screen="search";showPage();}
-            else if(action.contains("Анализ")){screen="analytics";showPage();}
-            else if(action.contains("Хронология")){screen="relationships";showPage();}
-            else if(action.contains("Кинолента")){screen="cinema";showPage();}
-            else if(action.contains("Настроить"))settingsMenu();
-            else if(action.contains("Медиатека")){screen="media";showPage();}
-            else if(action.contains("Закреплённые"))showPinList();
-            return true;
-        });popup.show();
+        // A calm, readable sheet: media lives behind the chat title,
+        // PDF has its own visible action, and advanced tools remain in the drawer.
+        LinearLayout content=column();content.setPadding(px(14),px(8),px(14),px(12));
+        TextView guide=text("Нажми на название чата, чтобы открыть фото и файлы. PDF — отдельная кнопка в шапке.",12,SUB);
+        guide.setPadding(px(5),0,px(5),px(9));content.addView(guide,p(-1,-2));
+        String[] labels={"Поиск сообщений","Анализ диалога","Хронология","Управление чатом","Закреплённые","Все инструменты"};
+        Runnable[] actions={
+            ()->{screen="search";showPage();},
+            ()->{screen="analytics";showPage();},
+            ()->{screen="relationships";showPage();},
+            ()->showChatActions(activeKey,activeName),
+            this::showPinList,
+            this::showSideMenu
+        };
+        final AlertDialog dialog=new FontDialog.Builder(this).setTitle(activeName)
+            .setView(content).setNegativeButton("Закрыть",null).create();
+        for(int i=0;i<labels.length;i++){
+            final int index=i;
+            LinearLayout item=row();item.setPadding(px(12),px(9),px(8),px(9));
+            item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2e5aaad8),outlined(PANEL,14,false),null));
+            ImageView symbol=new ImageView(this);symbol.setImageResource(drawerIconFor(labels[i]));symbol.setColorFilter(ACCENT);
+            LinearLayout.LayoutParams iconSize=p(22,22);iconSize.rightMargin=px(13);item.addView(symbol,iconSize);
+            TextView label=text(labels[i],15,FG);item.addView(label,new LinearLayout.LayoutParams(0,-2,1));
+            LinearLayout.LayoutParams itemSize=p(-1,46);itemSize.bottomMargin=px(5);content.addView(item,itemSize);
+            item.setContentDescription(labels[i]);
+            item.setOnClickListener(v->{dialog.dismiss();actions[index].run();});
+        }
+        dialog.show();
     }
-    private void chooseConversationPdf(){
+        private void chooseConversationPdf(){
         new FontDialog.Builder(this).setTitle("Сохранить переписку в PDF")
             .setMessage("В PDF войдут текст, авторы и даты всех сообщений. Вложения будут обозначены текстом, без самих файлов. Для очень больших переписок действует ограничение: 250 страниц.")
             .setNegativeButton("Отмена",null).setPositiveButton("Выбрать файл",(dialog,which)->{
