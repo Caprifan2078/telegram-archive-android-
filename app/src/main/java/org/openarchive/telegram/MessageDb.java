@@ -163,6 +163,15 @@ class MessageDb extends SQLiteOpenHelper {
         v.put("anchor_id",anchorId);v.put("anchor_offset",offset);v.put("created_at",System.currentTimeMillis());
         return d.insertOrThrow("relationship_events",null,v);
     }
+    /** Read-only label for chronology; safe on stale/missing anchor IDs. */
+    String messageDate(long messageId){
+        if(messageId<=0)return "";
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT date_text FROM messages WHERE id=? LIMIT 1",
+                new String[]{Long.toString(messageId)})){
+            return c.moveToFirst()?(c.getString(0)==null?"":c.getString(0)):"";
+        }
+    }
     List<RelationshipEvent> relationshipEvents(){
         ArrayList<RelationshipEvent> out=new ArrayList<>();
         String sql="SELECT e.id,e.title,e.note,e.anchor_id,e.anchor_offset,"+
