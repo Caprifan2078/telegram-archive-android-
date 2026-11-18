@@ -128,7 +128,8 @@ public class Qa00NavigationCoreTest {
         shown("Мои переписки");
         shown("Добавить переписку");
         tap("Добавить переписку");
-        shown("Добавить переписку"); // chooser is a real Android AlertDialog
+        shown("Импорт переписки"); // one dialog with two separate Android picker sources
+        shown("Выбрать файл Telegram");
         shown("Выбрать папку Telegram");
         device.pressBack();
         device.waitForIdle();
