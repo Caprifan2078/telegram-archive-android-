@@ -62,7 +62,15 @@ android {
             signingConfig signingConfigs.debug
         }
     }
-    testBuildType (project.findProperty('qaHandoffInstrumentation') == 'true' ? 'handoffQa' : (project.findProperty('qaStableInstrumentation') == 'true' ? 'stableQa' : 'compactQa'))
+    // Standalone test-review APK: never replace user-installed Work QA / handoff QA.
+    buildTypes {
+        uiReviewQa {
+            initWith compactQa
+            applicationIdSuffix '.uichat20261118'
+            signingConfig signingConfigs.debug
+        }
+    }
+    testBuildType (project.findProperty('qaUiReviewInstrumentation') == 'true' ? 'uiReviewQa' : (project.findProperty('qaHandoffInstrumentation') == 'true' ? 'handoffQa' : (project.findProperty('qaStableInstrumentation') == 'true' ? 'stableQa' : 'compactQa')))
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
