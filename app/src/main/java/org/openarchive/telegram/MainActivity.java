@@ -1371,7 +1371,12 @@ public class MainActivity extends Activity {
         LinearLayout hero=column();hero.setPadding(px(18),px(19),px(17),px(19));
         hero.setBackground(gradient(themeIndex==2?0xffd5e8f7:0xff244b68,themeIndex==2?0xffe9f2fa:0xff163750,22));
         LinearLayout.LayoutParams heroParams=p(-1,-2);heroParams.setMargins(px(2),px(10),px(2),px(14));list.addView(hero,heroParams);
-        TextView heading=text("Всего чатов: "+archives.length(),19,FG);heading.setTypeface(null,Typeface.BOLD);hero.addView(heading);
+        int hiddenChats=0;
+        for(int i=0;i<archives.length();i++){
+            JSONObject entry=archives.optJSONObject(i);
+            if(entry!=null&&isChatHidden(entry.optString("key")))hiddenChats++;
+        }
+        TextView heading=text("Всего чатов: "+archives.length()+(hiddenChats>0?" · скрыто: "+hiddenChats:""),19,FG);heading.setTypeface(null,Typeface.BOLD);hero.addView(heading);
         TextView description=text("Локально · все данные только на устройстве",12,themeIndex==2?SUB:0xffc8e2f1);
         description.setPadding(0,px(9),0,0);hero.addView(description);
         if(archives.length()>=2){
@@ -1383,9 +1388,21 @@ public class MainActivity extends Activity {
         // User guide lives in the side drawer; the home screen stays focused on chats.
         TextView section=text("ПЕРЕПИСКИ",11,SUB);section.setTypeface(null,Typeface.BOLD);
         section.setPadding(px(9),px(5),0,px(8));list.addView(section);
-        // Global saved notes live in the drawer; chat favorites live under Media.
+        // Hidden chats stay indexed and backed up, but disappear from ordinary navigation.
+        final boolean showHidden=getPreferences(MODE_PRIVATE).getBoolean("show_hidden_chats",false);
+        if(hiddenChats>0){
+            Button toggleHidden=btn(showHidden?"Свернуть скрытые чаты":"Показать скрытые чаты ("+hiddenChats+")");
+            list.addView(toggleHidden,p(-1,45));
+            toggleHidden.setOnClickListener(v->{
+                getPreferences(MODE_PRIVATE).edit().putBoolean("show_hidden_chats",!showHidden).apply();
+                renderHome();
+            });
+        }
         ArrayList<JSONObject> orderedChats=new ArrayList<>();
-        for(int i=0;i<archives.length();i++){JSONObject c=archives.optJSONObject(i);if(c!=null)orderedChats.add(c);}
+        for(int i=0;i<archives.length();i++){
+            JSONObject c=archives.optJSONObject(i);
+            if(c!=null&&(!isChatHidden(c.optString("key"))||showHidden))orderedChats.add(c);
+        }
         orderedChats.sort((a,b)->Boolean.compare(isChatPinned(b.optString("key")),isChatPinned(a.optString("key"))));
         for(int i=0;i<orderedChats.size();i++){
             JSONObject chat=orderedChats.get(i);
@@ -1399,16 +1416,17 @@ public class MainActivity extends Activity {
             Bitmap picture=PersonalImages.load(this,getPreferences(MODE_PRIVATE).getString(PersonalImages.chatAvatarKey(key),""));
             if(picture!=null){avatar.setText("");avatar.setBackground(new android.graphics.drawable.BitmapDrawable(getResources(),PersonalImages.circular(picture,px(51))));}
             item.addView(avatar,p(51,51));
+            avatar.setContentDescription("Установить аватар чата "+name);
+            avatar.setOnClickListener(v->{pendingImageChatKey=key;pickPersonalImage(62);});
             LinearLayout info=column();info.setPadding(px(14),0,0,0);item.addView(info,new LinearLayout.LayoutParams(0,-2,1));
             TextView nameLabel=text((isChatPinned(key)?"📌  ":"")+name,16,FG);nameLabel.setTypeface(null,Typeface.BOLD);nameLabel.setSingleLine(true);
             nameLabel.setEllipsize(TextUtils.TruncateAt.END);info.addView(nameLabel);
-            info.addView(text("Переписка на устройстве · офлайн",12,SUB));
-            TextView arrow=text("›",25,ACCENT);item.addView(arrow);
+            info.addView(text(isChatHidden(key)?"Скрытый чат · хранится на устройстве":"Переписка на устройстве · офлайн",12,SUB));
+            Button actions=btn("⋮");actions.setContentDescription("Управление чатом "+name);
+            item.addView(actions,p(39,42));
+            actions.setOnClickListener(v->showChatActions(key,name));
             item.setOnClickListener(v->{item.animate().alpha(.75f).setDuration(90).withEndAction(()->{item.setAlpha(1);activateArchive(key);}).start();});
-            item.setOnLongClickListener(v->{new FontDialog.Builder(this).setTitle(name)
-                .setItems(new String[]{isChatPinned(key)?"Открепить чат":"📌 Закрепить чат", "Открыть переписку"},(d,which)->{
-                    if(which==0)toggleChatPin(key);else activateArchive(key);
-                }).show();return true;});
+            item.setOnLongClickListener(v->{showChatActions(key,name);return true;});
         }
         TextView add=text("＋   Добавить переписку",15,ACCENT);add.setTypeface(null,Typeface.BOLD);
         add.setGravity(Gravity.CENTER);add.setPadding(px(12),px(17),px(12),px(17));
@@ -1420,6 +1438,95 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams ap=p(-1,60);ap.setMargins(px(2),px(9),px(2),px(8));list.addView(add,ap);
         add.setOnClickListener(v->chooseFolder());
         animateEntrance();scroll.post(()->scroll.scrollTo(0,0));
+    }
+    private boolean isChatHidden(String key){
+        return getPreferences(MODE_PRIVATE).getBoolean("hidden_chat_"+key,false);
+    }
+    private void showChatActions(String key,String name){
+        if(importing||restoringBackup){toast("Дождись завершения операции");return;}
+        new FontDialog.Builder(this).setTitle(name)
+            .setItems(new String[]{
+                isChatPinned(key)?"Открепить":"Закрепить",
+                "Переименовать чат",
+                "Изменить аватар",
+                isChatHidden(key)?"Показать чат":"Скрыть чат",
+                "Убрать чат из списка"
+            },(d,which)->{
+                if(which==0)toggleChatPin(key);
+                else if(which==1)renameChat(key,name);
+                else if(which==2){pendingImageChatKey=key;pickPersonalImage(62);}
+                else if(which==3){
+                    boolean hidden=!isChatHidden(key);
+                    getPreferences(MODE_PRIVATE).edit().putBoolean("hidden_chat_"+key,hidden).apply();
+                    if(hidden)getPreferences(MODE_PRIVATE).edit().putBoolean("show_hidden_chats",false).apply();
+                    renderHome();
+                    toast(hidden?"Чат скрыт. Его можно вернуть через «Показать скрытые»":"Чат снова виден");
+                }else if(which==4)confirmRemoveChatFromList(key,name);
+            }).setNegativeButton("Закрыть",null).show();
+    }
+    private void renameChat(String key,String name){
+        EditText input=new EditText(this);input.setSingleLine(true);input.setText(name);
+        input.setSelection(input.length());
+        input.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(80)});
+        new FontDialog.Builder(this).setTitle("Название переписки")
+            .setView(input).setNegativeButton("Отмена",null)
+            .setPositiveButton("Сохранить",(d,w)->{
+                String updated=input.getText().toString().trim();
+                if(updated.isEmpty()){toast("Название не может быть пустым");return;}
+                for(int i=0;i<archives.length();i++){
+                    JSONObject chat=archives.optJSONObject(i);
+                    if(chat==null||!key.equals(chat.optString("key")))continue;
+                    try{chat.put("name",updated);}catch(org.json.JSONException error){
+                        toast("Не удалось сохранить название");return;
+                    }
+                    if(key.equals(activeKey))activeName=updated;
+                    saveRegistry();renderHome();toast("Название изменено");return;
+                }
+                toast("Чат больше не найден");
+            }).show();
+    }
+    /** Remove only the library entry, not the user's source files, indexed SQLite or notes. */
+    private void confirmRemoveChatFromList(String key,String name){
+        new FontDialog.Builder(this).setTitle("Убрать «"+name+"» из списка?")
+            .setMessage("Чат исчезнет из списка. Исходный экспорт, медиа и локальная база НЕ удаляются. Чтобы скрыть без удаления записи, выбери «Скрыть чат».")
+            .setNegativeButton("Отмена",null)
+            .setPositiveButton("Убрать",(d,w)->removeChatFromList(key)).show();
+    }
+    private void removeChatFromList(String key){
+        if(importing||restoringBackup)return;
+        JSONArray remaining=new JSONArray();boolean existed=false;
+        for(int i=0;i<archives.length();i++){
+            JSONObject chat=archives.optJSONObject(i);
+            if(chat==null)continue;
+            if(key.equals(chat.optString("key"))){existed=true;continue;}
+            remaining.put(chat);
+        }
+        if(!existed){toast("Чат не найден");return;}
+        String nextKey=activeKey;
+        if(key.equals(activeKey)){
+            JSONObject first=remaining.optJSONObject(0);
+            nextKey=first==null?"default":first.optString("key","default");
+        }
+        boolean written=getPreferences(MODE_PRIVATE).edit()
+            .putString("archive_registry",remaining.toString())
+            .putString("active_archive",nextKey).commit();
+        if(!written){toast("Не удалось сохранить изменения; чат оставлен");return;}
+        archives=remaining;
+        getPreferences(MODE_PRIVATE).edit()
+            .remove("pinned_chat_"+key).remove("hidden_chat_"+key).apply();
+        if(key.equals(activeKey)){
+            closeFloatingRound();stopPlayback();if(db!=null)db.close();
+            activeKey=nextKey;JSONObject first=null;
+            for(int i=0;i<archives.length();i++){
+                JSONObject entry=archives.optJSONObject(i);
+                if(entry!=null&&nextKey.equals(entry.optString("key"))){first=entry;break;}
+            }
+            activeName=first==null?"Архив":first.optString("name","Архив");
+            db=new MessageDb(this,activeKey);
+            folder=null;
+        }
+        home=true;screen="chat";returnScreen="";renderHome();
+        toast("Чат убран из списка. Его файлы сохранены.");
     }
     private boolean isChatPinned(String key){return getPreferences(MODE_PRIVATE).getBoolean("pinned_chat_"+key,false);}
     private void toggleChatPin(String key){
