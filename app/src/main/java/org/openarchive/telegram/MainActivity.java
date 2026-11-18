@@ -1488,7 +1488,7 @@ public class MainActivity extends Activity {
                 "Переименовать чат",
                 "Изменить аватар",
                 isChatHidden(key)?"Показать чат":"Скрыть чат",
-                "Убрать чат из списка"
+                "Убрать в корзину"
             },(d,which)->{
                 if(which==0)toggleChatPin(key);
                 else if(which==1)renameChat(key,name);
@@ -1523,23 +1523,64 @@ public class MainActivity extends Activity {
                 toast("Чат больше не найден");
             }).show();
     }
-    /** Remove only the library entry, not the user's source files, indexed SQLite or notes. */
+    /** A recoverable, metadata-only bin; never delete source archives, media or SQLite. */
+    private JSONArray chatTrash(){
+        try{return new JSONArray(getPreferences(MODE_PRIVATE).getString("archive_trash","[]"));}
+        catch(org.json.JSONException bad){return null;} // preserve corrupt data, fail closed
+    }
+    private void showChatTrash(){
+        JSONArray removed=chatTrash();
+        if(removed==null){
+            new FontDialog.Builder(this).setTitle("Корзина недоступна")
+                .setMessage("Список корзины поврежден. Ничего не удалено; восстанови настройки из резервной копии.")
+                .setPositiveButton("Понятно",null).show();return;
+        }
+        if(removed.length()==0){
+            new FontDialog.Builder(this).setTitle("Корзина пуста")
+                .setMessage("Убранные из списка переписки появятся здесь. Файлы и базы сообщений при этом сохраняются.")
+                .setPositiveButton("Закрыть",null).show();return;
+        }
+        String[] items=new String[removed.length()];
+        for(int i=0;i<removed.length();i++){
+            JSONObject chat=removed.optJSONObject(i);
+            items[i]=chat==null?"Недоступная запись":chat.optString("name","Переписка")+" · восстановить";
+        }
+        new FontDialog.Builder(this).setTitle("Корзина · "+removed.length())
+            .setMessage("Восстановление вернет чат в список. Локальные данные не изменятся.")
+            .setItems(items,(d,index)->{
+                JSONObject selected=removed.optJSONObject(index);
+                if(selected!=null)restoreChatFromTrash(selected.optString("key"));
+            }).setNegativeButton("Закрыть",null).show();
+    }
     private void confirmRemoveChatFromList(String key,String name){
-        new FontDialog.Builder(this).setTitle("Убрать «"+name+"» из списка?")
-            .setMessage("Чат исчезнет из списка. Исходный экспорт, медиа и локальная база НЕ удаляются. Чтобы скрыть без удаления записи, выбери «Скрыть чат».")
+        new FontDialog.Builder(this).setTitle("Убрать «"+name+"» в корзину?")
+            .setMessage("Чат исчезнет из списка, но останется в корзине. Его можно восстановить без нового импорта. Исходные файлы, сообщения и медиа не удаляются.")
             .setNegativeButton("Отмена",null)
-            .setPositiveButton("Убрать",(d,w)->removeChatFromList(key)).show();
+            .setPositiveButton("В корзину",(d,w)->removeChatFromList(key)).show();
     }
     private void removeChatFromList(String key){
-        if(importing||restoringBackup)return;
-        JSONArray remaining=new JSONArray();boolean existed=false;
+        if(importing||restoringBackup){toast("Дождись завершения операции");return;}
+        JSONArray trash=chatTrash();
+        if(trash==null){toast("Корзина недоступна: ничего не изменено");return;}
+        JSONArray remaining=new JSONArray();JSONObject removed=null;
         for(int i=0;i<archives.length();i++){
             JSONObject chat=archives.optJSONObject(i);
             if(chat==null)continue;
-            if(key.equals(chat.optString("key"))){existed=true;continue;}
+            if(key.equals(chat.optString("key"))){removed=chat;continue;}
             remaining.put(chat);
         }
-        if(!existed){toast("Чат не найден");return;}
+        if(removed==null){toast("Чат не найден");return;}
+        for(int i=0;i<trash.length();i++){
+            JSONObject entry=trash.optJSONObject(i);
+            if(entry!=null&&key.equals(entry.optString("key"))){
+                toast("Чат уже есть в корзине: ничего не изменено");return;
+            }
+        }
+        try{
+            JSONObject archived=new JSONObject(removed.toString());
+            archived.put("removed_at",System.currentTimeMillis());
+            trash.put(archived);
+        }catch(org.json.JSONException e){toast("Не удалось сохранить запись в корзине");return;}
         String nextKey=activeKey;
         if(key.equals(activeKey)){
             JSONObject first=remaining.optJSONObject(0);
@@ -1547,11 +1588,11 @@ public class MainActivity extends Activity {
         }
         boolean written=getPreferences(MODE_PRIVATE).edit()
             .putString("archive_registry",remaining.toString())
+            .putString("archive_trash",trash.toString())
             .putString("active_archive",nextKey).commit();
-        if(!written){toast("Не удалось сохранить изменения; чат оставлен");return;}
+        if(!written){toast("Не удалось сохранить корзину; чат оставлен");return;}
         archives=remaining;
-        getPreferences(MODE_PRIVATE).edit()
-            .remove("pinned_chat_"+key).remove("hidden_chat_"+key).apply();
+        // Keep avatar and pin preferences, so restored chats retain customization.
         if(key.equals(activeKey)){
             closeFloatingRound();stopPlayback();if(db!=null)db.close();
             activeKey=nextKey;JSONObject first=null;
@@ -1560,11 +1601,43 @@ public class MainActivity extends Activity {
                 if(entry!=null&&nextKey.equals(entry.optString("key"))){first=entry;break;}
             }
             activeName=first==null?"Архив":first.optString("name","Архив");
-            db=new MessageDb(this,activeKey);
-            folder=null;
+            db=new MessageDb(this,activeKey);folder=null;
         }
         home=true;screen="chat";returnScreen="";renderHome();
-        toast("Чат убран из списка. Его файлы сохранены.");
+        toast("Чат в корзине. Вернуть можно из списка чатов.");
+    }
+    private void restoreChatFromTrash(String key){
+        if(importing||restoringBackup){toast("Дождись завершения операции");return;}
+        if(key==null||!key.matches("[a-zA-Z0-9_-]{1,80}")){toast("Неверный ключ переписки");return;}
+        JSONArray trash=chatTrash();if(trash==null){toast("Корзина недоступна");return;}
+        for(int i=0;i<archives.length();i++){
+            JSONObject existing=archives.optJSONObject(i);
+            if(existing!=null&&key.equals(existing.optString("key"))){
+                toast("Этот чат уже в списке");return;
+            }
+        }
+        JSONArray remainingTrash=new JSONArray();JSONObject recovered=null;
+        for(int i=0;i<trash.length();i++){
+            JSONObject chat=trash.optJSONObject(i);
+            if(chat==null)continue;
+            if(key.equals(chat.optString("key"))){
+                if(recovered!=null){toast("Повторяющиеся записи в корзине");return;}
+                recovered=chat;
+            }else remainingTrash.put(chat);
+        }
+        if(recovered==null){toast("Переписка не найдена в корзине");return;}
+        JSONArray restored=new JSONArray();
+        for(int i=0;i<archives.length();i++)restored.put(archives.optJSONObject(i));
+        try{
+            JSONObject clean=new JSONObject(recovered.toString());
+            clean.remove("removed_at");restored.put(clean);
+        }catch(org.json.JSONException e){toast("Не удалось прочитать запись");return;}
+        boolean written=getPreferences(MODE_PRIVATE).edit()
+            .putString("archive_registry",restored.toString())
+            .putString("archive_trash",remainingTrash.toString())
+            .putBoolean("hidden_chat_"+key,false).commit();
+        if(!written){toast("Не удалось восстановить запись");return;}
+        archives=restored;home=true;renderHome();toast("Чат возвращен в список");
     }
     private boolean isChatPinned(String key){return getPreferences(MODE_PRIVATE).getBoolean("pinned_chat_"+key,false);}
     private void toggleChatPin(String key){
@@ -1806,7 +1879,9 @@ public class MainActivity extends Activity {
     private void loadArchiveRegistry(){
         try{archives=new JSONArray(getPreferences(MODE_PRIVATE).getString("archive_registry","[]"));}catch(Exception e){archives=new JSONArray();}
         activeKey=getPreferences(MODE_PRIVATE).getString("active_archive","default");
-        if(archives.length()==0){
+        // A deliberately removed chat must not return through legacy migration
+        // while the active registry is empty but the recycle bin has entries.
+        if(archives.length()==0&&getPreferences(MODE_PRIVATE).getString("archive_trash","[]").equals("[]")){
             String old=getPreferences(MODE_PRIVATE).getString("tree",null);
             if(old!=null)try{JSONObject o=new JSONObject();o.put("key","default");o.put("name","Первая переписка");o.put("tree",old);archives.put(o);saveRegistry();}catch(Exception ignored){}
         }
