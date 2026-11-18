@@ -2259,11 +2259,19 @@ public class MainActivity extends Activity {
         },c.get(Calendar.YEAR),c.get(Calendar.MONTH),c.get(Calendar.DAY_OF_MONTH)).show();
     }
     private void chooseFolder(){
-        new FontDialog.Builder(this).setTitle("Импорт переписки")
-            .setMessage("Один импорт для всех чатов. Выбери файл Telegram (HTML, ZIP, 7z, RAR) или папку экспорта для медиа.")
-            .setItems(new String[]{"Выбрать файл Telegram", "Выбрать папку Telegram"},
-                (d,selection)->{if(selection==0)chooseCompressedArchive();else chooseExistingFolder();})
-            .setNegativeButton("Отмена",null).show();
+        // A single entry point with two Android picker types. A file picker cannot
+        // also grant directory-tree access, so offer both choices in ONE compact dialog.
+        LinearLayout options=column();options.setPadding(px(18),px(7),px(18),px(8));
+        TextView help=text("Файл HTML/ZIP/7z/RAR открывается как обычный чат. Если есть отдельные фото, видео и голосовые — лучше выбрать папку экспорта.",13,SUB);
+        help.setPadding(0,0,0,px(13));options.addView(help,p(-1,-2));
+        Button file=btn("Выбрать файл Telegram");options.addView(file,p(-1,51));
+        space(options,9);
+        Button folderChoice=btn("Выбрать папку Telegram");options.addView(folderChoice,p(-1,51));
+        final AlertDialog dialog=new FontDialog.Builder(this).setTitle("Импорт переписки")
+            .setView(options).setNegativeButton("Отмена",null).create();
+        file.setOnClickListener(v->{dialog.dismiss();chooseCompressedArchive();});
+        folderChoice.setOnClickListener(v->{dialog.dismiss();chooseExistingFolder();});
+        dialog.show();
     }
     private void chooseReadOnlyPreview(){
         Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
