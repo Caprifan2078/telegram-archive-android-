@@ -3647,17 +3647,45 @@ public class MainActivity extends Activity {
                 int end=Math.min(all.size(),start+20);
                 List<MessageDb.RelationshipEvent> visible=new ArrayList<>(all.subList(start,end));
                 LinkedHashMap<Long,List<MessageDb.Attachment>> links=new LinkedHashMap<>();
-                for(MessageDb.RelationshipEvent e:visible)links.put(e.id,source.relationshipMedia(e.id));
+                LinkedHashMap<Long,String> eventDates=new LinkedHashMap<>();
+                for(MessageDb.RelationshipEvent e:visible){
+                    links.put(e.id,source.relationshipMedia(e.id));
+                    eventDates.put(e.id,source.messageDate(e.anchorId));
+                }
                 final int first=start;
                 runOnUiThread(()->{
                     if(isFinishing()||token!=loadToken||!key.equals(activeKey)||db!=source)return;
                     eventsHolder.removeAllViews();
-                    TextView heading=text("Мои события · "+all.size(),18,FG);heading.setTypeface(null,Typeface.BOLD);
-                    eventsHolder.addView(heading,p(-1,50));
-                    if(all.isEmpty())analyticsText(eventsHolder,"Событий пока нет. Они создаются через долгое нажатие на сообщение.",SUB,13);
+                    TextView heading=text("Лента событий  ·  "+all.size(),17,FG);
+                    heading.setTypeface(null,Typeface.BOLD);
+                    heading.setPadding(px(10),px(13),px(8),px(9));
+                    eventsHolder.addView(heading,p(-1,-2));
+                    if(all.isEmpty()){
+                        LinearLayout empty=column();empty.setGravity(Gravity.CENTER);
+                        empty.setPadding(px(12),px(17),px(12),px(20));
+                        TextView dot=text("●",26,ACCENT);dot.setGravity(Gravity.CENTER);
+                        empty.addView(dot,p(-1,38));
+                        TextView label=text("Здесь появятся твои события",15,FG);
+                        label.setGravity(Gravity.CENTER);
+                        empty.addView(label,p(-1,-2));
+                        analyticsText(empty,"Удерживай важное сообщение и добавь событие.",SUB,12);
+                        eventsHolder.addView(empty,p(-1,-2));
+                    }
                     for(MessageDb.RelationshipEvent event:visible){
-                        LinearLayout card=relationshipCard(eventsHolder,"♡ "+event.title);
-                        analyticsText(card,"Сообщение #"+event.anchorId+" · исходная точка в переписке",SUB,12);
+                        LinearLayout timelineRow=row();timelineRow.setGravity(Gravity.TOP);
+                        eventsHolder.addView(timelineRow,p(-1,-2));
+                        LinearLayout rail=column();rail.setGravity(Gravity.CENTER_HORIZONTAL);
+                        TextView dot=text("●",17,ACCENT);dot.setGravity(Gravity.CENTER);
+                        rail.addView(dot,p(-1,29));
+                        View stem=new View(this);stem.setBackground(shape(0xff355b70,2));
+                        rail.addView(stem,p(2,145));
+                        timelineRow.addView(rail,p(25,-2));
+                        LinearLayout card=relationshipCard(timelineRow,event.title);
+                        LinearLayout.LayoutParams cell=(LinearLayout.LayoutParams)card.getLayoutParams();
+                        cell.width=0;cell.weight=1f;card.setLayoutParams(cell);
+                        String recorded=eventDates.get(event.id);
+                        if(recorded!=null&&!recorded.isEmpty())
+                            analyticsText(card,day(recorded)+" · "+clock(recorded),ACCENT,12);
                         if(!event.note.isEmpty())analyticsText(card,event.note,FG,13);
                         List<MessageDb.Attachment> attachments=links.get(event.id);
                         if(attachments!=null)for(MessageDb.Attachment a:attachments){
@@ -3666,11 +3694,13 @@ public class MainActivity extends Activity {
                         }
                         if(event.linkedCount>0&&(attachments==null||attachments.size()<event.linkedCount))
                             analyticsText(card,"Некоторые ссылки не разрешились: исходные файлы могли измениться после импорта.",SUB,11);
-                        Button anchor=btn("↗ К исходному сообщению");card.addView(anchor,p(-1,43));
+                        LinearLayout actions=row();card.addView(actions,p(-1,43));
+                        Button anchor=btn("Открыть");actions.addView(anchor,new LinearLayout.LayoutParams(0,-1,1f));
                         anchor.setOnClickListener(v->jump(event.anchorId,"relationships"));
-                        Button attach=btn("+ Прикрепить медиа из архива");card.addView(attach,p(-1,43));
+                        Button attach=btn("Медиа");actions.addView(attach,new LinearLayout.LayoutParams(0,-1,1f));
                         attach.setOnClickListener(v->chooseRelationshipAttachment(event.id,0));
-                        Button remove=btn("Удалить отметку (не файл)");card.addView(remove,p(-1,42));
+                        Button remove=btn("⋮");remove.setContentDescription("Удалить личную отметку события");
+                        actions.addView(remove,p(43,43));
                         remove.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Удалить событие?")
                             .setMessage("Удалится только описание и список ссылок. Все исходные файлы и сообщения останутся.")
                             .setNegativeButton("Отмена",null).setPositiveButton("Удалить",(d,which)->worker.execute(()->{
@@ -3685,7 +3715,7 @@ public class MainActivity extends Activity {
                         Button next=btn("Позже ›");pager.addView(next,new LinearLayout.LayoutParams(0,px(46),1));
                         next.setEnabled(first+20<all.size());next.setOnClickListener(v->{relationshipPageIndex++;renderRelationshipsPage();});
                     }
-                    status.setText("Хронология · "+all.size()+" событий · без облака");
+                    status.setText("");status.setVisibility(View.GONE);
                 });
             }catch(Exception e){runOnUiThread(()->{if(token==loadToken)status.setText("Ошибка событий: "+e.getMessage());});}
         });
