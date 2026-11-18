@@ -1896,27 +1896,27 @@ public class MainActivity extends Activity {
         // A calm, readable sheet: media lives behind the chat title,
         // PDF has its own visible action, and advanced tools remain in the drawer.
         LinearLayout content=column();content.setPadding(px(14),px(8),px(14),px(12));
-        TextView guide=text("Нажми на название чата, чтобы открыть фото и файлы. PDF — отдельная кнопка в шапке.",12,SUB);
+        TextView guide=text("Фото и файлы — по нажатию на название чата.",12,SUB);
         guide.setPadding(px(5),0,px(5),px(9));content.addView(guide,p(-1,-2));
-        String[] labels={"Поиск сообщений","Анализ диалога","Хронология","Управление чатом","Закреплённые","Все инструменты"};
+        String[] labels={"Найти сообщение","Перейти к дате","Анализ диалога","Хронология","Управление чатом","Все инструменты"};
         Runnable[] actions={
             ()->{screen="search";showPage();},
+            this::chooseDate,
             ()->{screen="analytics";showPage();},
             ()->{screen="relationships";showPage();},
             ()->showChatActions(activeKey,activeName),
-            this::showPinList,
             this::showSideMenu
         };
         final AlertDialog dialog=new FontDialog.Builder(this).setTitle(activeName)
             .setView(content).setNegativeButton("Закрыть",null).create();
         for(int i=0;i<labels.length;i++){
             final int index=i;
-            LinearLayout item=row();item.setPadding(px(12),px(9),px(8),px(9));
+            LinearLayout item=row();item.setPadding(px(12),px(6),px(8),px(6));
             item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2e5aaad8),outlined(PANEL,14,false),null));
             ImageView symbol=new ImageView(this);symbol.setImageResource(drawerIconFor(labels[i]));symbol.setColorFilter(ACCENT);
             LinearLayout.LayoutParams iconSize=p(22,22);iconSize.rightMargin=px(13);item.addView(symbol,iconSize);
             TextView label=text(labels[i],15,FG);item.addView(label,new LinearLayout.LayoutParams(0,-2,1));
-            LinearLayout.LayoutParams itemSize=p(-1,46);itemSize.bottomMargin=px(5);content.addView(item,itemSize);
+            LinearLayout.LayoutParams itemSize=p(-1,43);itemSize.bottomMargin=px(3);content.addView(item,itemSize);
             item.setContentDescription(labels[i]);
             // Handle taps on the text itself, not only on the surrounding row.
             // UIAutomator/accessibility may dispatch a click directly to the label.
@@ -2024,7 +2024,7 @@ public class MainActivity extends Activity {
         });root.requestApplyInsets();
         LinearLayout head=row();head.setPadding(px(7),px(4),px(7),px(4));
         head.setBackground(glass(PANEL,19));
-        LinearLayout.LayoutParams headBounds=p(-1,58);headBounds.bottomMargin=px(8);
+        LinearLayout.LayoutParams headBounds=p(-1,52);headBounds.bottomMargin=px(5);
         base.addView(head,headBounds);
         menuButton=btn("☰");menuButton.setTextSize(22);menuButton.setGravity(Gravity.CENTER);
         head.addView(menuButton,p(42,42));menuButton.setOnClickListener(v->showSideMenu());
@@ -2038,7 +2038,7 @@ public class MainActivity extends Activity {
             if(!home){saveReadingProgress();home=true;screen="chat";returnScreen="";searchReturnsToAnalytics=false;showPage();}});
         headerLogo=text("◇",29,ACCENT);headerLogo.setGravity(Gravity.CENTER);headerLogo.setContentDescription("Локальный архив");head.addView(headerLogo,p(34,42));
         LinearLayout headings=column();headings.setGravity(Gravity.CENTER_VERTICAL);
-        head.addView(headings,new LinearLayout.LayoutParams(0,px(50),1));
+        head.addView(headings,new LinearLayout.LayoutParams(0,px(44),1));
         title=text("Telegram Archive",17,FG);title.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
         title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.END);headings.addView(title,p(-1,26));
         subtitle=text("Личный архив · офлайн",11,SUB);
@@ -2064,13 +2064,13 @@ public class MainActivity extends Activity {
         Button close=btn("✕");playerStrip.addView(close,p(38,40));close.setOnClickListener(v->{closeFloatingRound();stopPlayback();});
         bottomNav=row();bottomNav.setPadding(px(4),px(3),px(4),px(3));
         bottomNav.setBackground(glass(PANEL,17));
-        LinearLayout.LayoutParams navBounds=p(-1,53);navBounds.bottomMargin=px(7);base.addView(bottomNav,navBounds);
+        LinearLayout.LayoutParams navBounds=p(-1,46);navBounds.bottomMargin=px(4);base.addView(bottomNav,navBounds);
         addTab("💬 Переписка","chat");addTab("▦ Медиа","media");
         toolArea=column();base.addView(toolArea,p(-1,-2));
         pinnedBar=row();base.addView(pinnedBar,p(-1,-2));
         filterBar=column();toolArea.addView(filterBar,p(-1,-2));
         searchArea=column();toolArea.addView(searchArea,p(-1,-2));
-        status=text("",11,SUB);status.setPadding(px(8),px(4),px(8),px(6));status.setMaxLines(3);base.addView(status,p(-1,-2));
+        status=text("",11,SUB);status.setPadding(px(8),px(3),px(8),px(4));status.setMaxLines(3);base.addView(status,p(-1,-2));
         scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);
         scroll.setOnScrollChangeListener((View.OnScrollChangeListener)(v,x,y,ox,oy)->{if(!home&&(screen.equals("chat")||screen.equals("search"))&&!loadingMore&&list.getHeight()>0&&y>oy&&y+scroll.getHeight()>list.getHeight()-px(300)&&((screen.equals("chat")?autoLoaded:searchLoaded)<total)){appendMessages();}if(!home&&"chat".equals(screen)){scheduleFloatingCheck();scheduleReadingSave();}});
         FrameLayout scrollHost=new FrameLayout(this);
@@ -2092,7 +2092,7 @@ public class MainActivity extends Activity {
         TextView t=text(label,13,SUB);t.setGravity(Gravity.CENTER);t.setTag(key);
         t.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
         t.setContentDescription(label);t.setBackground(shape(Color.TRANSPARENT,14));
-        LinearLayout.LayoutParams tabBounds=new LinearLayout.LayoutParams(0,px(44),1);
+        LinearLayout.LayoutParams tabBounds=new LinearLayout.LayoutParams(0,px(39),1);
         tabBounds.leftMargin=px(2);tabBounds.rightMargin=px(2);bottomNav.addView(t,tabBounds);
         t.setOnClickListener(v->{
             if("media".equals(key))rememberChatPositionForReturn();
@@ -2153,14 +2153,13 @@ public class MainActivity extends Activity {
                 filterBar.addView(actions,p(-1,46));
             }
         }
-        if("chat".equals(screen)){
+        if("chat".equals(screen)&&!returnScreen.isEmpty()){
+            // Date navigation remains available via the chat menu; no permanent
+            // 46dp toolbar over every message.
             LinearLayout actions=row();
-            Button date=btn("📅 Перейти к дате");actions.addView(date,new LinearLayout.LayoutParams(0,px(42),1));date.setOnClickListener(v->chooseDate());
-            if(!returnScreen.isEmpty()){
-                backButton=btn("↩ Назад к "+("media".equals(returnScreen)?"медиа":"relationships".equals(returnScreen)?"Хронологиям":"echo".equals(returnScreen)?"Эхо фраз":"analytics".equals(returnScreen)?"анализу":"поиску"));
-                actions.addView(backButton,p(-2,42));backButton.setOnClickListener(v->restoreReturn());
-            }
-            filterBar.addView(actions,p(-1,46));
+            backButton=btn("‹ Назад к "+("media".equals(returnScreen)?"медиа":"relationships".equals(returnScreen)?"хронологии":"echo".equals(returnScreen)?"фразам":"analytics".equals(returnScreen)?"анализу":"поиску"));
+            actions.addView(backButton,p(-2,39));backButton.setOnClickListener(v->restoreReturn());
+            filterBar.addView(actions,p(-1,41));
         }
         if("search".equals(screen)){
             if(searchReturnsToAnalytics&&"analytics".equals(returnScreen)){
@@ -2591,7 +2590,7 @@ public class MainActivity extends Activity {
         if(home){renderHome();return;}
         final String tab=screen,kind=mediaKind,search=q,who=byAuthor;
         final int requested=getOffset();final boolean deepMode=deep,hasMedia=onlyMedia;
-        backPage.setEnabled(false);nextPage.setEnabled(false);status.setText("Загружаю…");
+        backPage.setEnabled(false);nextPage.setEnabled(false);status.setVisibility(View.VISIBLE);status.setText("Загружаю…");
         worker.execute(()->{
             try{
                 if("analytics".equals(tab)){
@@ -2648,16 +2647,25 @@ public class MainActivity extends Activity {
                             }
                         });
                     }
-                    bottomPager.setVisibility(tab.equals("chat")||tab.equals("search")?View.GONE:View.VISIBLE);
+                    // A pager with no items (or just one page) is dead UI.
+                    // Keep it for galleries/favorites only when multiple pages exist.
+                    bottomPager.setVisibility((gallery||favs)&&count>MEDIA_PAGE?View.VISIBLE:View.GONE);
                     int shown=gallery?attachments.size():messages.size();
                     verticalTimeline.setVisibility("chat".equals(tab)?View.VISIBLE:View.GONE);
                     if("chat".equals(tab))verticalTimeline.setPosition(pos,count);
                     pageLabel.setText(count==0?"Нет данных":(pos+1)+"–"+(pos+shown)+" / "+count);
                     backPage.setEnabled(pos>0);nextPage.setEnabled(pos+shown<count);
-                    if(count==0)status.setText(gallery?"Таких медиа пока нет. Попробуй повторный импорт исходных HTML.":
+                    if(gallery){
+                        if(filterBar.getChildCount()>1)filterBar.getChildAt(1).setVisibility(count==0?View.GONE:View.VISIBLE);
+                        if(count==0)renderEmptyMediaState();
+                    }
+                    if(count>0&&"chat".equals(tab)){
+                        status.setText("");status.setVisibility(View.GONE);
+                    }else status.setVisibility(View.VISIBLE);
+                    if(count==0)status.setText(gallery?"":
                             "chat".equals(tab)?"В этой переписке пока нет сообщений.":
                             "Ничего не найдено — попробуй другой запрос или выбери папку.");
-                    else status.setText("media".equals(tab)?"Нажми — воспроизвести · удерживай — действия":
+                    else if(!"chat".equals(tab))status.setText("media".equals(tab)?"Нажми на файл, чтобы открыть":
                             "search".equals(tab)?(search.isEmpty()?"Введите слово или фразу":("Сообщений: "+count+"  ·  Точных вхождений «"+clip(search,28)+"»: "+stats.literalOccurrences+(deepMode?"":"  ·  Быстрый поиск учитывает начала слов"))):
                             "favorites".equals(tab)?"Твои избранные сообщения": "История · удерживай сообщение для действий");
                 });
@@ -3175,8 +3183,8 @@ public class MainActivity extends Activity {
             boolean roundOnly=attachments!=null&&attachments.size()==1&&"round".equals(attachments.get(0).kind)
                 &&(m.body==null||m.body.trim().matches("[.·•]*"));
             LinearLayout bubble=column();
-            bubble.setPadding(px(roundOnly?0:bubbleInset()),px(roundOnly?0:densityIndex==0?3:densityIndex==2?10:6),
-                px(roundOnly?0:bubbleInset()),px(roundOnly?0:densityIndex==0?3:densityIndex==2?11:7));
+            bubble.setPadding(px(roundOnly?0:bubbleInset()),px(roundOnly?0:densityIndex==0?3:densityIndex==2?8:5),
+                px(roundOnly?0:bubbleInset()),px(roundOnly?0:densityIndex==0?3:densityIndex==2?8:5));
             int chosenColor=authorColor(m.author);
             if(roundOnly)bubble.setBackgroundColor(Color.TRANSPARENT);
             else bubble.setBackground(gradient(m.id==highlightId?HIGHLIGHT:chosenColor,
@@ -3215,8 +3223,8 @@ public class MainActivity extends Activity {
                 if(reply.targetId>0)link.setOnClickListener(v->jump(reply.targetId,""));
             }
             if(m.body!=null&&!m.body.isEmpty()&&!roundOnly){
-                TextView body=text("",15,FG);body.setMaxWidth(mw);body.setText(highlighted(m.body,results?q:""));
-                body.setPadding(0,px(5),0,px(4));body.setLineSpacing(px(2),1.0f);bubble.addView(body);
+                TextView body=text("",14,FG);body.setMaxWidth(mw);body.setText(highlighted(m.body,results?q:""));
+                body.setPadding(0,px(3),0,px(2));body.setLineSpacing(px(2),1.0f);bubble.addView(body);
             }
             if(attachments!=null)for(MessageDb.Attachment a:attachments)bubble.addView(mediaTile(a,false),p(-2,-2));
             LinearLayout footer=row();footer.setGravity(Gravity.RIGHT);
@@ -4203,6 +4211,26 @@ public class MainActivity extends Activity {
                 toast(on?"★ Добавлено в избранное":"Убрано из избранного");
             });
         });
+    }
+    private void renderEmptyMediaState(){
+        // A real empty state instead of a disabled pager and vague status message.
+        LinearLayout empty=column();empty.setGravity(Gravity.CENTER);
+        empty.setPadding(px(18),px(37),px(18),px(31));
+        TextView symbol=text("▧",34,ACCENT);symbol.setGravity(Gravity.CENTER);
+        empty.addView(symbol,p(-1,49));
+        TextView heading=text("Здесь пока нет медиа",19,FG);
+        heading.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+        heading.setGravity(Gravity.CENTER);empty.addView(heading,p(-1,-2));
+        TextView details=text("Фото, видео, голосовые и файлы появятся после импорта полного экспорта Telegram.",13,SUB);
+        details.setGravity(Gravity.CENTER);details.setPadding(0,px(9),0,px(14));
+        empty.addView(details,p(-1,-2));
+        Button importAction=btn("Добавить медиа из экспорта");
+        empty.addView(importAction,p(-1,47));
+        importAction.setOnClickListener(v->chooseFolder());
+        LinearLayout.LayoutParams params=p(-1,-2);
+        params.setMargins(px(16),px(16),px(16),0);
+        empty.setBackground(glass(PANEL,18));
+        list.addView(empty,params);
     }
     private void renderMedia(List<MessageDb.Attachment> media){
         if("audio".equals(mediaKind)&&!media.isEmpty()){
