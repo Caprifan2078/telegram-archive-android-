@@ -1397,7 +1397,7 @@ public class MainActivity extends Activity {
     private void renderHome(){
         list.setBackgroundColor(BG);
         savedComposer.setVisibility(View.GONE);
-        final int homeToken=++loadToken;list.removeAllViews();pinnedBar.removeAllViews();filterBar.removeAllViews();searchArea.removeAllViews();
+        final int homeToken=++loadToken;list.removeAllViews();list.setTag("home-list");pinnedBar.removeAllViews();filterBar.removeAllViews();searchArea.removeAllViews();
         verticalTimeline.setVisibility(View.GONE);bottomPager.setVisibility(View.GONE);bottomNav.setVisibility(View.GONE);
         menuButton.setVisibility(View.VISIBLE);navBack.setVisibility(View.GONE);
         if(headerActions!=null)headerActions.setVisibility(View.GONE);
@@ -2748,6 +2748,13 @@ public class MainActivity extends Activity {
         if(importing)return;if(floatingPanel==null)stopPlayback();refreshTabs();configureBars();renderPinnedBar();int token=++loadToken;
         loadingMore=false; // A stale asynchronous page must not block the new tab.
         if(home){renderHome();return;}
+        // Do not show the old chat-list contents under the new conversation header
+        // while the SQLite worker is loading the first message page.
+        if("home-list".equals(list.getTag())){
+            list.removeAllViews();
+            list.setTag(null);list.setBackgroundColor(BG);
+            scroll.scrollTo(0,0);
+        }
         final String tab=screen,kind=mediaKind,search=q,who=byAuthor;
         final int requested=getOffset();final boolean deepMode=deep,hasMedia=onlyMedia;
         backPage.setEnabled(false);nextPage.setEnabled(false);status.setVisibility(View.VISIBLE);status.setText("Загружаю…");
