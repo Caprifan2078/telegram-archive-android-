@@ -450,7 +450,7 @@ public class Qa00NavigationCoreTest {
             screenOld=field(a,"screen"),folderOld=field(a,"folder");
         try{
             String[][] destinations={
-                {"Поиск сообщений","search"},
+                {"Найти сообщение","search"},
                 {"Анализ диалога","analytics"},
                 {"Хронология","relationships"}
             };
