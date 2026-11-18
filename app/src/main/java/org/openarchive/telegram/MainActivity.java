@@ -1532,27 +1532,63 @@ public class MainActivity extends Activity {
     private boolean isChatHidden(String key){
         return getPreferences(MODE_PRIVATE).getBoolean("hidden_chat_"+key,false);
     }
+    /** Single chat-details surface for the main list and conversation menu. */
     private void showChatActions(String key,String name){
         if(importing||restoringBackup){toast("Дождись завершения операции");return;}
-        new FontDialog.Builder(this).setTitle(name)
-            .setItems(new String[]{
-                isChatPinned(key)?"Открепить":"Закрепить",
-                "Переименовать чат",
-                "Изменить аватар",
-                isChatHidden(key)?"Показать чат":"Скрыть чат",
-                "Убрать в корзину"
-            },(d,which)->{
-                if(which==0)toggleChatPin(key);
-                else if(which==1)renameChat(key,name);
-                else if(which==2){pendingImageChatKey=key;pickPersonalImage(62);}
-                else if(which==3){
+        LinearLayout panel=column();panel.setPadding(px(13),px(5),px(13),px(8));
+        LinearLayout profile=row();profile.setPadding(px(7),px(7),px(7),px(12));
+        panel.addView(profile,p(-1,65));
+        TextView avatar=text(initial(name),22,FG);avatar.setGravity(Gravity.CENTER);
+        avatar.setTypeface(null,Typeface.BOLD);
+        avatar.setBackground(outlined(CHIP,100,false));
+        Bitmap bitmap=PersonalImages.load(this,
+            getPreferences(MODE_PRIVATE).getString(PersonalImages.chatAvatarKey(key),""));
+        if(bitmap!=null){
+            avatar.setText("");
+            avatar.setBackground(new android.graphics.drawable.BitmapDrawable(
+                getResources(),PersonalImages.circular(bitmap,px(47))));
+        }
+        profile.addView(avatar,p(47,47));
+        LinearLayout details=column();details.setPadding(px(12),0,0,0);
+        profile.addView(details,new LinearLayout.LayoutParams(0,-2,1));
+        TextView heading=text(name,17,FG);heading.setSingleLine(true);
+        heading.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+        heading.setEllipsize(TextUtils.TruncateAt.END);details.addView(heading);
+        TextView subtitle=text("Локальная переписка · данные на устройстве",11,SUB);
+        subtitle.setPadding(0,px(4),0,0);details.addView(subtitle);
+        final AlertDialog dialog=new FontDialog.Builder(this).setTitle("Информация о чате")
+            .setView(panel).setNegativeButton("Закрыть",null).create();
+        avatar.setContentDescription("Изменить аватар");
+        avatar.setOnClickListener(v->{dialog.dismiss();pendingImageChatKey=key;pickPersonalImage(62);});
+        String[] options={
+            "Открыть переписку",
+            "Переименовать чат",
+            "Изменить аватар",
+            isChatPinned(key)?"Открепить":"Закрепить",
+            isChatHidden(key)?"Показать чат":"Скрыть чат",
+            "Убрать в корзину"
+        };
+        for(int i=0;i<options.length;i++){
+            final int choice=i;
+            Button action=btn(options[i]);
+            LinearLayout.LayoutParams dims=p(-1,44);dims.bottomMargin=px(5);
+            panel.addView(action,dims);
+            action.setOnClickListener(v->{
+                dialog.dismiss();
+                if(choice==0)activateArchive(key);
+                else if(choice==1)renameChat(key,name);
+                else if(choice==2){pendingImageChatKey=key;pickPersonalImage(62);}
+                else if(choice==3)toggleChatPin(key);
+                else if(choice==4){
                     boolean hidden=!isChatHidden(key);
                     getPreferences(MODE_PRIVATE).edit().putBoolean("hidden_chat_"+key,hidden).apply();
                     if(hidden)getPreferences(MODE_PRIVATE).edit().putBoolean("show_hidden_chats",false).apply();
                     home=true;screen="chat";renderHome();
-                    toast(hidden?"Чат скрыт. Его можно вернуть через «Показать скрытые»":"Чат снова виден");
-                }else if(which==4)confirmRemoveChatFromList(key,name);
-            }).setNegativeButton("Закрыть",null).show();
+                    toast(hidden?"Чат скрыт. Вернуть можно из «Показать скрытые»":"Чат снова виден");
+                }else if(choice==5)confirmRemoveChatFromList(key,name);
+            });
+        }
+        dialog.show();
     }
     private void renameChat(String key,String name){
         EditText input=new EditText(this);input.setSingleLine(true);input.setText(name);
@@ -2015,16 +2051,7 @@ public class MainActivity extends Activity {
         rememberChatPositionForReturn();
         screen="media";returnScreen="";searchReturnsToAnalytics=false;showPage();
     }
-    private void showConversationInfo(){
-        new FontDialog.Builder(this).setTitle(activeName)
-            .setItems(new String[]{"▦ Медиатека","⌕ Поиск сообщений","▥ Анализ переписки","⚙ Оформление переписки","Локальный профиль и заметка"},(d,i)->{
-                if(i==0)screen="media";
-                else if(i==1)screen="search";
-                else if(i==2)screen="analytics";
-                else if(i==3){settingsMenu();return;}else{editLocalProfile();return;}
-                showPage();
-            }).show();
-    }
+    private void showConversationInfo(){showChatActions(activeKey,activeName);}
     private void showConversationMenu(View anchor){
         // A calm, readable sheet: media lives behind the chat title,
         // PDF has its own visible action, and advanced tools remain in the drawer.
