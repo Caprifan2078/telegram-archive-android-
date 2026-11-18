@@ -78,7 +78,15 @@ android {
             signingConfig signingConfigs.debug
         }
     }
-    testBuildType (project.findProperty('qaUiPolishInstrumentation') == 'true' ? 'uiPolishQa' : (project.findProperty('qaUiReviewInstrumentation') == 'true' ? 'uiReviewQa' : (project.findProperty('qaHandoffInstrumentation') == 'true' ? 'handoffQa' : (project.findProperty('qaStableInstrumentation') == 'true' ? 'stableQa' : 'compactQa'))))
+    // UI redesign is a separate QA app: never replace an installed archive under a different signing key.
+    buildTypes {
+        uiStructureQa {
+            initWith compactQa
+            applicationIdSuffix '.uistruct20261118'
+            signingConfig signingConfigs.debug
+        }
+    }
+    testBuildType (project.findProperty('qaUiStructureInstrumentation') == 'true' ? 'uiStructureQa' : (project.findProperty('qaUiPolishInstrumentation') == 'true' ? 'uiPolishQa' : (project.findProperty('qaUiReviewInstrumentation') == 'true' ? 'uiReviewQa' : (project.findProperty('qaHandoffInstrumentation') == 'true' ? 'handoffQa' : (project.findProperty('qaStableInstrumentation') == 'true' ? 'stableQa' : 'compactQa')))))
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
