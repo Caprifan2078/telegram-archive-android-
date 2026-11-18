@@ -3345,18 +3345,31 @@ public class MainActivity extends Activity {
     private void renderMessages(List<MessageDb.Item> messages,Map<Long,List<MessageDb.Attachment>> files,Map<Long,MessageDb.ReplyInfo> replies,boolean results,boolean append){
         if(messages.isEmpty())return;
         if(!append)renderedMessageViews.clear();
-        String last=append?lastRenderedDay:"";View focus=null;View glowBubble=null;int glowBase=0;long glowId=-1;
+        String last=append?lastRenderedDay:"",previousSender=null;
+        View focus=null;View glowBubble=null;int glowBase=0;long glowId=-1;
         for(MessageDb.Item m:messages){
-            String date=day(m.date);if(!date.equals(last)){dateSeparator(date);last=date;}
-            boolean own=!mine.isEmpty()&&mine.equalsIgnoreCase(m.author==null?"":m.author.trim());
+            String date=day(m.date),sender=m.author==null?"":m.author.trim();
+            boolean newDay=!date.equals(last);
+            if(newDay){dateSeparator(date);last=date;previousSender=null;}
+            boolean continued=!results&&previousSender!=null&&previousSender.equalsIgnoreCase(sender);
+            boolean own=!mine.isEmpty()&&mine.equalsIgnoreCase(sender);
             LinearLayout line=row();line.setTag(Long.valueOf(m.id));line.setGravity(own?Gravity.RIGHT:Gravity.LEFT);
-            LinearLayout.LayoutParams linep=p(-1,-2);linep.setMargins(px(2),px(1),px(2),px(densityIndex==0?2:densityIndex==2?8:4));list.addView(line,linep);
-            if(!own){TextView avatar=text(initial(m.author),14,FG);avatar.setTypeface(null,Typeface.BOLD);
-                avatar.setGravity(Gravity.CENTER);avatar.setBackground(shape(authorColor(m.author),100));
-                String avatarFile=getPreferences(MODE_PRIVATE).getString(PersonalImages.avatarKey(activeKey,m.author),"");
-                Bitmap portrait=PersonalImages.circularCached(this,avatarFile,px(32));
-                if(portrait!=null){avatar.setText("");avatar.setBackground(new android.graphics.drawable.BitmapDrawable(getResources(),portrait));}
-                LinearLayout.LayoutParams ap=p(32,32);ap.rightMargin=px(7);line.addView(avatar,ap);}
+            LinearLayout.LayoutParams linep=p(-1,-2);
+            linep.setMargins(px(2),continued?0:px(5),px(2),continued?px(2):px(6));
+            list.addView(line,linep);
+            if(!own){
+                if(continued){
+                    // Keep message text aligned with the first bubble in the group.
+                    line.addView(new View(this),p(36,1));
+                }else{
+                    TextView avatar=text(initial(m.author),13,FG);avatar.setTypeface(null,Typeface.BOLD);
+                    avatar.setGravity(Gravity.CENTER);avatar.setBackground(shape(authorColor(m.author),100));
+                    String avatarFile=getPreferences(MODE_PRIVATE).getString(PersonalImages.avatarKey(activeKey,m.author),"");
+                    Bitmap portrait=PersonalImages.circularCached(this,avatarFile,px(29));
+                    if(portrait!=null){avatar.setText("");avatar.setBackground(new android.graphics.drawable.BitmapDrawable(getResources(),portrait));}
+                    LinearLayout.LayoutParams ap=p(29,29);ap.rightMargin=px(7);line.addView(avatar,ap);
+                }
+            }
             List<MessageDb.Attachment> attachments=files.get(m.id);
             boolean roundOnly=attachments!=null&&attachments.size()==1&&"round".equals(attachments.get(0).kind)
                 &&(m.body==null||m.body.trim().matches("[.·•]*"));
@@ -3386,8 +3399,9 @@ public class MainActivity extends Activity {
             if(maxWidth<px(190))maxWidth=px(240);final int mw=maxWidth;
             bubble.setOnLongClickListener(v->{messageActions(m);return true;});
             String author=m.author==null||m.author.isEmpty()?"Неизвестный отправитель":m.author;
-            if(!roundOnly){
-                TextView from=text(author,12,0xffe8f6ff);from.setMaxWidth(mw);from.setTypeface(null,Typeface.BOLD);bubble.addView(from);
+            if(!roundOnly&&!continued){
+                TextView from=text(author,12,0xffd9ebfb);from.setMaxWidth(mw);
+                from.setTypeface(null,Typeface.BOLD);bubble.addView(from);
                 from.setOnLongClickListener(v->{pickAuthorColor(author);return true;});
             }
             MessageDb.ReplyInfo reply=replies.get(m.id);
@@ -3421,6 +3435,7 @@ public class MainActivity extends Activity {
             }
             renderedMessageViews.put(m.id,line);
             if(m.id==highlightId)focus=line;
+            previousSender=sender;
         }
         lastRenderedDay=last;
         if(append)return; // Never jump to the top when more history is appended.
