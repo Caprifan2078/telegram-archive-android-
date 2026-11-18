@@ -1918,7 +1918,11 @@ public class MainActivity extends Activity {
             TextView label=text(labels[i],15,FG);item.addView(label,new LinearLayout.LayoutParams(0,-2,1));
             LinearLayout.LayoutParams itemSize=p(-1,46);itemSize.bottomMargin=px(5);content.addView(item,itemSize);
             item.setContentDescription(labels[i]);
-            item.setOnClickListener(v->{dialog.dismiss();actions[index].run();});
+            // Handle taps on the text itself, not only on the surrounding row.
+            // UIAutomator/accessibility may dispatch a click directly to the label.
+            Runnable open=()->{dialog.dismiss();actions[index].run();};
+            item.setOnClickListener(v->open.run());
+            label.setOnClickListener(v->open.run());
         }
         dialog.show();
     }
