@@ -450,11 +450,9 @@ public class Qa00NavigationCoreTest {
             screenOld=field(a,"screen"),folderOld=field(a,"folder");
         try{
             String[][] destinations={
-                {"⌕ Поиск","search"},
-                {"▥ Анализ переписки","analytics"},
-                {"♡ Хронология","relationships"},
-                {"▤ Кинолента медиа","cinema"},
-                {"▦ Медиатека","media"}
+                {"Поиск сообщений","search"},
+                {"Анализ диалога","analytics"},
+                {"Хронология","relationships"}
             };
             for(String[] destination:destinations){
                 inst.runOnMainSync(()->{
@@ -466,7 +464,7 @@ public class Qa00NavigationCoreTest {
                     }catch(Exception e){throw new AssertionError(e);}
                 });
                 inst.waitForIdleSync();
-                tap("≡"); // header popup menu, not drawer
+                tap("≡"); // compact themed chat actions, not the left drawer
                 shown(destination[0]);
                 tap(destination[0]);
                 assertEquals("Wrong destination for "+destination[0],
