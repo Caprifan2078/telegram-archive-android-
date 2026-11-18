@@ -113,6 +113,11 @@ public final class QaVisualAuditScreenshotsTest {
             synthetic.stage(sql,i%2==0?"Александр":"Мария",d,lines[i],null,"");
         }
         synthetic.publishStaged(sql);
+        // Real dated events exercise the actual timeline, not only its empty state.
+        java.util.List<MessageDb.Item> chatItems=synthetic.page(0,14,"",false,"",false,false);
+        assertTrue("Synthetic chat missing timeline anchors",chatItems.size()>=10);
+        synthetic.addRelationshipEvent("Первый разговор","Начало общей истории",chatItems.get(1).id,0);
+        synthetic.addRelationshipEvent("Планы на поездку","Обсудили будущую встречу",chatItems.get(8).id,0);
         SQLiteDatabase sql2=second.getWritableDatabase();
         second.clearStage(sql2);
         second.stage(sql2,"Студент","2026-11-03 11:20:00","Завтра сдаём контрольную работу.",null,"");
@@ -148,6 +153,9 @@ public final class QaVisualAuditScreenshotsTest {
                 try{put(a,"home",false);put(a,"screen","chat");method(a,"showPage",new Class<?>[0]);}
                 catch(Exception e){throw new AssertionError(e);}
             });
+            assertNotNull("Chat must actually finish loading before a visual capture",
+                device.wait(androidx.test.uiautomator.Until.findObject(
+                    androidx.test.uiautomator.By.textContains("Привет! Это пример переписки")),20000));
             shot(a,"05-chat");
             ui(a,"showConversationInfo");shot(a,"06-chat-info");
             device.pressBack();inst.waitForIdleSync();
