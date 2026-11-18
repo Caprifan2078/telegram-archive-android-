@@ -158,6 +158,8 @@ public final class QaVisualAuditScreenshotsTest {
                 catch(Exception e){throw new AssertionError(e);}
             });
             shot(a,"11-analytics");
+            // Keep app-private screenshots available briefly for the CI ADB poller.
+            Thread.sleep(12000);
         }finally{
             idle(a);
             inst.runOnMainSync(()->{
