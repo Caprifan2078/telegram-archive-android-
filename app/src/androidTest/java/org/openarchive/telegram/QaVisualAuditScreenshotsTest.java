@@ -155,7 +155,7 @@ public final class QaVisualAuditScreenshotsTest {
             });
             assertNotNull("Chat must actually finish loading before a visual capture",
                 device.wait(androidx.test.uiautomator.Until.findObject(
-                    androidx.test.uiautomator.By.textContains("Привет! Это пример переписки")),20000));
+                    androidx.test.uiautomator.By.text("Мария")),20000));
             shot(a,"05-chat");
             ui(a,"showConversationInfo");shot(a,"06-chat-info");
             device.pressBack();inst.waitForIdleSync();
