@@ -65,7 +65,7 @@ public final class QaStandaloneHtmlImportRegressionTest {
         String oldScreen=(String)field(activity,"screen");
         boolean oldHome=(boolean)field(activity,"home");
         Object oldFolder=field(activity,"folder");
-        JSONArray before=(JSONArray)field(activity,"archives");
+        JSONArray before=new JSONArray(((JSONArray)field(activity,"archives")).toString());
         String freshKey=null;
         try {
             instrumentation.runOnMainSync(()->{
