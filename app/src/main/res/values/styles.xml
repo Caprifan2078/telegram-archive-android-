@@ -7,5 +7,15 @@
         <item name="android:colorAccent">#7AD2FF</item>
         <item name="android:windowBackground">#0B1424</item>
         <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:alertDialogTheme">@style/ArchiveAlertDialog</item>
+    </style>
+
+    <!-- Native AlertDialogs keep familiar Android behavior but match our dark slate UI. -->
+    <style name="ArchiveAlertDialog" parent="android:style/Theme.Material.Dialog.Alert">
+        <item name="android:windowBackground">#192A3C</item>
+        <item name="android:colorAccent">#7AD2FF</item>
+        <item name="android:textColorPrimary">#F0F8FF</item>
+        <item name="android:textColorSecondary">#B4C6D6</item>
+        <item name="android:fontFamily">sans</item>
     </style>
 </resources>
