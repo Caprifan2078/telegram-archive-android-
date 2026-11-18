@@ -5,6 +5,7 @@ on:
     paths:
       - 'app/src/main/java/org/openarchive/telegram/MainActivity.java'
       - 'app/src/androidTest/java/org/openarchive/telegram/QaUiChatNavigationRegressionTest.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/Qa00NavigationCoreTest.java'
       - 'app/src/androidTest/java/org/openarchive/telegram/QaStandaloneHtmlImportRegressionTest.java'
       - '.github/workflows/ui-chat-navigation-20261118.yml'
   workflow_dispatch:
