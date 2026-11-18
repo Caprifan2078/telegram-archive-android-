@@ -1,0 +1,56 @@
+name: Visual QA screenshots — synthetic Android 11
+on:
+  push:
+    branches: [qa/visual-audit-20261118]
+    paths:
+      - 'app/src/androidTest/java/org/openarchive/telegram/QaVisualAuditScreenshotsTest.java'
+      - '.github/workflows/visual-audit-screenshots-20261118.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  visual-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Compile screenshot instrumentation
+        run: gradle --no-daemon --max-workers=2 assembleUiReviewQa assembleUiReviewQaAndroidTest -PqaUiReviewInstrumentation=true
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: |
+            gradle --no-daemon --max-workers=2 connectedUiReviewQaAndroidTest -PqaUiReviewInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.QaVisualAuditScreenshotsTest'
+            mkdir -p visual-audit
+            adb pull /sdcard/Android/data/org.openarchive.telegram.qa.uichat20261118/files/visual-audit/. visual-audit/
+            ls -lh visual-audit/
+      - name: Upload real screen captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-viewer-visual-audit-android11
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            visual-audit/*.png
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
