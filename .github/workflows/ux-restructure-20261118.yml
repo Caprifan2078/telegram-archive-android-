@@ -1,0 +1,95 @@
+name: QA UX restructure and safe chat trash — Android regressions and screenshots
+on:
+  push:
+    branches: [qa/ux-structure-trash-20261118]
+    paths:
+      - 'app/src/main/java/org/openarchive/telegram/MainActivity.java'
+      - 'app/src/main/java/org/openarchive/telegram/MessageDb.java'
+      - 'app/src/main/java/org/openarchive/telegram/ArchiveBackup.java'
+      - 'app/src/main/java/org/openarchive/telegram/FullBackup.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/QaUiChatNavigationRegressionTest.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/FullBackupCustomAssetSafetyRegressionTest.java'
+      - 'app/src/main/res/values/styles.xml'
+      - 'app/src/androidTest/java/org/openarchive/telegram/Qa00NavigationCoreTest.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/QaVisualAuditScreenshotsTest.java'
+      - 'app/build.gradle'
+      - 'scripts/qa_visual_screenshot_pull.sh'
+      - '.github/workflows/ux-restructure-20261118.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  visual-and-functional:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK build tools
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: Compile isolated Android APK and JVM regressions
+        run: |
+          gradle --no-daemon --max-workers=2 assembleUiStructureQa assembleUiStructureQaAndroidTest testUiStructureQaUnitTest -PqaUiStructureInstrumentation=true
+      - name: Verify APK, immutable package identity, and local-only permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/uiStructureQa/app-uiStructureQa.apk
+          test -s "$apk"
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/apksigner" verify --verbose "$apk"
+          "$tools/apksigner" verify --print-certs "$apk" | grep 'Signer #1 certificate SHA-256 digest'
+          "$tools/aapt" dump badging "$apk" | grep '^package:'
+          "$tools/aapt" dump badging "$apk" | grep -q "package: name='org.openarchive.telegram.qa.uistruct20261118'"
+          if "$tools/aapt" dump permissions "$apk" | grep -q 'android.permission.INTERNET'; then
+            echo "Unexpected INTERNET permission"; exit 1
+          fi
+          mkdir -p deliver
+          cp "$apk" deliver/Telegram_Archive_Viewer_0.51_UX_Structure_QA_2026-11-18.apk
+          cd deliver
+          sha256sum *.apk > SHA256SUMS.txt
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: |
+            adb install deliver/Telegram_Archive_Viewer_0.51_UX_Structure_QA_2026-11-18.apk
+            gradle --no-daemon --max-workers=2 connectedUiStructureQaAndroidTest -PqaUiStructureInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.QaUiChatNavigationRegressionTest,org.openarchive.telegram.QaStandaloneHtmlImportRegressionTest,org.openarchive.telegram.Qa00NavigationCoreTest,org.openarchive.telegram.UiSmokeTest,org.openarchive.telegram.FullBackupCustomAssetSafetyRegressionTest'
+            bash scripts/qa_visual_screenshot_pull.sh
+      - name: Upload synthetic screenshots and result XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-viewer-ux-restructure-android11-screens
+          retention-days: 7
+          path: |
+            visual-audit/*.png
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+      - name: Upload test-only APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Telegram-Archive-Viewer-UX-Structure-0.51-QA
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            deliver/*.apk
+            deliver/SHA256SUMS.txt
