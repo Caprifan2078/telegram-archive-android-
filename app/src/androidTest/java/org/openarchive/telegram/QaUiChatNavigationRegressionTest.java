@@ -124,6 +124,7 @@ public final class QaUiChatNavigationRegressionTest {
         synthetic.getWritableDatabase();synthetic.close();
         SharedPreferences prefs=a.getPreferences(Context.MODE_PRIVATE);
         String originalRegistry=prefs.getString("archive_registry","[]");
+        String originalTrash=prefs.getString("archive_trash","[]");
         String originalActive=prefs.getString("active_archive","default");
         boolean originalShowHidden=prefs.getBoolean("show_hidden_chats",false);
         JSONArray old=(JSONArray)value(a,"archives");
@@ -150,6 +151,7 @@ public final class QaUiChatNavigationRegressionTest {
         }finally{
             inst.runOnMainSync(()->{
                 prefs.edit().putString("archive_registry",originalRegistry)
+                    .putString("archive_trash",originalTrash)
                     .putString("active_archive",originalActive)
                     .putBoolean("show_hidden_chats",originalShowHidden)
                     .remove("hidden_chat_"+key).remove("pinned_chat_"+key).commit();
@@ -159,4 +161,66 @@ public final class QaUiChatNavigationRegressionTest {
             a.deleteDatabase("telegram_"+key+".db");
         }
     }
+    @Test public void removedChatRestoresFromTrashWithOriginalDatabaseAndMetadata()throws Exception {
+        MainActivity activity=rule.getActivity();
+        String key="qa_trash_"+UUID.randomUUID().toString().replace("-","");
+        SharedPreferences prefs=activity.getPreferences(Context.MODE_PRIVATE);
+        String initialRegistry=prefs.getString("archive_registry","[]");
+        String initialTrash=prefs.getString("archive_trash","[]");
+        String initialActive=prefs.getString("active_archive","default");
+        JSONArray initialArray=(JSONArray)value(activity,"archives");
+        MessageDb synthetic=new MessageDb(activity,key);
+        android.database.sqlite.SQLiteDatabase sql=synthetic.getWritableDatabase();
+        synthetic.clearStage(sql);
+        synthetic.stage(sql,"Test Author","2026-01-01 12:00","Recover this message",null,"");
+        synthetic.publishStaged(sql);synthetic.close();
+        try{
+            JSONObject entry=new JSONObject().put("key",key).put("name","QA Recoverable Chat")
+                .put("tree","local:/test-recoverable-source");
+            JSONArray withChat=new JSONArray(initialArray.toString());withChat.put(entry);
+            inst.runOnMainSync(()->{try{
+                set(activity,"archives",withChat);set(activity,"home",true);
+                invoke(activity,"removeChatFromList",new Class<?>[]{String.class},key);
+            }catch(Exception error){throw new AssertionError(error);}});
+            assertFalse("Removed entry must leave active registry",prefs.getString("archive_registry","[]").contains(key));
+            assertTrue("Trash must durably retain its registration metadata",
+                prefs.getString("archive_trash","[]").contains(key));
+            assertTrue("Original SQLite must remain after removal",
+                activity.getDatabasePath("telegram_"+key+".db").isFile());
+            inst.runOnMainSync(()->{try{
+                invoke(activity,"restoreChatFromTrash",new Class<?>[]{String.class},key);
+            }catch(Exception error){throw new AssertionError(error);}});
+            assertTrue("Restore must make chat visible in registry",
+                prefs.getString("archive_registry","[]").contains(key));
+            assertFalse("Restored chat must not remain in trash",
+                prefs.getString("archive_trash","[]").contains(key));
+            JSONArray restored=(JSONArray)value(activity,"archives");
+            assertEquals(initialArray.length()+1,restored.length());
+            assertEquals("QA Recoverable Chat",restored.getJSONObject(restored.length()-1).getString("name"));
+            assertEquals("local:/test-recoverable-source",
+                restored.getJSONObject(restored.length()-1).getString("tree"));
+            try(MessageDb db=new MessageDb(activity,key)){
+                assertEquals("Reversible removal must preserve original messages",1,db.totalMessages());
+                assertEquals("Recover this message",
+                    db.page(0,1,"",false,"",false,false).get(0).body);
+            }
+            // Duplicate restore is a no-op: must not append a second entry.
+            inst.runOnMainSync(()->{try{
+                invoke(activity,"restoreChatFromTrash",new Class<?>[]{String.class},key);
+            }catch(Exception error){throw new AssertionError(error);}});
+            assertEquals(initialArray.length()+1,((JSONArray)value(activity,"archives")).length());
+        }finally{
+            inst.runOnMainSync(()->{
+                prefs.edit().putString("archive_registry",initialRegistry)
+                    .putString("archive_trash",initialTrash)
+                    .putString("active_archive",initialActive).commit();
+                try{
+                    set(activity,"archives",initialArray);set(activity,"home",true);
+                    invoke(activity,"renderHome",new Class<?>[0]);
+                }catch(Exception error){throw new AssertionError(error);}
+            });
+            activity.deleteDatabase("telegram_"+key+".db");
+        }
+    }
+
 }
