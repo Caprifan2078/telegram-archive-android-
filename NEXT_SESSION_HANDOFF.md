@@ -1,3 +1,10 @@
+### Дополнение 18.11.2026 — UI-правки после первых RED/Green прогонов
+
+- **RED:** [44212563677](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/44212563677) — 5 тестов, 1 FAIL: файл в диалоге импорта не отображался. Причина: неоднозначное сочетание `setMessage` / `setItems` в Android AlertDialog.
+- **GREEN:** [44213568670](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/44213568670) — Android 11, 5/5 PASS и JVM/build PASS после замены диалога на два явных пункта (файл/папка). [44213950319](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/44213950319) — тоже 5/5 PASS после замены меню чата на единый тематический список, возврата отдельного просмотра Office/архивов и упрощённой Хронологии.
+- Обновлён `chatPicker()`: скрытые чаты не должны появляться в списке выбора; боковая кнопка Хронологии ведёт в упрощённый обзор; импорт из единственного HTML проверяется отдельным `QaStandaloneHtmlImportRegressionTest`; старый `Qa00NavigationCoreTest` обновлён для нового диалога.
+- **Последний SHA на момент записи:** `c9307ef1a9c1c1e4ec10144c72c636104f16ca75`. Последний запущенный CI [44214172612](https://github.com/Caprifan2078/telegram-archive-android-/actions/runs/44214172612), **ещё не подтверждён на момент записи** — проверить компиляцию и результаты Android. Не выдавать APK и не заявлять общий PASS до завершения. Никакие пользовательские архивы не удалялись.
+
 ## 18.11.2026 — Навигация и чат-менеджмент, активная QA-ветка
 
 **Ветка:** `qa/ui-chat-navigation-20261118`, основание `qa/apk-handoff-20261115` (`60dc82ee209bdb2ab6b791b07864715608be3b43`). **`main` не менять**. Gradle версия `0.51 QA` не повышалась.
