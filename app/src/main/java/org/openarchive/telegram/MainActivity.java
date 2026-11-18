@@ -1080,13 +1080,44 @@ public class MainActivity extends Activity {
         });
         space(group,5);
     }
+    /** One consistent native icon family instead of mixed emojis and Unicode silhouettes. */
+    private int drawerIconFor(String label){
+        String low=label.toLowerCase(Locale.ROOT);
+        if(low.contains("импорт")||low.contains("добавить"))return android.R.drawable.ic_menu_add;
+        if(low.contains("поиск")||low.contains("найти"))return android.R.drawable.ic_menu_search;
+        if(low.contains("медиа")||low.contains("кино")||low.contains("аватар")||low.contains("обои"))
+            return android.R.drawable.ic_menu_gallery;
+        if(low.contains("резерв")||low.contains("копию")||low.contains("капсула"))
+            return android.R.drawable.ic_menu_save;
+        if(low.contains("восстанов")||low.contains("перенос"))
+            return android.R.drawable.ic_menu_revert;
+        if(low.contains("хронолог")||low.contains("истори")||low.contains("день"))
+            return android.R.drawable.ic_menu_recent_history;
+        if(low.contains("настро")||low.contains("оформлен")||low.contains("производител"))
+            return android.R.drawable.ic_menu_manage;
+        if(low.contains("помощ")||low.contains("инструкц"))
+            return android.R.drawable.ic_menu_help;
+        if(low.contains("замет")||low.contains("шрифт"))
+            return android.R.drawable.ic_menu_edit;
+        if(low.contains("анализ")||low.contains("сравнен")||low.contains("провер")||low.contains("диагност"))
+            return android.R.drawable.ic_menu_info_details;
+        return android.R.drawable.ic_menu_view;
+    }
     private void sideMenuItem(LinearLayout parent,Dialog dialog,View pane,
                               String heading,String detail,Runnable action){
-        LinearLayout item=column();item.setPadding(px(13),px(11),px(9),px(11));
+        int split=heading.indexOf("  ");
+        String label=split>=0?heading.substring(split+2).trim():heading;
+        LinearLayout item=row();item.setPadding(px(12),px(11),px(10),px(11));
         item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2e5aaad8),outlined(PANEL,15,false),null));
         LinearLayout.LayoutParams params=p(-1,-2);params.bottomMargin=px(5);parent.addView(item,params);
-        TextView name=text(heading,15,FG);name.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));item.addView(name);
-        TextView summary=text(detail,12,SUB);summary.setPadding(0,px(4),0,0);item.addView(summary);
+        ImageView symbol=new ImageView(this);symbol.setImageResource(drawerIconFor(label));
+        symbol.setColorFilter(ACCENT);symbol.setContentDescription(null);
+        LinearLayout.LayoutParams symbolSize=p(22,22);symbolSize.rightMargin=px(13);
+        item.addView(symbol,symbolSize);
+        LinearLayout info=column();item.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+        TextView name=text(label,15,FG);name.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));info.addView(name);
+        TextView summary=text(detail,12,SUB);summary.setPadding(0,px(3),0,0);info.addView(summary);
+        item.setContentDescription(label+". "+detail);
         item.setOnClickListener(v->closeDrawer(dialog,pane,action));
     }
     private void glassDialog(){
@@ -3348,30 +3379,32 @@ public class MainActivity extends Activity {
     private void renderRelationshipsPage(){
         int token=++loadToken;
         if(home){screen="chat";showPage();return;}
-        prepareRelationshipScreen("♡ Хронология","Личный архив истории: этапы, события, медиа и повторяющиеся выражения. Всё включается вручную и остаётся на телефоне.");
-        analyticsText(list,RelationshipFeatureGuide.INTRO,SUB,13);
-        Button stages=btn("◷ Этапы истории и сравнение графиков");list.addView(stages,p(-1,52));
-        analyticsText(list,RelationshipFeatureGuide.STAGES,SUB,12);
+        prepareRelationshipScreen("Хронология","Твоя история в сообщениях. Начни с событий или периодов; дополнительные инструменты скрыты ниже.");
+        Button stages=btn("Мои периоды истории");list.addView(stages,p(-1,52));
         stages.setOnClickListener(v->{screen="chronology";showPage();});
-        Button echoes=btn("❞ Эхо фраз — найти повторения");list.addView(echoes,p(-1,52));
-        analyticsText(list,RelationshipFeatureGuide.ECHO,SUB,12);
+        Button backToChat=btn("+ Отметить событие в переписке");list.addView(backToChat,p(-1,52));
+        backToChat.setOnClickListener(v->{screen="chat";showPage();
+            toast("Удерживай важное сообщение и выбери «Добавить событие истории»");});
+        analyticsText(list,"События привязаны к настоящим сообщениям. Они не меняют исходный экспорт.",SUB,12);
+        Button more=btn("Другие инструменты истории  ▾");list.addView(more,p(-1,46));
+        LinearLayout advanced=column();advanced.setVisibility(View.GONE);list.addView(advanced,p(-1,-2));
+        more.setOnClickListener(v->{
+            boolean expand=advanced.getVisibility()!=View.VISIBLE;
+            advanced.setVisibility(expand?View.VISIBLE:View.GONE);
+            more.setText(expand?"Скрыть дополнительные инструменты  ▴":"Другие инструменты истории  ▾");
+        });
+        Button echoes=btn("Повторяющиеся фразы");advanced.addView(echoes,p(-1,48));
         echoes.setOnClickListener(v->{screen="echo";showPage();});
-        Button fullCompare=btn("⇄ Сравнение диалогов · два чата");list.addView(fullCompare,p(-1,52));
-        analyticsText(list,RelationshipFeatureGuide.COMPARE,SUB,12);
+        Button fullCompare=btn("Сравнить две переписки");advanced.addView(fullCompare,p(-1,48));
         fullCompare.setOnClickListener(v->chooseDualChat("dual_compare"));
-        Button sharedMemories=btn("◷ Воспоминания · общая временная линия");list.addView(sharedMemories,p(-1,52));
-        analyticsText(list,RelationshipFeatureGuide.MEMORIES,SUB,12);
+        Button sharedMemories=btn("Воспоминания двух переписок");advanced.addView(sharedMemories,p(-1,48));
         sharedMemories.setOnClickListener(v->chooseDualChat("dual_memories"));
-        Button comparison=btn("▦ Параллельные календари двух чатов");list.addView(comparison,p(-1,52));
-        analyticsText(list,RelationshipFeatureGuide.CALENDARS,SUB,12);
+        Button comparison=btn("Календари двух переписок");advanced.addView(comparison,p(-1,48));
         comparison.setOnClickListener(v->chooseParallelCalendar());
-        Button cinema=btn("▤ Кинолента: медиа по годам");list.addView(cinema,p(-1,52));
-        analyticsText(list,RelationshipFeatureGuide.CINEMA,SUB,12);
+        Button cinema=btn("Кинолента медиа по годам");advanced.addView(cinema,p(-1,48));
         cinema.setOnClickListener(v->{screen="cinema";showPage();});
-        Button health=btn("◇ Проверить сохранность медиа");list.addView(health,p(-1,52));
-        analyticsText(list,RelationshipFeatureGuide.MEDIA_HEALTH,SUB,12);
+        Button health=btn("Проверить сохранность медиа");advanced.addView(health,p(-1,48));
         health.setOnClickListener(v->showMediaHealth());
-        analyticsText(list,"Как создать событие: вернись в переписку, удерживай нужное сообщение → «♡ Добавить событие истории». Затем открой этот раздел и прикрепи медиа. Удаление события не удаляет переписку или файлы.",SUB,12);
         LinearLayout eventsHolder=column();list.addView(eventsHolder,p(-1,-2));
         final MessageDb source=db;final String key=activeKey;
         worker.execute(()->{
