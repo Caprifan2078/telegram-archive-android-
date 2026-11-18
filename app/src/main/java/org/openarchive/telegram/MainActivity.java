@@ -2113,9 +2113,11 @@ public class MainActivity extends Activity {
         },c.get(Calendar.YEAR),c.get(Calendar.MONTH),c.get(Calendar.DAY_OF_MONTH)).show();
     }
     private void chooseFolder(){
-        new FontDialog.Builder(this).setTitle("Добавить переписку").setItems(
-            new String[]{"Выбрать папку Telegram","Импортировать Telegram ZIP / 7z / RAR","Просмотреть файл или архив · 7z / ZIP / RAR / Office"},
-            (d,selected)->{if(selected==0)chooseExistingFolder();else if(selected==1)chooseCompressedArchive();else chooseReadOnlyPreview();}).show();
+        new FontDialog.Builder(this).setTitle("Импорт переписки")
+            .setMessage("Один импорт для всех чатов. Выбери файл Telegram (HTML, ZIP, 7z, RAR) или папку экспорта для медиа.")
+            .setItems(new String[]{"Выбрать файл Telegram", "Выбрать папку Telegram"},
+                (d,selection)->{if(selection==0)chooseCompressedArchive();else chooseExistingFolder();})
+            .setNegativeButton("Отмена",null).show();
     }
     private void chooseReadOnlyPreview(){
         Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -2268,9 +2270,17 @@ public class MainActivity extends Activity {
                 if(c!=null&&c.moveToFirst())name=c.getString(0);
             }catch(Exception ignored){}
             String low=name==null?"":name.toLowerCase(Locale.ROOT);
-            String ext=low.endsWith(".rar")?"rar":low.endsWith(".zip")?"zip":low.endsWith(".7z")?"7z":"";
-            if(ext.isEmpty()){toast("Нужен ZIP, 7z или RAR");return;}
+            String ext=low.endsWith(".rar")?"rar":low.endsWith(".zip")?"zip":
+                low.endsWith(".7z")?"7z":low.endsWith(".html")||low.endsWith(".htm")?"html":"";
+            if(ext.isEmpty()){toast("Выбери HTML, ZIP, 7z, RAR или папку экспорта");return;}
             final String displayName=name;
+            if("html".equals(ext)){
+                new FontDialog.Builder(this).setTitle("Импорт HTML Telegram")
+                    .setMessage("Сообщения откроются в обычном чате. Для фото, голосовых и видео нужен полный экспорт: выбери папку Telegram или архив с медиа.")
+                    .setNegativeButton("Отмена",null)
+                    .setPositiveButton("Импортировать",(d,w)->importSingleHtml(source,displayName)).show();
+                return;
+            }
             EditText archivePassword=new EditText(this);archivePassword.setSingleLine(true);
             archivePassword.setHint("Пароль архива, если есть");
             archivePassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
@@ -2298,6 +2308,60 @@ public class MainActivity extends Activity {
                 .setPositiveButton("Импортировать",(d,w)->importArchive()).setNegativeButton("Отмена",null).show();
         }).setNegativeButton("Отмена",null).show();
     }
+    /** Index a standalone Telegram HTML without replacing another chat or inventing media. */
+    private void importSingleHtml(Uri source,String label){
+        if(importing)return;
+        importing=true;
+        if(folderButton!=null)folderButton.setEnabled(false);
+        status.setText("Читаю HTML и создаю переписку…");
+        final String key=UUID.randomUUID().toString().replace("-","");
+        final java.io.File root=new java.io.File(new java.io.File(getFilesDir(),"telegram_imports"),key);
+        worker.execute(()->{
+            try{
+                if(!root.isDirectory()&&!root.mkdirs())throw new IOException("Не удалось создать папку");
+                java.io.File html=new java.io.File(root,"messages.html");
+                try(InputStream input=getContentResolver().openInputStream(source);
+                    OutputStream output=new java.io.FileOutputStream(html)){
+                    if(input==null)throw new IOException("Не удалось прочитать HTML");
+                    byte[] buffer=new byte[65536];int count;long totalBytes=0;
+                    while((count=input.read(buffer))!=-1){
+                        totalBytes+=count;
+                        if(totalBytes>1024L*1024*1024)throw new IOException("HTML больше 1 ГБ; импортируй исходную папку");
+                        output.write(buffer,0,count);
+                    }
+                    if(totalBytes==0)throw new IOException("HTML-файл пуст");
+                }
+                MessageDb fresh=new MessageDb(this,key);
+                try{
+                    TelegramImporter.importFiles(getContentResolver(),
+                        new DocumentFolder(getContentResolver(),root),fresh,
+                        message->runOnUiThread(()->status.setText(message)));
+                    if(fresh.totalMessages()==0)throw new IOException("Не найдены сообщения Telegram в HTML");
+                }finally{fresh.close();}
+                runOnUiThread(()->{
+                    importing=false;
+                    if(folderButton!=null)folderButton.setEnabled(true);
+                    try{
+                        JSONObject entry=new JSONObject();
+                        entry.put("key",key);entry.put("name",label);entry.put("tree","local:"+root.getAbsolutePath());
+                        archives.put(entry);activateArchive(key);
+                        status.setText("Переписка открыта · медиа из одиночного HTML недоступны");
+                    }catch(Exception error){toast("Не удалось зарегистрировать чат: "+error.getMessage());}
+                });
+            }catch(Exception error){
+                ArchiveFileImport.deleteTree(root);
+                deleteDatabase("telegram_"+key+".db");
+                runOnUiThread(()->{
+                    importing=false;
+                    if(folderButton!=null)folderButton.setEnabled(true);
+                    status.setText("Импорт HTML не завершён");
+                    new FontDialog.Builder(this).setTitle("HTML не импортирован")
+                        .setMessage(error.getMessage()).setPositiveButton("Закрыть",null).show();
+                });
+            }
+        });
+    }
+
     private void importCompressed(Uri source,String extension,String label,char[] password){
         if(importing){if(password!=null)java.util.Arrays.fill(password,'\0');return;}
         importing=true;folderButton.setEnabled(false);status.setText("Распаковка "+label+"…");
