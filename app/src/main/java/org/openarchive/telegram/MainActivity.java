@@ -2649,7 +2649,7 @@ public class MainActivity extends Activity {
                     }
                     // A pager with no items (or just one page) is dead UI.
                     // Keep it for galleries/favorites only when multiple pages exist.
-                    bottomPager.setVisibility((gallery||favs)&&count>MEDIA_PAGE?View.VISIBLE:View.GONE);
+                    bottomPager.setVisibility((gallery||favs)&&count>getLimit()?View.VISIBLE:View.GONE);
                     int shown=gallery?attachments.size():messages.size();
                     verticalTimeline.setVisibility("chat".equals(tab)?View.VISIBLE:View.GONE);
                     if("chat".equals(tab))verticalTimeline.setPosition(pos,count);
@@ -2673,12 +2673,47 @@ public class MainActivity extends Activity {
         });
     }
     /** Analytics is a read-only, anonymous-by-default view of the current chat DB. */
+    private void addAnalyticsMetric(LinearLayout parent,String caption,long value){
+        LinearLayout card=column();card.setGravity(Gravity.CENTER);
+        card.setPadding(px(6),px(13),px(6),px(11));
+        card.setBackground(outlined(PANEL,15,false));
+        LinearLayout.LayoutParams size=new LinearLayout.LayoutParams(0,px(83),1f);
+        size.setMargins(px(3),0,px(3),0);parent.addView(card,size);
+        TextView number=text(String.format(Locale.ROOT,"%,d",value).replace(',',' '),21,FG);
+        number.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+        number.setGravity(Gravity.CENTER);number.setSingleLine(true);
+        number.setAutoSizeTextTypeUniformWithConfiguration(13,21,1,
+            android.util.TypedValue.COMPLEX_UNIT_SP);
+        card.addView(number,p(-1,32));
+        TextView label=text(caption,11,SUB);
+        label.setGravity(Gravity.CENTER);label.setSingleLine(true);
+        card.addView(label,p(-1,18));
+        card.setContentDescription(caption+": "+value);
+    }
     private void renderAnalytics(ChatAnalytics.Snapshot r){
-        TextView heading=text("Анализ переписки",22,FG);heading.setTypeface(null,Typeface.BOLD);
-        heading.setPadding(px(10),px(8),px(8),px(7));list.addView(heading);
-        TextView note=text(AnalyticsDisplayCopy.ANALYSIS_INTRO,12,SUB);
-        note.setPadding(px(11),0,px(11),px(12));list.addView(note);
+        TextView heading=text("Анализ переписки",21,FG);heading.setTypeface(null,Typeface.BOLD);
+        heading.setPadding(px(10),px(9),px(8),px(4));list.addView(heading);
+        TextView note=text("Самое важное о переписке · только на устройстве",12,SUB);
+        note.setPadding(px(11),0,px(11),px(11));list.addView(note);
+
+        // A useful first screen: key numbers before explanations and long charts.
+        LinearLayout glance=row();glance.setGravity(Gravity.TOP);
+        glance.setPadding(px(5),0,px(5),px(2));list.addView(glance,p(-1,-2));
+        addAnalyticsMetric(glance,"Сообщений",r.totalMessages);
+        addAnalyticsMetric(glance,"Людей",r.people.size());
+        addAnalyticsMetric(glance,"Медиа",r.totalMedia);
+
+        Button expandOverview=btn("Подробные показатели  ▾");
+        LinearLayout.LayoutParams expandParams=p(-1,42);
+        expandParams.setMargins(px(5),px(7),px(5),px(2));
+        list.addView(expandOverview,expandParams);
         LinearLayout overview=analyticsCard("Общая картина");
+        overview.setVisibility(View.GONE);
+        expandOverview.setOnClickListener(v->{
+            boolean show=overview.getVisibility()!=View.VISIBLE;
+            overview.setVisibility(show?View.VISIBLE:View.GONE);
+            expandOverview.setText(show?"Скрыть подробные показатели  ▴":"Подробные показатели  ▾");
+        });
         analyticsLine(overview,"Сообщений",r.totalMessages);
         analyticsLine(overview,"Участников / отправителей",r.people.size());
         analyticsLine(overview,"Слов",r.totalWords);
@@ -2738,7 +2773,17 @@ public class MainActivity extends Activity {
             ranked.sort((a,b)->{int diff=Long.compare(b.getValue(),a.getValue());return diff!=0?diff:a.getKey().compareTo(b.getKey());});
             for(int i=0;i<Math.min(8,ranked.size());i++)analyticsLine(days,ranked.get(i).getKey(),ranked.get(i).getValue());
         }
-        LinearLayout about=analyticsCard("Как считаются показатели");
+        Button methodology=btn("Как рассчитана статистика  ▾");
+        LinearLayout.LayoutParams explainButton=p(-1,43);
+        explainButton.setMargins(px(6),px(12),px(6),px(4));
+        list.addView(methodology,explainButton);
+        LinearLayout about=analyticsCard("Методика расчёта");
+        about.setVisibility(View.GONE);
+        methodology.setOnClickListener(v->{
+            boolean show=about.getVisibility()!=View.VISIBLE;
+            about.setVisibility(show?View.VISIBLE:View.GONE);
+            methodology.setText(show?"Скрыть методику  ▴":"Как рассчитана статистика  ▾");
+        });
         analyticsText(about,"Отправители объединяются без учёта регистра и лишних пробелов. Каждое вложение считается отдельно; одно сообщение может содержать несколько файлов. Слова считаются по Unicode-буквам и цифрам. Системные сообщения из старых импортов могут иметь ошибочно назначенного автора — для уточнения нужен повторный импорт HTML.",SUB,12);
         analyticsText(about,"Число медиа основано на индексированных ссылках HTML: отсутствующий на диске файл тоже учитывается. Получатель в группе не определяется только по имени отправителя. Нажатие на слово открывает поиск.",SUB,12);
     }
@@ -3415,13 +3460,13 @@ public class MainActivity extends Activity {
     private void renderRelationshipsPage(){
         int token=++loadToken;
         if(home){screen="chat";showPage();return;}
-        prepareRelationshipScreen("Хронология","Твоя история в сообщениях. Начни с событий или периодов; дополнительные инструменты скрыты ниже.");
+        prepareRelationshipScreen("Хронология","Важные события и периоды из твоих сообщений.");
         Button stages=btn("Мои периоды истории");list.addView(stages,p(-1,52));
         stages.setOnClickListener(v->{screen="chronology";showPage();});
         Button backToChat=btn("+ Отметить событие в переписке");list.addView(backToChat,p(-1,52));
         backToChat.setOnClickListener(v->{screen="chat";showPage();
             toast("Удерживай важное сообщение и выбери «Добавить событие истории»");});
-        analyticsText(list,"События привязаны к настоящим сообщениям. Они не меняют исходный экспорт.",SUB,12);
+        analyticsText(list,"Отметки личные: исходная переписка не меняется.",SUB,12);
         Button more=btn("Другие инструменты истории  ▾");list.addView(more,p(-1,46));
         LinearLayout advanced=column();advanced.setVisibility(View.GONE);list.addView(advanced,p(-1,-2));
         more.setOnClickListener(v->{
@@ -3922,18 +3967,27 @@ public class MainActivity extends Activity {
         filterBar.removeAllViews();searchArea.removeAllViews();
         bottomPager.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
         list.removeAllViews();list.setBackgroundColor(BG);status.setText("Загружаю твою хронологию…");
-        TextView heading=text("◷  Хронология истории",21,FG);heading.setTypeface(null,Typeface.BOLD);
-        heading.setPadding(px(12),px(12),px(12),px(10));list.addView(heading);
-        analyticsText(list,"Этот раздел включается только вручную. Ты сам задаёшь названия и границы, даже посередине сообщения. Импортированный текст не меняется.",SUB,13);
-        Button back=btn("‹ К разделу «Хронология»");list.addView(back,p(-1,46));
+        TextView heading=text("Периоды истории",21,FG);heading.setTypeface(null,Typeface.BOLD);
+        heading.setPadding(px(12),px(11),px(12),px(6));list.addView(heading);
+        analyticsText(list,"Отмечай важные этапы по сообщениям или задавай даты вручную.",SUB,13);
+        Button addCalendar=btn("+ Добавить период по датам");
+        list.addView(addCalendar,p(-1,46));addCalendar.setOnClickListener(v->editCalendarPeriod(null));
+        Button startFromChat=btn("Отметить начало в переписке");
+        list.addView(startFromChat,p(-1,46));
+        startFromChat.setOnClickListener(v->{screen="chat";showPage();
+            toast("Удерживай сообщение → Отметить начало периода");});
+        Button expandHelp=btn("Как это работает  ▾");list.addView(expandHelp,p(-1,41));
+        LinearLayout helper=column();helper.setVisibility(View.GONE);list.addView(helper,p(-1,-2));
+        analyticsText(helper,"Удерживай первое сообщение, выбери «Отметить начало периода». Затем удерживай последнее сообщение и отметь конец. Название периода можно задать после выбора границ.",SUB,13);
+        Button twoChats=btn("Общая линия двух переписок");
+        helper.addView(twoChats,p(-1,43));twoChats.setOnClickListener(v->chooseDualChat("dual_memories"));
+        Button back=btn("‹ Все события");helper.addView(back,p(-1,42));
         back.setOnClickListener(v->{screen="relationships";showPage();});
-        Button chat=btn("↗ К переписке");list.addView(chat,p(-1,46));
-        chat.setOnClickListener(v->{screen="chat";showPage();});
-        Button twoChats=btn("◷ Показать две переписки на общей временной линии");
-        list.addView(twoChats,p(-1,48));twoChats.setOnClickListener(v->chooseDualChat("dual_memories"));
-        TextView how=text("Как создать этап: открой «Переписка» → удерживай первое сообщение → «Отметить начало периода». Затем отметь конец в другом сообщении, придумай название и сохрани.",14,FG);
-        how.setPadding(px(12),px(15),px(12),px(15));how.setBackground(glass(PANEL,14));list.addView(how,p(-1,-2));
-        Button addCalendar=btn("+ Календарный период · любые даты");list.addView(addCalendar,p(-1,-2));addCalendar.setOnClickListener(v->editCalendarPeriod(null));
+        expandHelp.setOnClickListener(v->{
+            boolean show=helper.getVisibility()!=View.VISIBLE;
+            helper.setVisibility(show?View.VISIBLE:View.GONE);
+            expandHelp.setText(show?"Скрыть подсказки  ▴":"Как это работает  ▾");
+        });
         LinearLayout calendar=column();list.addView(calendar,p(-1,-2));renderCalendarPeriods(calendar,db,activeKey,token);
         final MessageDb source=db, initial=db;final String archive=activeKey;
         worker.execute(()->{
