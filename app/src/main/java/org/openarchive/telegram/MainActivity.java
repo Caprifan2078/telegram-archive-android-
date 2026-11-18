@@ -1031,6 +1031,7 @@ public class MainActivity extends Activity {
                 if(home)toast("Сначала открой переписку");else showConversationPauses();});
         });
         sideMenuSection(items,"Открытия · новые возможности",false,group->{
+            sideMenuItem(group,dialog,pane,"▤  Просмотреть отдельный файл","Office, архивы и документы · без импорта чата",this::chooseReadOnlyPreview);
             sideMenuItem(group,dialog,pane,"⌕  Умный поиск по всем чатам","Текст, автор, год, медиа · только локально",this::discoverySmartSearch);
             sideMenuItem(group,dialog,pane,"✦  Студия оформления 2.0","Предпросмотр, темы, обои и аватары",this::discoveryStudio);
             sideMenuItem(group,dialog,pane,"▦  Медиатека PRO","Галерея, кинолента, коллекции, проверка файлов",this::discoveryMediaPro);
