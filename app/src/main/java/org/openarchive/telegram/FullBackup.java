@@ -21,12 +21,14 @@ final class FullBackup {
         return count;
     }
     static void export(Context ctx,SharedPreferences prefs,Uri target,Progress progress) throws Exception {
+        ArchiveBackup.requireEmptyChatTrash(prefs);
         try(OutputStream output=ctx.getContentResolver().openOutputStream(target,"w")){
             if(output==null)throw new IOException("Нельзя открыть файл назначения");
             export(ctx,prefs,output,progress);
         }
     }
     static void export(Context ctx,SharedPreferences prefs,OutputStream target,Progress progress) throws Exception {
+        ArchiveBackup.requireEmptyChatTrash(prefs);
         String registrySnapshot=prefs.getString("archive_registry","[]");
         JSONArray chats=new JSONArray(registrySnapshot);
         File metadata=File.createTempFile("tg-metadata-", ".zip",ctx.getCacheDir());
