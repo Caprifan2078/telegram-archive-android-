@@ -467,6 +467,13 @@ public class Qa00NavigationCoreTest {
                 tap("≡"); // compact themed chat actions, not the left drawer
                 shown(destination[0]);
                 tap(destination[0]);
+                // UIAutomator click dispatch is asynchronous. Wait for the actual
+                // destination, but still fail if no navigation occurs.
+                for(int attempt=0;attempt<45;attempt++){
+                    inst.waitForIdleSync();
+                    if(destination[1].equals(field(a,"screen")))break;
+                    Thread.sleep(75);
+                }
                 assertEquals("Wrong destination for "+destination[0],
                     destination[1],field(a,"screen"));
             }
