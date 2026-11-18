@@ -45,13 +45,24 @@ final class ArchiveBackup {
             if(c.moveToFirst()&&c.getInt(0)!=0)throw new IOException("База занята, повтори резервное копирование");
         }
     }
+    /** Fail closed: a metadata/full backup cannot claim to contain the complete
+     * archive while reversible chat entries (and their DBs) live in the recycle bin. */
+    static void requireEmptyChatTrash(SharedPreferences prefs)throws IOException {
+        JSONArray trashed;
+        try{trashed=new JSONArray(prefs.getString("archive_trash","[]"));}
+        catch(Exception invalid){throw new IOException("Корзина переписок повреждена — резервная копия остановлена",invalid);}
+        if(trashed.length()>0)
+            throw new IOException("В корзине есть "+trashed.length()+" переписок. Восстанови их в список перед резервным копированием, иначе данные могут не попасть в копию.");
+    }
     static void write(Context ctx,SharedPreferences prefs,Uri destination,Progress progress) throws Exception {
+        requireEmptyChatTrash(prefs);
         try(OutputStream out=ctx.getContentResolver().openOutputStream(destination,"w")){
             if(out==null)throw new IOException("Невозможно открыть место сохранения");
             write(ctx,prefs,out,progress);
         }
     }
     static void write(Context ctx,SharedPreferences prefs,OutputStream output,Progress progress) throws Exception {
+        requireEmptyChatTrash(prefs);
         JSONArray chats=new JSONArray(prefs.getString("archive_registry","[]"));
         ArrayList<String> backupChatKeys=new ArrayList<>();
         for(int i=0;i<chats.length();i++)backupChatKeys.add(chats.getJSONObject(i).optString("key","default"));
