@@ -2,6 +2,10 @@ package org.openarchive.telegram;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import androidx.test.uiautomator.By;
+import androidx.test.uiautomator.UiDevice;
+import androidx.test.uiautomator.UiObject2;
+import androidx.test.uiautomator.Until;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.rule.ActivityTestRule;
@@ -74,14 +78,21 @@ public final class QaTrashRestoreRegressionTest {
             assertTrue(a.getDatabasePath("telegram_"+key+".db").isFile());
             assertTrue("Pin preference retained",prefs.getBoolean("pinned_chat_"+key,false));
 
-            // Reload the active list as if the process had been restarted.
+            // Reload the active list as if the process had been restarted,
+            // then restore using the ACTUAL visible button in the recycle bin.
             a.runOnUiThread(()->{
                 try{
                     Method load=MainActivity.class.getDeclaredMethod("loadArchiveRegistry");
                     load.setAccessible(true);load.invoke(a);
-                    invoke(a,"restoreChatFromTrash",key);
+                    Method show=MainActivity.class.getDeclaredMethod("showChatTrash");
+                    show.setAccessible(true);show.invoke(a);
                 }catch(Exception error){throw new AssertionError(error);}
             });
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+            UiDevice device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
+            UiObject2 restore=device.wait(Until.findObject(By.text("Сохранить этот чат · восстановить")),5000);
+            assertNotNull("Recycle bin must show an accessible restore action",restore);
+            restore.click();
             InstrumentationRegistry.getInstrumentation().waitForIdleSync();
             assertTrue("Recovered chat is registered",prefs.getString("archive_registry","[]").contains(key));
             assertEquals("[]",prefs.getString("archive_trash","missing"));
