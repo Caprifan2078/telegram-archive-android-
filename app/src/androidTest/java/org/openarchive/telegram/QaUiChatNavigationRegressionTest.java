@@ -137,9 +137,19 @@ public final class QaUiChatNavigationRegressionTest {
                 invoke(a,"renderHome",new Class<?>[0]);
                 invoke(a,"showChatActions",new Class<?>[]{String.class,String.class},key,"QA Hidden Chat");
             }catch(Exception error){throw new AssertionError(error);}});
+            // Wait for the themed dialog, custom font application and its layout
+            // to settle before tapping the actual action (not a stale text node).
             assertNotNull("Hide action exists",device.wait(Until.findObject(By.text("Скрыть чат")),2500));
-            device.findObject(By.text("Скрыть чат")).click();device.waitForIdle();
-            assertTrue(prefs.getBoolean("hidden_chat_"+key,false));
+            device.waitForIdle();
+            androidx.test.uiautomator.UiObject2 hide=device.findObject(By.text("Скрыть чат"));
+            assertNotNull("Hide button disappeared",hide);
+            assertTrue("Hide action is clickable",hide.isClickable());
+            hide.click();
+            inst.waitForIdleSync();
+            assertNotNull("Hiding must return to the chat list",device.wait(
+                Until.findObject(By.textContains("Показать скрытые чаты")),5000));
+            assertTrue("Hidden preference must persist after visible click",
+                prefs.getBoolean("hidden_chat_"+key,false));
             assertNull("Hidden chat must not be shown",device.findObject(By.text("QA Hidden Chat")));
             assertNotNull("Hidden chat remains recoverable",device.findObject(By.textContains("Показать скрытые чаты")));
             assertTrue("Hiding does not erase SQLite",a.getDatabasePath("telegram_"+key+".db").isFile());
