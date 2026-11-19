@@ -8,6 +8,7 @@ on:
       - 'app/src/main/java/org/openarchive/telegram/ArchiveBackup.java'
       - 'app/src/main/java/org/openarchive/telegram/FullBackup.java'
       - 'app/src/androidTest/java/org/openarchive/telegram/QaUiChatNavigationRegressionTest.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/QaTrashRestoreRegressionTest.java'
       - 'app/src/androidTest/java/org/openarchive/telegram/FullBackupCustomAssetSafetyRegressionTest.java'
       - 'app/src/main/res/values/styles.xml'
       - 'app/src/androidTest/java/org/openarchive/telegram/Qa00NavigationCoreTest.java'
@@ -71,7 +72,7 @@ jobs:
           emulator-boot-timeout: 420
           script: |
             adb install deliver/Telegram_Archive_Viewer_0.51_UX_Structure_QA_2026-11-18.apk
-            gradle --no-daemon --max-workers=2 connectedUiStructureQaAndroidTest -PqaUiStructureInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.QaUiChatNavigationRegressionTest,org.openarchive.telegram.QaStandaloneHtmlImportRegressionTest,org.openarchive.telegram.Qa00NavigationCoreTest,org.openarchive.telegram.UiSmokeTest,org.openarchive.telegram.FullBackupCustomAssetSafetyRegressionTest'
+            gradle --no-daemon --max-workers=2 connectedUiStructureQaAndroidTest -PqaUiStructureInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.QaTrashRestoreRegressionTest,org.openarchive.telegram.QaUiChatNavigationRegressionTest,org.openarchive.telegram.QaStandaloneHtmlImportRegressionTest,org.openarchive.telegram.Qa00NavigationCoreTest,org.openarchive.telegram.UiSmokeTest,org.openarchive.telegram.FullBackupCustomAssetSafetyRegressionTest'
             bash scripts/qa_visual_screenshot_pull.sh
       - name: Upload synthetic screenshots and result XML
         if: always()
