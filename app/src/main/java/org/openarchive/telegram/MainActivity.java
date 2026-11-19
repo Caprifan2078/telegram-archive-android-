@@ -1515,7 +1515,7 @@ public class MainActivity extends Activity {
                             String date=cursor.getString(0);
                             String body=cursor.getString(1);
                             String media=cursor.getString(2);
-                            String excerpt=(body==null?"":body.trim().replaceAll("\s+"," "));
+                            String excerpt=(body==null?"":body.trim().replaceAll("\\s+"," "));
                             if(excerpt.isEmpty())excerpt=media!=null&&!media.isEmpty()?"Вложение":"Сообщение без текста";
                             textValue=clip(excerpt,66)+(date==null||date.isEmpty()?"":" · "+day(date));
                         }
