@@ -1628,17 +1628,23 @@ public class MainActivity extends Activity {
                 .setMessage("Убранные из списка переписки появятся здесь. Файлы и базы сообщений при этом сохраняются.")
                 .setPositiveButton("Закрыть",null).show();return;
         }
-        String[] items=new String[removed.length()];
+        // Android's AlertDialog setMessage + setItems can hide the list entirely.
+        // A single visible themed panel has explicit restore buttons for each chat.
+        LinearLayout panel=column();panel.setPadding(px(12),px(5),px(12),px(8));
+        TextView tip=text("Выбери переписку для восстановления. Локальные файлы и база не изменятся.",12,SUB);
+        tip.setPadding(px(5),0,px(5),px(12));panel.addView(tip,p(-1,-2));
+        final AlertDialog dialog=new FontDialog.Builder(this).setTitle("Корзина · "+removed.length())
+            .setView(panel).setNegativeButton("Закрыть",null).create();
         for(int i=0;i<removed.length();i++){
             JSONObject chat=removed.optJSONObject(i);
-            items[i]=chat==null?"Недоступная запись":chat.optString("name","Переписка")+" · восстановить";
+            if(chat==null)continue;
+            final String key=chat.optString("key","");
+            Button restore=btn(chat.optString("name","Переписка")+" · восстановить");
+            LinearLayout.LayoutParams size=p(-1,46);size.bottomMargin=px(6);
+            panel.addView(restore,size);
+            restore.setOnClickListener(v->{dialog.dismiss();restoreChatFromTrash(key);});
         }
-        new FontDialog.Builder(this).setTitle("Корзина · "+removed.length())
-            .setMessage("Восстановление вернет чат в список. Локальные данные не изменятся.")
-            .setItems(items,(d,index)->{
-                JSONObject selected=removed.optJSONObject(index);
-                if(selected!=null)restoreChatFromTrash(selected.optString("key"));
-            }).setNegativeButton("Закрыть",null).show();
+        dialog.show();
     }
     private void confirmRemoveChatFromList(String key,String name){
         new FontDialog.Builder(this).setTitle("Убрать «"+name+"» в корзину?")
