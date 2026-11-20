@@ -86,7 +86,15 @@ android {
             signingConfig signingConfigs.debug
         }
     }
-    testBuildType (project.findProperty('qaUiStructureInstrumentation') == 'true' ? 'uiStructureQa' : (project.findProperty('qaUiPolishInstrumentation') == 'true' ? 'uiPolishQa' : (project.findProperty('qaUiReviewInstrumentation') == 'true' ? 'uiReviewQa' : (project.findProperty('qaHandoffInstrumentation') == 'true' ? 'handoffQa' : (project.findProperty('qaStableInstrumentation') == 'true' ? 'stableQa' : 'compactQa')))))
+    // Side-by-side install: never overwrite the user's old archive or signing key.
+    buildTypes {
+        uxFixQa {
+            initWith compactQa
+            applicationIdSuffix '.uxfix20261120'
+            signingConfig signingConfigs.debug
+        }
+    }
+    testBuildType (project.findProperty('qaUxFixInstrumentation') == 'true' ? 'uxFixQa' : (project.findProperty('qaUiStructureInstrumentation') == 'true' ? 'uiStructureQa' : (project.findProperty('qaUiPolishInstrumentation') == 'true' ? 'uiPolishQa' : (project.findProperty('qaUiReviewInstrumentation') == 'true' ? 'uiReviewQa' : (project.findProperty('qaHandoffInstrumentation') == 'true' ? 'handoffQa' : (project.findProperty('qaStableInstrumentation') == 'true' ? 'stableQa' : 'compactQa'))))))
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
