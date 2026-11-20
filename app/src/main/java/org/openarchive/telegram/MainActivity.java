@@ -1532,63 +1532,88 @@ public class MainActivity extends Activity {
     private boolean isChatHidden(String key){
         return getPreferences(MODE_PRIVATE).getBoolean("hidden_chat_"+key,false);
     }
-    /** Single chat-details surface for the main list and conversation menu. */
+    /** Compact chat management, never a second "open chat" action on an open chat. */
     private void showChatActions(String key,String name){
         if(importing||restoringBackup){toast("Дождись завершения операции");return;}
-        LinearLayout panel=column();panel.setPadding(px(13),px(5),px(13),px(8));
-        LinearLayout profile=row();profile.setPadding(px(7),px(7),px(7),px(12));
-        panel.addView(profile,p(-1,65));
-        TextView avatar=text(initial(name),22,FG);avatar.setGravity(Gravity.CENTER);
-        avatar.setTypeface(null,Typeface.BOLD);
+        LinearLayout panel=column();panel.setPadding(px(13),px(13),px(13),px(11));
+        LinearLayout profile=row();profile.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams headSize=p(-1,55);headSize.bottomMargin=px(10);
+        panel.addView(profile,headSize);
+        TextView avatar=text(initial(name),18,FG);
+        avatar.setGravity(Gravity.CENTER);avatar.setTypeface(null,Typeface.BOLD);
         avatar.setBackground(outlined(CHIP,100,false));
-        Bitmap bitmap=PersonalImages.load(this,
+        Bitmap photo=PersonalImages.load(this,
             getPreferences(MODE_PRIVATE).getString(PersonalImages.chatAvatarKey(key),""));
-        if(bitmap!=null){
+        if(photo!=null){
             avatar.setText("");
             avatar.setBackground(new android.graphics.drawable.BitmapDrawable(
-                getResources(),PersonalImages.circular(bitmap,px(47))));
+                getResources(),PersonalImages.circular(photo,px(44))));
         }
-        profile.addView(avatar,p(47,47));
-        LinearLayout details=column();details.setPadding(px(12),0,0,0);
+        profile.addView(avatar,p(44,44));
+        LinearLayout details=column();details.setPadding(px(11),0,0,0);
         profile.addView(details,new LinearLayout.LayoutParams(0,-2,1));
-        TextView heading=text(name,17,FG);heading.setSingleLine(true);
-        heading.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
-        heading.setEllipsize(TextUtils.TruncateAt.END);details.addView(heading);
-        TextView subtitle=text("Локальная переписка · данные на устройстве",11,SUB);
-        subtitle.setPadding(0,px(4),0,0);details.addView(subtitle);
-        final AlertDialog dialog=new FontDialog.Builder(this).setTitle("Информация о чате")
-            .setView(panel).setNegativeButton("Закрыть",null).create();
+        TextView titleLabel=text(name,16,FG);titleLabel.setSingleLine(true);
+        titleLabel.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+        titleLabel.setEllipsize(TextUtils.TruncateAt.END);details.addView(titleLabel);
+        TextView subLabel=text("Настройки чата",12,SUB);
+        subLabel.setPadding(0,px(2),0,0);details.addView(subLabel);
+        TextView close=text("✕",19,SUB);
+        close.setGravity(Gravity.CENTER);close.setContentDescription("Закрыть");
+        profile.addView(close,p(39,42));
+        final AlertDialog dialog=new FontDialog.Builder(this).setView(panel).create();
+        close.setOnClickListener(v->dialog.dismiss());
         avatar.setContentDescription("Изменить аватар");
         avatar.setOnClickListener(v->{dialog.dismiss();pendingImageChatKey=key;pickPersonalImage(62);});
-        String[] options={
-            "Открыть переписку",
-            "Переименовать чат",
+        String[] labels={
+            "Переименовать",
             "Изменить аватар",
             isChatPinned(key)?"Открепить":"Закрепить",
             isChatHidden(key)?"Показать чат":"Скрыть чат",
             "Убрать в корзину"
         };
-        for(int i=0;i<options.length;i++){
-            final int choice=i;
-            Button action=btn(options[i]);
-            LinearLayout.LayoutParams dims=p(-1,44);dims.bottomMargin=px(5);
-            panel.addView(action,dims);
-            action.setOnClickListener(v->{
+        int[] icons={
+            android.R.drawable.ic_menu_edit,
+            android.R.drawable.ic_menu_gallery,
+            android.R.drawable.ic_menu_save,
+            android.R.drawable.ic_menu_view,
+            android.R.drawable.ic_menu_delete
+        };
+        for(int i=0;i<labels.length;i++){
+            final int actionIndex=i;
+            LinearLayout item=row();item.setGravity(Gravity.CENTER_VERTICAL);
+            item.setPadding(px(13),0,px(11),0);
+            item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x305aadd8),
+                outlined(PANEL,12,false),null));
+            LinearLayout.LayoutParams itemSize=p(-1,44);
+            itemSize.bottomMargin=px(4);
+            panel.addView(item,itemSize);
+            ImageView image=new ImageView(this);image.setImageResource(icons[i]);
+            image.setColorFilter(i==4?0xffe9a6a6:ACCENT);
+            LinearLayout.LayoutParams symbolSize=p(19,19);symbolSize.rightMargin=px(15);
+            item.addView(image,symbolSize);
+            TextView caption=text(labels[i],14,i==4?0xffe9a6a6:FG);
+            caption.setGravity(Gravity.CENTER_VERTICAL);
+            item.addView(caption,new LinearLayout.LayoutParams(0,-1,1));
+            item.setContentDescription(labels[i]);
+            Runnable open=()->{
                 dialog.dismiss();
-                if(choice==0)activateArchive(key);
-                else if(choice==1)renameChat(key,name);
-                else if(choice==2){pendingImageChatKey=key;pickPersonalImage(62);}
-                else if(choice==3)toggleChatPin(key);
-                else if(choice==4){
+                if(actionIndex==0)renameChat(key,name);
+                else if(actionIndex==1){pendingImageChatKey=key;pickPersonalImage(62);}
+                else if(actionIndex==2)toggleChatPin(key);
+                else if(actionIndex==3){
                     boolean hidden=!isChatHidden(key);
                     getPreferences(MODE_PRIVATE).edit().putBoolean("hidden_chat_"+key,hidden).apply();
                     if(hidden)getPreferences(MODE_PRIVATE).edit().putBoolean("show_hidden_chats",false).apply();
                     home=true;screen="chat";renderHome();
                     toast(hidden?"Чат скрыт. Вернуть можно из «Показать скрытые»":"Чат снова виден");
-                }else if(choice==5)confirmRemoveChatFromList(key,name);
-            });
+                }else if(actionIndex==4)confirmRemoveChatFromList(key,name);
+            };
+            item.setOnClickListener(v->open.run());
+            caption.setOnClickListener(v->open.run());
         }
         dialog.show();
+        if(dialog.getWindow()!=null)dialog.getWindow().setLayout(
+            Math.min(px(355),getResources().getDisplayMetrics().widthPixels-px(36)),-2);
     }
     private void renameChat(String key,String name){
         EditText input=new EditText(this);input.setSingleLine(true);input.setText(name);
