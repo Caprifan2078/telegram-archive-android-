@@ -984,16 +984,17 @@ public class MainActivity extends Activity {
     private void showSideMenu(){
         final Dialog dialog=new FontDialog(this,android.R.style.Theme_Translucent_NoTitleBar);
         FrameLayout overlay=new FrameLayout(this);overlay.setBackgroundColor(0x99040912);
-        LinearLayout pane=column();pane.setPadding(px(18),px(27),px(17),px(14));
+        LinearLayout pane=column();pane.setPadding(px(14),px(18),px(14),px(10));
         pane.setBackground(gradient(themeIndex==2?0xfaffffff:0xfa1a3045,
             themeIndex==2?0xffe8edf4:0xff101c2d,24));pane.setElevation(px(12));
         int width=Math.min(px(348),getResources().getDisplayMetrics().widthPixels-px(38));
         FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(width,-1,Gravity.START);
         overlay.addView(pane,lp);
-        TextView app=text("TELEGRAM ARCHIVE",18,FG);app.setTypeface(null,Typeface.BOLD);
-        app.setPadding(px(5),px(7),0,px(4));pane.addView(app);
-        TextView desc=text("Приватная коллекция · офлайн",12,SUB);
-        desc.setPadding(px(5),0,0,px(16));pane.addView(desc);
+        TextView app=text("TELEGRAM ARCHIVE",16,FG);
+        app.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+        app.setPadding(px(5),px(3),0,px(2));pane.addView(app);
+        TextView desc=text("Навигация и настройки",11,SUB);
+        desc.setPadding(px(5),0,0,px(11));pane.addView(desc);
         ScrollView menuScroll=new ScrollView(this);menuScroll.setVerticalScrollBarEnabled(false);
         menuScroll.setFillViewport(false);pane.addView(menuScroll,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout items=column();menuScroll.addView(items);
@@ -1068,10 +1069,11 @@ public class MainActivity extends Activity {
                                  java.util.function.Consumer<LinearLayout> populate){
         LinearLayout group=column();parent.addView(group,p(-1,-2));
         TextView title=text((opened?"▾  ":"▸  ")+name,13,ACCENT);
-        title.setTypeface(null,Typeface.BOLD);title.setPadding(px(10),px(12),px(6),px(12));
-        title.setBackground(shape(themeIndex==2?0x55c0dbe9:0x55385069,12));
+        title.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+        title.setPadding(px(10),px(9),px(6),px(9));
+        title.setBackground(shape(Color.TRANSPARENT,9));
         group.addView(title,p(-1,-2));
-        LinearLayout contents=column();contents.setPadding(0,px(6),0,px(7));group.addView(contents);
+        LinearLayout contents=column();contents.setPadding(0,px(3),0,px(4));group.addView(contents);
         populate.accept(contents);contents.setVisibility(opened?View.VISIBLE:View.GONE);
         title.setOnClickListener(v->{boolean expand=contents.getVisibility()!=View.VISIBLE;
             title.setText((expand?"▾  ":"▸  ")+name);
@@ -1079,7 +1081,7 @@ public class MainActivity extends Activity {
             if(expand){contents.setAlpha(0f);contents.animate().alpha(1f)
                 .setDuration(motionDuration(170)).start();}
         });
-        space(group,5);
+        space(group,3);
     }
     /** One consistent native icon family instead of mixed emojis and Unicode silhouettes. */
     private int drawerIconFor(String label){
@@ -1114,16 +1116,17 @@ public class MainActivity extends Activity {
                               String heading,String detail,Runnable action){
         int split=heading.indexOf("  ");
         String label=split>=0?heading.substring(split+2).trim():heading;
-        LinearLayout item=row();item.setPadding(px(12),px(11),px(10),px(11));
-        item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2e5aaad8),outlined(PANEL,15,false),null));
-        LinearLayout.LayoutParams params=p(-1,-2);params.bottomMargin=px(5);parent.addView(item,params);
+        LinearLayout item=row();item.setPadding(px(11),px(8),px(9),px(8));
+        item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x265aaad8),
+            shape(Color.TRANSPARENT,10),null));
+        LinearLayout.LayoutParams params=p(-1,-2);params.bottomMargin=px(2);parent.addView(item,params);
         ImageView symbol=new ImageView(this);symbol.setImageResource(drawerIconFor(label));
         symbol.setColorFilter(ACCENT);symbol.setContentDescription(null);
-        LinearLayout.LayoutParams symbolSize=p(22,22);symbolSize.rightMargin=px(13);
+        LinearLayout.LayoutParams symbolSize=p(20,20);symbolSize.rightMargin=px(12);
         item.addView(symbol,symbolSize);
         LinearLayout info=column();item.addView(info,new LinearLayout.LayoutParams(0,-2,1));
-        TextView name=text(label,15,FG);name.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));info.addView(name);
-        TextView summary=text(detail,12,SUB);summary.setPadding(0,px(3),0,0);info.addView(summary);
+        TextView name=text(label,14,FG);name.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));info.addView(name);
+        TextView summary=text(detail,11,SUB);summary.setPadding(0,px(2),0,0);info.addView(summary);
         item.setContentDescription(label+". "+detail);
         item.setOnClickListener(v->closeDrawer(dialog,pane,action));
     }
@@ -1406,18 +1409,19 @@ public class MainActivity extends Activity {
         if(folderButton!=null)folderButton.setVisibility(View.GONE); // Only the large bottom Add Chat button.
         title.setText("Мои переписки");subtitle.setText("Твои сообщения · в одном месте");
         status.setText("");status.setVisibility(View.GONE);
-        LinearLayout hero=column();hero.setPadding(px(13),px(10),px(13),px(10));
-        hero.setBackground(outlined(PANEL,16,false));
-        LinearLayout.LayoutParams heroParams=p(-1,-2);heroParams.setMargins(px(2),px(5),px(2),px(8));list.addView(hero,heroParams);
+        // Flat, compact list heading: the app bar already says "Мои переписки".
+        LinearLayout homeHeading=row();homeHeading.setPadding(px(10),px(9),px(10),px(7));
+        list.addView(homeHeading,p(-1,-2));
         int hiddenChats=0;
         for(int i=0;i<archives.length();i++){
             JSONObject entry=archives.optJSONObject(i);
             if(entry!=null&&isChatHidden(entry.optString("key")))hiddenChats++;
         }
-        TextView heading=text("Переписки  ·  "+archives.length(),17,FG);
-        heading.setTypeface(null,Typeface.BOLD);hero.addView(heading);
-        TextView description=text(hiddenChats>0?("Скрыто: "+hiddenChats+" · всё хранится локально"):"Твои чаты · офлайн",11,SUB);
-        description.setPadding(0,px(3),0,0);hero.addView(description);
+        TextView heading=text("Чаты",17,FG);
+        heading.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+        homeHeading.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
+        TextView countLabel=text(String.valueOf(archives.length())+(hiddenChats>0?" · скрыто "+hiddenChats:""),12,SUB);
+        homeHeading.addView(countLabel);
         JSONArray trash=chatTrash();
         if(trash==null||trash.length()>0){
             Button recycle=btn(trash==null?"Корзина · требуется проверка":"Корзина · "+trash.length());
@@ -1425,9 +1429,7 @@ public class MainActivity extends Activity {
             list.addView(recycle,recycleMargin);
             recycle.setOnClickListener(v->showChatTrash());
         }
-        // User guide lives in the side drawer; the home screen stays focused on chats.
-        TextView section=text("ПЕРЕПИСКИ",11,SUB);section.setTypeface(null,Typeface.BOLD);
-        section.setPadding(px(9),px(5),0,px(8));list.addView(section);
+        // No duplicate chapter heading between the app header and chat list.
         // Hidden chats stay indexed and backed up, but disappear from ordinary navigation.
         final boolean showHidden=getPreferences(MODE_PRIVATE).getBoolean("show_hidden_chats",false);
         if(hiddenChats>0){
