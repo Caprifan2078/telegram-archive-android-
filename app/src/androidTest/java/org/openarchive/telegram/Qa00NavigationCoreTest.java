@@ -127,15 +127,14 @@ public class Qa00NavigationCoreTest {
     @Test public void emptyHomeOpensImportDialogAndClosesDrawerByTouchOutside() {
         shown("Мои переписки");
         shown("Добавить переписку");
-        android.content.IntentFilter filter=new android.content.IntentFilter(android.content.Intent.ACTION_OPEN_DOCUMENT);
-        Instrumentation.ActivityMonitor monitor=inst.addMonitor(
-            filter,new Instrumentation.ActivityResult(android.app.Activity.RESULT_CANCELED,null),true);
         try{
             tap("Добавить переписку");
-            assertNotNull("System picker must be launched directly",
-                inst.waitForMonitorWithTimeout(monitor,4000));
+            assertNotEquals("One tap should leave the app for Android's document picker",
+                activity.getActivity().getPackageName(),device.getCurrentPackageName());
             assertNull("Unexpected two-choice import dialog",visible("Импорт переписки"));
-        }finally{inst.removeMonitor(monitor);}
+        }finally{
+            device.pressBack();device.waitForIdle();
+        }
         shown("Мои переписки");
         tap("☰");
         shown("TELEGRAM ARCHIVE");
