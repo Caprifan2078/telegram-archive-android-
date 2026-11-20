@@ -2073,9 +2073,11 @@ public class MainActivity extends Activity {
         });menu.show();
     }
     private void openChatMediaFromHeader(){
-        if(home||"saved".equals(screen)||"help".equals(screen)||importing)return;
-        rememberChatPositionForReturn();
-        screen="media";returnScreen="";searchReturnsToAnalytics=false;showPage();
+        if(home||"saved".equals(screen)||"help".equals(screen)||"media".equals(screen)||importing)return;
+        String origin=screen;
+        if("chat".equals(origin))rememberChatPositionForReturn();
+        // Returning from media must lead back into the chat, not throw the reader home.
+        screen="media";returnScreen=origin;searchReturnsToAnalytics=false;showPage();
     }
     private void showConversationInfo(){showChatActions(activeKey,activeName);}
     private void showConversationMenu(View anchor){
