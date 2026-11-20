@@ -247,11 +247,11 @@ public final class QaUiChatNavigationRegressionTest {
                     set(activity,"home",true);
                     invoke(activity,"renderHome",new Class<?>[0]);
                     assertNotNull("Home rows must exist for regression test",
-                        findText(activity.getWindow().getDecorView(),"ПЕРЕПИСКИ"));
+                        findText(activity.getWindow().getDecorView(),"＋   Добавить переписку"));
                     set(activity,"home",false);set(activity,"screen","chat");
                     invoke(activity,"showPage",new Class<?>[0]);
                     assertNull("Never show the old home list beneath a conversation header",
-                        findText(activity.getWindow().getDecorView(),"ПЕРЕПИСКИ"));
+                        findText(activity.getWindow().getDecorView(),"＋   Добавить переписку"));
                 }catch(Exception error){throw new AssertionError(error);}
             });
         }finally{
