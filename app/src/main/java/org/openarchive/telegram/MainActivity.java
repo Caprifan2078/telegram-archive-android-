@@ -2575,18 +2575,7 @@ public class MainActivity extends Activity {
                     .setPositiveButton("Импортировать",(d,w)->importSingleHtml(source,displayName)).show();
                 return;
             }
-            EditText archivePassword=new EditText(this);archivePassword.setSingleLine(true);
-            archivePassword.setHint("Пароль архива, если есть");
-            archivePassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
-            FontDialog.Builder confirm=new FontDialog.Builder(this);
-            confirm.setTitle("Импорт "+displayName)
-                .setMessage("Сообщения откроются в переписке. Медиа из архива сохранятся локально. Если архив защищён, введи пароль.");
-            confirm.setView(archivePassword);
-            confirm.setNegativeButton("Отмена",null).setPositiveButton("Импортировать",(d,w)->{
-                char[] password=archivePassword.getText().toString().toCharArray();
-                importCompressed(source,ext,displayName,password);
-                archivePassword.setText("");
-            }).show();
+            confirmArchiveImport(source,ext,displayName);
             return;
         }
         if(request!=PICK_FOLDER||result!=RESULT_OK||data==null||data.getData()==null)return;
@@ -2656,6 +2645,25 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void confirmArchiveImport(Uri source,String ext,String displayName){
+        EditText archivePassword=new EditText(this);
+        archivePassword.setSingleLine(true);
+        archivePassword.setHint("Пароль, если архив защищён");
+        archivePassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT|
+            android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        archivePassword.setTextColor(FG);
+        archivePassword.setHintTextColor(SUB);
+        archivePassword.setPadding(px(18),px(10),px(18),px(10));
+        new FontDialog.Builder(this).setTitle("Импорт "+displayName)
+            .setMessage("ZIP, 7z и RAR с паролем поддерживаются. Если пароля нет, оставь поле пустым.")
+            .setView(archivePassword).setNegativeButton("Отмена",null)
+            .setPositiveButton("Импортировать",(d,w)->{
+                String typed=archivePassword.getText().toString();
+                char[] password=typed.isEmpty()?null:typed.toCharArray();
+                archivePassword.setText("");
+                importCompressed(source,ext,displayName,password);
+            }).show();
+    }
     private void importCompressed(Uri source,String extension,String label,char[] password){
         if(importing){if(password!=null)java.util.Arrays.fill(password,'\0');return;}
         importing=true;folderButton.setEnabled(false);status.setText("Распаковка "+label+"…");
@@ -2674,8 +2682,21 @@ public class MainActivity extends Activity {
                     }catch(Exception error){toast("Ошибка регистрации чата: "+error.getMessage());}
                 });
             }catch(Exception error){
+                // A failed password or corrupt archive must not publish partially indexed
+                // messages or leave a failed import hidden in app-private storage.
                 ArchiveFileImport.deleteTree(new java.io.File(new java.io.File(getFilesDir(),"telegram_imports"),key));
-                runOnUiThread(()->{importing=false;folderButton.setEnabled(true);status.setText("Ошибка архива: "+error.getMessage());});
+                deleteDatabase("telegram_"+key+".db");
+                String message=error.getMessage()==null?"Файл не удалось распаковать":error.getMessage();
+                runOnUiThread(()->{
+                    importing=false;folderButton.setEnabled(true);
+                    status.setVisibility(View.VISIBLE);
+                    status.setText("Импорт не завершён");
+                    new FontDialog.Builder(this).setTitle("Не удалось импортировать архив")
+                        .setMessage(message+"\nИсходный файл не изменён. Если это RAR с паролем, проверь пароль и повтори.")
+                        .setNegativeButton("Закрыть",null)
+                        .setPositiveButton("Повторить",(d,w)->confirmArchiveImport(source,extension,label))
+                        .show();
+                });
             }finally{if(password!=null)java.util.Arrays.fill(password,'\0');}
         });
     }
