@@ -3,6 +3,7 @@ package org.openarchive.telegram;
 import android.content.Context;
 import android.net.Uri;
 import com.github.junrar.Archive;
+import com.github.junrar.ArchiveOptions;
 import com.github.junrar.rarfile.FileHeader;
 import java.io.*;
 import java.util.*;
@@ -44,8 +45,7 @@ final class ArchiveFileImport {
             }else if("7z".equalsIgnoreCase(suffix)){
                 extractSevenZ(ctx,uri,root,password,budget,progress);
             }else if("rar".equalsIgnoreCase(suffix)){
-                if(password!=null&&password.length>0)throw new IOException("Импорт RAR с паролем пока не поддерживается");
-                extractRar(ctx,uri,root,budget,progress);
+                extractRar(ctx,uri,root,password,budget,progress);
             }
             else throw new IOException("Ожидался ZIP, 7z или RAR");
             File selected=findChatRoot(root,0);
@@ -158,7 +158,7 @@ final class ArchiveFileImport {
             }
         }
     }
-    private static void extractRar(Context ctx,Uri uri,File root,Budget budget,Progress progress) throws Exception{
+    private static void extractRar(Context ctx,Uri uri,File root,char[] password,Budget budget,Progress progress) throws Exception{
         // Junrar needs random access for efficient RAR5/solid decoding. Keep a temporary copy
         // until import has finished; original remains at its selected SAF location.
         File compressed=File.createTempFile("telegram-", ".rar",ctx.getCacheDir());
@@ -174,7 +174,11 @@ final class ArchiveFileImport {
                     out.write(buffer,0,n);
                 }
             }
-            try(Archive rar=new Archive(compressed)){
+            // RAR4 and RAR5 content/header encryption are supported by Junrar 8.1.2.
+            // The options API copies char[] instead of leaving the password in a String.
+            ArchiveOptions options=ArchiveOptions.builder().password(
+                password==null||password.length==0?null:password).build();
+            try(Archive rar=new Archive(compressed,options)){
                 for(FileHeader entry:rar.getFileHeaders()){
                     // Even skipped directories and links consume the bounded entry budget.
                     String name=entry.getFileName();
