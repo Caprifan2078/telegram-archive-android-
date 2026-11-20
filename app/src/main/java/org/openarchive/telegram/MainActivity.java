@@ -1002,7 +1002,7 @@ public class MainActivity extends Activity {
         sideMenuItem(items,dialog,pane,"📝  Личные заметки","Заметки из разных переписок",()->{
             home=false;screen="saved";renderSaved();});
         sideMenuSection(items,"Архивы и резервные копии",false,group->{
-            if(!home)sideMenuItem(group,dialog,pane,"＋  Импортировать чат","HTML, ZIP, 7z, RAR или папка Telegram",this::chooseFolder);
+            sideMenuItem(group,dialog,pane,"▤  Подключить папку Telegram","Для несжатого HTML-экспорта с медиа",this::chooseExistingFolder);
             sideMenuItem(group,dialog,pane,"⇧  Создать резервную копию","Чаты, настройки и при выборе — медиа",this::backupPicker);
             sideMenuItem(group,dialog,pane,"✓  Проверить копию","Контроль целостности без изменений",this::verifyBackupPicker);
             sideMenuItem(group,dialog,pane,"◈  Пробное восстановление","Тест без изменения переписок",this::dryRunPicker);
@@ -2436,19 +2436,10 @@ public class MainActivity extends Activity {
         },c.get(Calendar.YEAR),c.get(Calendar.MONTH),c.get(Calendar.DAY_OF_MONTH)).show();
     }
     private void chooseFolder(){
-        // A single entry point with two Android picker types. A file picker cannot
-        // also grant directory-tree access, so offer both choices in ONE compact dialog.
-        LinearLayout options=column();options.setPadding(px(18),px(7),px(18),px(8));
-        TextView help=text("Файл HTML/ZIP/7z/RAR открывается как обычный чат. Если есть отдельные фото, видео и голосовые — лучше выбрать папку экспорта.",13,SUB);
-        help.setPadding(0,0,0,px(13));options.addView(help,p(-1,-2));
-        Button file=btn("Выбрать файл Telegram");options.addView(file,p(-1,51));
-        space(options,9);
-        Button folderChoice=btn("Выбрать папку Telegram");options.addView(folderChoice,p(-1,51));
-        final AlertDialog dialog=new FontDialog.Builder(this).setTitle("Импорт переписки")
-            .setView(options).setNegativeButton("Отмена",null).create();
-        file.setOnClickListener(v->{dialog.dismiss();chooseCompressedArchive();});
-        folderChoice.setOnClickListener(v->{dialog.dismiss();chooseExistingFolder();});
-        dialog.show();
+        // Exactly one primary import button: open Android's file picker immediately.
+        // Android's SAF directory picker is a separate operation, available under
+        // the Advanced archive options in the drawer for unpacked Telegram exports.
+        chooseCompressedArchive();
     }
     private void chooseReadOnlyPreview(){
         Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -2603,7 +2594,11 @@ public class MainActivity extends Activity {
             String low=name==null?"":name.toLowerCase(Locale.ROOT);
             String ext=low.endsWith(".rar")?"rar":low.endsWith(".zip")?"zip":
                 low.endsWith(".7z")?"7z":low.endsWith(".html")||low.endsWith(".htm")?"html":"";
-            if(ext.isEmpty()){toast("Выбери HTML, ZIP, 7z, RAR или папку экспорта");return;}
+            if(ext.isEmpty()){
+                new FontDialog.Builder(this).setTitle("Неподдерживаемый файл")
+                    .setMessage("Выбери Telegram HTML, ZIP, 7z или RAR. Если экспорт не сжат, открой меню → «Архивы и резервные копии» → «Подключить папку Telegram».")
+                    .setPositiveButton("Понятно",null).show();return;
+            }
             final String displayName=name;
             if("html".equals(ext)){
                 new FontDialog.Builder(this).setTitle("Импорт HTML Telegram")
@@ -2612,18 +2607,7 @@ public class MainActivity extends Activity {
                     .setPositiveButton("Импортировать",(d,w)->importSingleHtml(source,displayName)).show();
                 return;
             }
-            EditText archivePassword=new EditText(this);archivePassword.setSingleLine(true);
-            archivePassword.setHint("Пароль архива, если есть");
-            archivePassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
-            FontDialog.Builder confirm=new FontDialog.Builder(this);
-            confirm.setTitle("Импорт "+displayName).setMessage("Архив распакуется во внутреннюю папку приложения. Для медиа потребуется свободное место."+
-                    ("rar".equals(ext)?" Импорт RAR с паролем пока не поддерживается.":""));
-            if("zip".equals(ext)||"7z".equals(ext))confirm.setView(archivePassword);
-            confirm.setNegativeButton("Отмена",null).setPositiveButton("Импортировать",(d,w)->{
-                char[] password=("zip".equals(ext)||"7z".equals(ext))?archivePassword.getText().toString().toCharArray():null;
-                importCompressed(source,ext,displayName,password);
-                archivePassword.setText("");
-            }).show();
+            promptArchiveImport(source,ext,displayName,false);
             return;
         }
         if(request!=PICK_FOLDER||result!=RESULT_OK||data==null||data.getData()==null)return;
@@ -2693,6 +2677,24 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void promptArchiveImport(Uri source,String extension,String label,boolean retry){
+        EditText pass=new EditText(this);
+        pass.setSingleLine(true);
+        pass.setHint("Пароль, если архив защищён");
+        pass.setInputType(android.text.InputType.TYPE_CLASS_TEXT|
+            android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        LinearLayout content=column();content.setPadding(px(18),px(4),px(18),px(8));
+        TextView hint=text(retry?"Пароль не подошёл или архив повреждён. Проверь пароль и повтори.":"RAR, ZIP и 7z распаковываются локально. Укажи пароль, если он установлен.",13,SUB);
+        hint.setPadding(0,0,0,px(9));content.addView(hint,p(-1,-2));
+        content.addView(pass,p(-1,49));
+        new FontDialog.Builder(this).setTitle("Добавить "+clip(label,48))
+            .setView(content).setNegativeButton("Отмена",null)
+            .setPositiveButton("Импортировать",(d,w)->{
+                char[] password=pass.getText().toString().toCharArray();
+                pass.setText("");
+                importCompressed(source,extension,label,password);
+            }).show();
+    }
     private void importCompressed(Uri source,String extension,String label,char[] password){
         if(importing){if(password!=null)java.util.Arrays.fill(password,'\0');return;}
         importing=true;folderButton.setEnabled(false);status.setText("Распаковка "+label+"…");
@@ -2712,7 +2714,23 @@ public class MainActivity extends Activity {
                 });
             }catch(Exception error){
                 ArchiveFileImport.deleteTree(new java.io.File(new java.io.File(getFilesDir(),"telegram_imports"),key));
-                runOnUiThread(()->{importing=false;folderButton.setEnabled(true);status.setText("Ошибка архива: "+error.getMessage());});
+                String detail=error.getMessage();
+                if(detail==null||detail.isEmpty())detail=error.getClass().getSimpleName();
+                final String failure=clip(detail,650);
+                final boolean passwordFailure=error.getClass().getSimpleName().toLowerCase(Locale.ROOT).contains("password")
+                    ||failure.toLowerCase(Locale.ROOT).contains("password")
+                    ||failure.toLowerCase(Locale.ROOT).contains("парол");
+                runOnUiThread(()->{
+                    importing=false;folderButton.setEnabled(true);
+                    status.setText("Импорт не завершён");
+                    FontDialog.Builder alert=new FontDialog.Builder(this)
+                        .setTitle("Не удалось импортировать "+clip(label,40))
+                        .setMessage((passwordFailure?"Возможно, пароль неверен. ":"")+failure)
+                        .setNegativeButton("Закрыть",null);
+                    if(passwordFailure)alert.setPositiveButton("Ввести пароль заново",
+                        (d,w)->promptArchiveImport(source,extension,label,true));
+                    alert.show();
+                });
             }finally{if(password!=null)java.util.Arrays.fill(password,'\0');}
         });
     }
