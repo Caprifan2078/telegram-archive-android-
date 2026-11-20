@@ -990,9 +990,9 @@ public class MainActivity extends Activity {
         int width=Math.min(px(348),getResources().getDisplayMetrics().widthPixels-px(38));
         FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(width,-1,Gravity.START);
         overlay.addView(pane,lp);
-        TextView app=text("TELEGRAM ARCHIVE",18,FG);app.setTypeface(null,Typeface.BOLD);
+        TextView app=text("Меню",18,FG);app.setTypeface(null,Typeface.BOLD);
         app.setPadding(px(5),px(7),0,px(4));pane.addView(app);
-        TextView desc=text("Приватная коллекция · офлайн",12,SUB);
+        TextView desc=text("Архив сообщений · офлайн",12,SUB);
         desc.setPadding(px(5),0,0,px(16));pane.addView(desc);
         ScrollView menuScroll=new ScrollView(this);menuScroll.setVerticalScrollBarEnabled(false);
         menuScroll.setFillViewport(false);pane.addView(menuScroll,new LinearLayout.LayoutParams(-1,0,1));
@@ -1115,7 +1115,7 @@ public class MainActivity extends Activity {
         int split=heading.indexOf("  ");
         String label=split>=0?heading.substring(split+2).trim():heading;
         LinearLayout item=row();item.setPadding(px(12),px(11),px(10),px(11));
-        item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2e5aaad8),outlined(PANEL,15,false),null));
+        item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x225aaad8),outlined(PANEL,12,false),null));
         LinearLayout.LayoutParams params=p(-1,-2);params.bottomMargin=px(5);parent.addView(item,params);
         ImageView symbol=new ImageView(this);symbol.setImageResource(drawerIconFor(label));
         symbol.setColorFilter(ACCENT);symbol.setContentDescription(null);
@@ -1402,22 +1402,20 @@ public class MainActivity extends Activity {
         menuButton.setVisibility(View.VISIBLE);navBack.setVisibility(View.GONE);
         if(headerActions!=null)headerActions.setVisibility(View.GONE);
         if(pdfButton!=null)pdfButton.setVisibility(View.GONE);
-        if(headerLogo!=null)headerLogo.setVisibility(View.VISIBLE);
+        if(headerLogo!=null)headerLogo.setVisibility(View.GONE);
         if(folderButton!=null)folderButton.setVisibility(View.GONE); // Only the large bottom Add Chat button.
         title.setText("Мои переписки");subtitle.setText("Твои сообщения · в одном месте");
         status.setText("");status.setVisibility(View.GONE);
-        LinearLayout hero=column();hero.setPadding(px(13),px(10),px(13),px(10));
-        hero.setBackground(outlined(PANEL,16,false));
-        LinearLayout.LayoutParams heroParams=p(-1,-2);heroParams.setMargins(px(2),px(5),px(2),px(8));list.addView(hero,heroParams);
         int hiddenChats=0;
         for(int i=0;i<archives.length();i++){
             JSONObject entry=archives.optJSONObject(i);
             if(entry!=null&&isChatHidden(entry.optString("key")))hiddenChats++;
         }
-        TextView heading=text("Переписки  ·  "+archives.length(),17,FG);
-        heading.setTypeface(null,Typeface.BOLD);hero.addView(heading);
-        TextView description=text(hiddenChats>0?("Скрыто: "+hiddenChats+" · всё хранится локально"):"Твои чаты · офлайн",11,SUB);
-        description.setPadding(0,px(3),0,0);hero.addView(description);
+        TextView section=text("Чаты  ·  "+archives.length()+
+            (hiddenChats>0?"  (скрыто "+hiddenChats+")":""),15,FG);
+        section.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+        section.setPadding(px(11),px(11),px(6),px(13));
+        list.addView(section,p(-1,-2));
         JSONArray trash=chatTrash();
         if(trash==null||trash.length()>0){
             Button recycle=btn(trash==null?"Корзина · требуется проверка":"Корзина · "+trash.length());
@@ -1425,9 +1423,6 @@ public class MainActivity extends Activity {
             list.addView(recycle,recycleMargin);
             recycle.setOnClickListener(v->showChatTrash());
         }
-        // User guide lives in the side drawer; the home screen stays focused on chats.
-        TextView section=text("ПЕРЕПИСКИ",11,SUB);section.setTypeface(null,Typeface.BOLD);
-        section.setPadding(px(9),px(5),0,px(8));list.addView(section);
         // Hidden chats stay indexed and backed up, but disappear from ordinary navigation.
         final boolean showHidden=getPreferences(MODE_PRIVATE).getBoolean("show_hidden_chats",false);
         if(hiddenChats>0){
@@ -1480,7 +1475,7 @@ public class MainActivity extends Activity {
             gradient(themeIndex==2?0xffc2e8f7:0xff12628a,themeIndex==2?0xff81d0f0:0xff17425d,20),
             shape(0xffffffff,20)));
         add.setContentDescription("Добавить переписку из экспорта Telegram");
-        LinearLayout.LayoutParams ap=p(-1,60);ap.setMargins(px(2),px(9),px(2),px(8));list.addView(add,ap);
+        LinearLayout.LayoutParams ap=p(-1,51);ap.setMargins(px(2),px(8),px(2),px(6));list.addView(add,ap);
         add.setOnClickListener(v->chooseFolder());
         if(archives.length()>=2){
             Button tools=btn("Инструменты для двух переписок  ▾");
