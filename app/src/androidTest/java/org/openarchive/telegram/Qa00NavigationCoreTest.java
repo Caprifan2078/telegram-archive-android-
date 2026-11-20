@@ -111,7 +111,7 @@ public class Qa00NavigationCoreTest {
                 set(a,"folder",null);set(a,"home",false);set(a,"screen","chat");call(a,"showPage");
             }catch(Exception e){throw new AssertionError(e);}});
             shown("QA00 help chat");tap("≡");tap("Все инструменты");openHelpFromDrawer();enterHelpChapterAndReturn();
-            device.pressBack();device.waitForIdle();shown("QA00 help chat");shown("История сообщений · локально");
+            device.pressBack();device.waitForIdle();shown("QA00 help chat");shown("Переписка");
             assertEquals("chat",field(a,"screen"));assertEquals(false,field(a,"home"));
         }finally{
             CountDownLatch idle=new CountDownLatch(1);((ExecutorService)field(a,"worker")).execute(idle::countDown);
@@ -127,12 +127,15 @@ public class Qa00NavigationCoreTest {
     @Test public void emptyHomeOpensImportDialogAndClosesDrawerByTouchOutside() {
         shown("Мои переписки");
         shown("Добавить переписку");
-        tap("Добавить переписку");
-        shown("Импорт переписки"); // one dialog with two separate Android picker sources
-        shown("Выбрать файл Telegram");
-        shown("Выбрать папку Telegram");
-        device.pressBack();
-        device.waitForIdle();
+        android.content.IntentFilter filter=new android.content.IntentFilter(android.content.Intent.ACTION_OPEN_DOCUMENT);
+        Instrumentation.ActivityMonitor monitor=inst.addMonitor(
+            filter,new Instrumentation.ActivityResult(android.app.Activity.RESULT_CANCELED,null),true);
+        try{
+            tap("Добавить переписку");
+            assertNotNull("System picker must be launched directly",
+                inst.waitForMonitorWithTimeout(monitor,4000));
+            assertNull("Unexpected two-choice import dialog",visible("Импорт переписки"));
+        }finally{inst.removeMonitor(monitor);}
         shown("Мои переписки");
         tap("☰");
         shown("TELEGRAM ARCHIVE");
@@ -172,14 +175,13 @@ public class Qa00NavigationCoreTest {
             });
             inst.waitForIdleSync();
             shown("QA00 синтетический чат");
-            shown("💬 Переписка");
-            shown("▦ Медиа");
-            tap("▦ Медиа");
+            assertNull("Old tab strip must not be visible",visible("▦ Медиа"));
+            tap("QA00 синтетический чат");
             assertEquals("media",field(a,"screen"));
-            shown("Фото, видео, голосовые и файлы");
-            tap("💬 Переписка");
+            shown("Медиа");
+            tap("‹");
             assertEquals("chat",field(a,"screen"));
-            shown("История сообщений · локально");
+            shown("Переписка");
             // The help module should return to the originating chat, not home.
             inst.runOnMainSync(()->{
                 try{call(a,"showHelp");}catch(Exception e){throw new AssertionError(e);}
@@ -239,12 +241,12 @@ public class Qa00NavigationCoreTest {
             });
             inst.waitForIdleSync();
             for(int i=0;i<10;i++) {
-                tap("▦ Медиа");
+                tap("QA00 вкладки");
                 assertEquals("media",field(a,"screen"));
-                shown("Фото, видео, голосовые и файлы");
-                tap("💬 Переписка");
+                shown("Медиа");
+                tap("‹");
                 assertEquals("chat",field(a,"screen"));
-                shown("История сообщений · локально");
+                shown("Переписка");
             }
         }finally {
             CountDownLatch idle=new CountDownLatch(1);
@@ -275,23 +277,16 @@ public class Qa00NavigationCoreTest {
                 } catch(Exception e){throw new AssertionError(e);}
             });
             inst.waitForIdleSync();
-            UiObject2 chat=visible("💬 Переписка"),media=visible("▦ Медиа");
-            assertNotNull("Chat tab missing",chat);assertNotNull("Media tab missing",media);
-            Rect chatBounds=chat.getVisibleBounds(),mediaBounds=media.getVisibleBounds();
-            assertFalse(chatBounds.isEmpty());assertFalse(mediaBounds.isEmpty());
-            for(int i=0;i<10;i++) {
-                assertTrue(device.click(mediaBounds.centerX(),mediaBounds.centerY()));
-                assertTrue(device.click(chatBounds.centerX(),chatBounds.centerY()));
+            assertNull("The redundant media tab must be absent",visible("▦ Медиа"));
+            for(int i=0;i<10;i++){
+                tap("QA00 быстрые вкладки");
+                assertEquals("media",field(a,"screen"));
+                tap("‹");
             }
-            device.waitForIdle();
-            java.util.concurrent.atomic.AtomicReference<String> current=new java.util.concurrent.atomic.AtomicReference<>();
-            inst.runOnMainSync(()->{
-                try{current.set((String)field(a,"screen"));}catch(Exception e){throw new AssertionError(e);}
-            });
-            assertEquals("The last tap should leave the chat tab active","chat",current.get());
-            shown("История сообщений · локально");
-            tap("▦ Медиа");shown("Фото, видео, голосовые и файлы");
-            tap("💬 Переписка");shown("История сообщений · локально");
+            assertEquals("Returning from media must preserve chat screen","chat",field(a,"screen"));
+            shown("Переписка");
+            tap("QA00 быстрые вкладки");shown("Медиа");
+            tap("‹");shown("Переписка");
         } finally {
             CountDownLatch idle=new CountDownLatch(1);
             ((ExecutorService)field(a,"worker")).execute(idle::countDown);
@@ -347,10 +342,10 @@ public class Qa00NavigationCoreTest {
             }
             assertNotNull("No fully visible synthetic message after scrolling",marker);
             String text=marker.getText();
-            tap("▦ Медиа");shown("Фото, видео, голосовые и файлы");
+            tap("QA00 scroll");shown("Медиа");
             assertNotNull("Media page did not finish loading",device.wait(
                 Until.findObject(By.textContains("Здесь пока нет медиа")),15000));
-            tap("💬 Переписка");
+            tap("‹");
             UiObject2 restored=device.wait(Until.findObject(By.text(text)),15000);
             assertNotNull("Scrolled message disappeared after media round trip: "+text,restored);
             Rect after=restored.getVisibleBounds();
@@ -414,11 +409,11 @@ public class Qa00NavigationCoreTest {
             }
             assertNotNull("No fully visible synthetic message after scrolling",marker);
             String text=marker.getText();
-            tap("▦ Медиа");shown("Фото, видео, голосовые и файлы");
+            tap("QA00 scroll");shown("Медиа");
             tap("Избранное");
             assertNotNull("Favorite messages did not load",device.wait(
                 Until.findObject(By.textContains("QA00_SCROLL_")),15000));
-            tap("💬 Переписка");
+            tap("‹");
             UiObject2 restored=device.wait(Until.findObject(By.text(text)),15000);
             assertNotNull("Scrolled message disappeared after media round trip: "+text,restored);
             Rect after=restored.getVisibleBounds();
