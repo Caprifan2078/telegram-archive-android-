@@ -86,7 +86,15 @@ android {
             signingConfig signingConfigs.debug
         }
     }
-    testBuildType (project.findProperty('qaUiStructureInstrumentation') == 'true' ? 'uiStructureQa' : (project.findProperty('qaUiPolishInstrumentation') == 'true' ? 'uiPolishQa' : (project.findProperty('qaUiReviewInstrumentation') == 'true' ? 'uiReviewQa' : (project.findProperty('qaHandoffInstrumentation') == 'true' ? 'handoffQa' : (project.findProperty('qaStableInstrumentation') == 'true' ? 'stableQa' : 'compactQa')))))
+    // Fresh side-by-side install ID: avoids any signing or data conflict with old QA.
+    buildTypes {
+        cleanChatQa {
+            initWith compactQa
+            applicationIdSuffix '.cleanchat20261120'
+            signingConfig signingConfigs.debug
+        }
+    }
+    testBuildType (project.findProperty('qaCleanChatInstrumentation') == 'true' ? 'cleanChatQa' : (project.findProperty('qaUiStructureInstrumentation') == 'true' ? 'uiStructureQa' : (project.findProperty('qaUiPolishInstrumentation') == 'true' ? 'uiPolishQa' : (project.findProperty('qaUiReviewInstrumentation') == 'true' ? 'uiReviewQa' : (project.findProperty('qaHandoffInstrumentation') == 'true' ? 'handoffQa' : (project.findProperty('qaStableInstrumentation') == 'true' ? 'stableQa' : 'compactQa'))))))
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
