@@ -1,0 +1,51 @@
+name: QA 2026-11-20 — signed one-click handoff APK
+on:
+  push:
+    branches: [qa/single-import-rar-clean-chat-20261120]
+    paths:
+      - '.github/workflows/clean-chat-build-only-20261120.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Compile and verify project
+        run: gradle --no-daemon --max-workers=2 assembleCleanChatQa testCleanChatQaUnitTest
+      - name: Verify signed package and offline permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/cleanChatQa/app-cleanChatQa.apk
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          test -s "$apk"
+          "$tools/apksigner" verify --verbose "$apk"
+          "$tools/aapt" dump badging "$apk" | grep -q "package: name='org.openarchive.telegram.qa.cleanchat20261120'"
+          if "$tools/aapt" dump permissions "$apk" | grep -q 'android.permission.INTERNET'; then
+            echo 'Unwanted INTERNET permission'; exit 1
+          fi
+          mkdir -p deliver
+          cp "$apk" deliver/Telegram_Archive_Viewer_0.51_Clean_Chat_QA_2026-11-20.apk
+          cd deliver
+          sha256sum *.apk > SHA256SUMS.txt
+      - name: Upload actual APK and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: TelegramArchiveViewer-0.51-CleanChat-QA-Handoff
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            deliver/*.apk
+            deliver/SHA256SUMS.txt
