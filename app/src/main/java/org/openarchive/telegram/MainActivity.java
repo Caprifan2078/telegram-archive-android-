@@ -2746,7 +2746,7 @@ public class MainActivity extends Activity {
                 runOnUiThread(()->{
                     importing=false;folderButton.setEnabled(true);
                     status.setText("Импорт не завершён");
-                    FontDialog.Builder alert=new FontDialog.Builder(this)
+                    AlertDialog.Builder alert=new FontDialog.Builder(this)
                         .setTitle("Не удалось импортировать "+clip(label,40))
                         .setMessage((passwordFailure?"Возможно, пароль неверен. ":"")+failure)
                         .setNegativeButton("Закрыть",null);
