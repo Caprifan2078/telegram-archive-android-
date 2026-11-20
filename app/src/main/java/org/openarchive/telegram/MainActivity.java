@@ -1068,8 +1068,8 @@ public class MainActivity extends Activity {
                                  java.util.function.Consumer<LinearLayout> populate){
         LinearLayout group=column();parent.addView(group,p(-1,-2));
         TextView title=text((opened?"▾  ":"▸  ")+name,13,ACCENT);
-        title.setTypeface(null,Typeface.BOLD);title.setPadding(px(10),px(12),px(6),px(12));
-        title.setBackground(shape(themeIndex==2?0x55c0dbe9:0x55385069,12));
+        title.setTypeface(null,Typeface.BOLD);title.setPadding(px(10),px(10),px(6),px(10));
+        title.setBackground(shape(Color.TRANSPARENT,10));
         group.addView(title,p(-1,-2));
         LinearLayout contents=column();contents.setPadding(0,px(6),0,px(7));group.addView(contents);
         populate.accept(contents);contents.setVisibility(opened?View.VISIBLE:View.GONE);
@@ -1114,16 +1114,17 @@ public class MainActivity extends Activity {
                               String heading,String detail,Runnable action){
         int split=heading.indexOf("  ");
         String label=split>=0?heading.substring(split+2).trim():heading;
-        LinearLayout item=row();item.setPadding(px(12),px(11),px(10),px(11));
-        item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x225aaad8),outlined(PANEL,12,false),null));
-        LinearLayout.LayoutParams params=p(-1,-2);params.bottomMargin=px(5);parent.addView(item,params);
+        LinearLayout item=row();item.setPadding(px(11),px(8),px(9),px(8));
+        item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x225aaad8),
+            shape(Color.TRANSPARENT,10),null));
+        LinearLayout.LayoutParams params=p(-1,-2);params.bottomMargin=px(2);parent.addView(item,params);
         ImageView symbol=new ImageView(this);symbol.setImageResource(drawerIconFor(label));
         symbol.setColorFilter(ACCENT);symbol.setContentDescription(null);
-        LinearLayout.LayoutParams symbolSize=p(22,22);symbolSize.rightMargin=px(13);
+        LinearLayout.LayoutParams symbolSize=p(19,19);symbolSize.rightMargin=px(12);
         item.addView(symbol,symbolSize);
         LinearLayout info=column();item.addView(info,new LinearLayout.LayoutParams(0,-2,1));
-        TextView name=text(label,15,FG);name.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));info.addView(name);
-        TextView summary=text(detail,12,SUB);summary.setPadding(0,px(3),0,0);info.addView(summary);
+        TextView name=text(label,14,FG);name.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));info.addView(name);
+        TextView summary=text(detail,11,SUB);summary.setPadding(0,px(2),0,0);info.addView(summary);
         item.setContentDescription(label+". "+detail);
         item.setOnClickListener(v->closeDrawer(dialog,pane,action));
     }
@@ -2233,7 +2234,7 @@ public class MainActivity extends Activity {
         subtitle.setSingleLine(true);subtitle.setEllipsize(TextUtils.TruncateAt.END);headings.addView(subtitle,p(-1,19));
         pdfButton=btn("PDF");pdfButton.setContentDescription("Сохранить переписку в PDF");head.addView(pdfButton,p(44,42));
         pdfButton.setOnClickListener(v->{if(!home&&"chat".equals(screen))chooseConversationPdf();});
-        headerActions=btn("≡");headerActions.setContentDescription("Другие инструменты переписки");head.addView(headerActions,p(42,42));
+        headerActions=btn("⋮");headerActions.setContentDescription("Инструменты переписки");head.addView(headerActions,p(42,42));
         headerActions.setOnClickListener(v->showConversationMenu(headerActions));
         title.setOnClickListener(v->openChatMediaFromHeader());
         headings.setOnClickListener(v->openChatMediaFromHeader());
