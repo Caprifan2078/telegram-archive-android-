@@ -3,6 +3,7 @@ package org.openarchive.telegram;
 import android.content.Context;
 import android.net.Uri;
 import com.github.junrar.Archive;
+import com.github.junrar.ArchiveOptions;
 import com.github.junrar.rarfile.FileHeader;
 import java.io.*;
 import java.util.*;
@@ -44,8 +45,7 @@ final class ArchiveFileImport {
             }else if("7z".equalsIgnoreCase(suffix)){
                 extractSevenZ(ctx,uri,root,password,budget,progress);
             }else if("rar".equalsIgnoreCase(suffix)){
-                if(password!=null&&password.length>0)throw new IOException("Импорт RAR с паролем пока не поддерживается");
-                extractRar(ctx,uri,root,budget,progress);
+                extractRar(ctx,uri,root,password,budget,progress);
             }
             else throw new IOException("Ожидался ZIP, 7z или RAR");
             File selected=findChatRoot(root,0);
@@ -158,7 +158,7 @@ final class ArchiveFileImport {
             }
         }
     }
-    private static void extractRar(Context ctx,Uri uri,File root,Budget budget,Progress progress) throws Exception{
+    private static void extractRar(Context ctx,Uri uri,File root,char[] password,Budget budget,Progress progress) throws Exception{
         // Junrar needs random access for efficient RAR5/solid decoding. Keep a temporary copy
         // until import has finished; original remains at its selected SAF location.
         File compressed=File.createTempFile("telegram-", ".rar",ctx.getCacheDir());
@@ -174,13 +174,18 @@ final class ArchiveFileImport {
                     out.write(buffer,0,n);
                 }
             }
-            try(Archive rar=new Archive(compressed)){
+            // Junrar supports password-protected RAR4/RAR5 entries and encrypted
+            // RAR5 headers. Keep authentication within the bounded extractor.
+            try(Archive rar=new Archive(compressed,ArchiveOptions.builder()
+                    .password(password).maxDictionarySize(128L*1024*1024).build())){
                 for(FileHeader entry:rar.getFileHeaders()){
                     // Even skipped directories and links consume the bounded entry budget.
                     String name=entry.getFileName();
                     budget.next(name==null?"":name);
                     if(entry.isDirectory())continue;
                     if(entry.getRedirection()!=null)continue; // never materialize archive links
+                    if(entry.isEncrypted()&&(password==null||password.length==0))
+                        throw new IOException("RAR защищён паролем. Повтори импорт и введи пароль.");
                     File target=safeFile(root,name);
                     if(entry.getFullUnpackSize()>MAX_ENTRY)throw new IOException("Слишком большой файл в RAR");
                     File parent=target.getParentFile();
