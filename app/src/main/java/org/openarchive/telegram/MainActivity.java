@@ -1002,7 +1002,7 @@ public class MainActivity extends Activity {
         sideMenuItem(items,dialog,pane,"📝  Личные заметки","Заметки из разных переписок",()->{
             home=false;screen="saved";renderSaved();});
         sideMenuSection(items,"Архивы и резервные копии",false,group->{
-            if(!home)sideMenuItem(group,dialog,pane,"＋  Импортировать чат","HTML, ZIP, 7z, RAR или папка Telegram",this::chooseFolder);
+            sideMenuItem(group,dialog,pane,"▧  Подключить папку экспорта","Расширенный способ для папки Telegram с медиа",this::chooseExistingFolder);
             sideMenuItem(group,dialog,pane,"⇧  Создать резервную копию","Чаты, настройки и при выборе — медиа",this::backupPicker);
             sideMenuItem(group,dialog,pane,"✓  Проверить копию","Контроль целостности без изменений",this::verifyBackupPicker);
             sideMenuItem(group,dialog,pane,"◈  Пробное восстановление","Тест без изменения переписок",this::dryRunPicker);
@@ -1532,63 +1532,31 @@ public class MainActivity extends Activity {
     private boolean isChatHidden(String key){
         return getPreferences(MODE_PRIVATE).getBoolean("hidden_chat_"+key,false);
     }
-    /** Single chat-details surface for the main list and conversation menu. */
+    /** Compact actions, not a full-screen stack of giant buttons.
+     * The card itself opens the chat, so this menu never duplicates "Open chat". */
     private void showChatActions(String key,String name){
         if(importing||restoringBackup){toast("Дождись завершения операции");return;}
-        LinearLayout panel=column();panel.setPadding(px(13),px(5),px(13),px(8));
-        LinearLayout profile=row();profile.setPadding(px(7),px(7),px(7),px(12));
-        panel.addView(profile,p(-1,65));
-        TextView avatar=text(initial(name),22,FG);avatar.setGravity(Gravity.CENTER);
-        avatar.setTypeface(null,Typeface.BOLD);
-        avatar.setBackground(outlined(CHIP,100,false));
-        Bitmap bitmap=PersonalImages.load(this,
-            getPreferences(MODE_PRIVATE).getString(PersonalImages.chatAvatarKey(key),""));
-        if(bitmap!=null){
-            avatar.setText("");
-            avatar.setBackground(new android.graphics.drawable.BitmapDrawable(
-                getResources(),PersonalImages.circular(bitmap,px(47))));
-        }
-        profile.addView(avatar,p(47,47));
-        LinearLayout details=column();details.setPadding(px(12),0,0,0);
-        profile.addView(details,new LinearLayout.LayoutParams(0,-2,1));
-        TextView heading=text(name,17,FG);heading.setSingleLine(true);
-        heading.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
-        heading.setEllipsize(TextUtils.TruncateAt.END);details.addView(heading);
-        TextView subtitle=text("Локальная переписка · данные на устройстве",11,SUB);
-        subtitle.setPadding(0,px(4),0,0);details.addView(subtitle);
-        final AlertDialog dialog=new FontDialog.Builder(this).setTitle("Информация о чате")
-            .setView(panel).setNegativeButton("Закрыть",null).create();
-        avatar.setContentDescription("Изменить аватар");
-        avatar.setOnClickListener(v->{dialog.dismiss();pendingImageChatKey=key;pickPersonalImage(62);});
         String[] options={
-            "Открыть переписку",
-            "Переименовать чат",
+            "Переименовать",
             "Изменить аватар",
             isChatPinned(key)?"Открепить":"Закрепить",
             isChatHidden(key)?"Показать чат":"Скрыть чат",
             "Убрать в корзину"
         };
-        for(int i=0;i<options.length;i++){
-            final int choice=i;
-            Button action=btn(options[i]);
-            LinearLayout.LayoutParams dims=p(-1,44);dims.bottomMargin=px(5);
-            panel.addView(action,dims);
-            action.setOnClickListener(v->{
-                dialog.dismiss();
-                if(choice==0)activateArchive(key);
-                else if(choice==1)renameChat(key,name);
-                else if(choice==2){pendingImageChatKey=key;pickPersonalImage(62);}
-                else if(choice==3)toggleChatPin(key);
-                else if(choice==4){
+        new FontDialog.Builder(this).setTitle(name)
+            .setItems(options,(dialog,choice)->{
+                if(choice==0)renameChat(key,name);
+                else if(choice==1){pendingImageChatKey=key;pickPersonalImage(62);}
+                else if(choice==2)toggleChatPin(key);
+                else if(choice==3){
                     boolean hidden=!isChatHidden(key);
                     getPreferences(MODE_PRIVATE).edit().putBoolean("hidden_chat_"+key,hidden).apply();
                     if(hidden)getPreferences(MODE_PRIVATE).edit().putBoolean("show_hidden_chats",false).apply();
                     home=true;screen="chat";renderHome();
-                    toast(hidden?"Чат скрыт. Вернуть можно из «Показать скрытые»":"Чат снова виден");
-                }else if(choice==5)confirmRemoveChatFromList(key,name);
-            });
-        }
-        dialog.show();
+                    toast(hidden?"Чат скрыт. Вернуть можно через «Показать скрытые»":"Чат снова виден");
+                }else if(choice==4)confirmRemoveChatFromList(key,name);
+            })
+            .setNegativeButton("Закрыть",null).show();
     }
     private void renameChat(String key,String name){
         EditText input=new EditText(this);input.setSingleLine(true);input.setText(name);
@@ -2055,7 +2023,7 @@ public class MainActivity extends Activity {
     private void openChatMediaFromHeader(){
         if(home||"saved".equals(screen)||"help".equals(screen)||importing)return;
         rememberChatPositionForReturn();
-        screen="media";returnScreen="";searchReturnsToAnalytics=false;showPage();
+        screen="media";returnScreen="chat";searchReturnsToAnalytics=false;showPage();
     }
     private void showConversationInfo(){showChatActions(activeKey,activeName);}
     private void showConversationMenu(View anchor){
@@ -2231,7 +2199,10 @@ public class MainActivity extends Activity {
         bottomNav=row();bottomNav.setPadding(px(4),px(3),px(4),px(3));
         bottomNav.setBackground(glass(PANEL,17));
         LinearLayout.LayoutParams navBounds=p(-1,46);navBounds.bottomMargin=px(4);base.addView(bottomNav,navBounds);
-        addTab("💬 Переписка","chat");addTab("▦ Медиа","media");
+        // No redundant "Переписка | Медиа" tab strip. Tap the chat title to see media.
+        // Existing addTab route is preserved for compatibility but hidden.
+        addTab("Переписка","chat");addTab("Медиа","media");
+        bottomNav.setVisibility(View.GONE);
         toolArea=column();base.addView(toolArea,p(-1,-2));
         pinnedBar=row();base.addView(pinnedBar,p(-1,-2));
         filterBar=column();toolArea.addView(filterBar,p(-1,-2));
@@ -2266,6 +2237,7 @@ public class MainActivity extends Activity {
         });
     }
     private void refreshTabs(){
+        bottomNav.setVisibility(View.GONE);
         for(int i=0;i<bottomNav.getChildCount();i++){
             TextView t=(TextView)bottomNav.getChildAt(i);boolean selected=screen.equals(t.getTag())||("favorites".equals(screen)&&"media".equals(t.getTag()));
             boolean previously=t.isSelected();t.setSelected(selected);
@@ -2281,8 +2253,8 @@ public class MainActivity extends Activity {
         if(pdfButton!=null)pdfButton.setVisibility("chat".equals(screen)?View.VISIBLE:View.GONE);
         if(headerLogo!=null)headerLogo.setVisibility(View.GONE);
         if(folderButton!=null)folderButton.setVisibility(View.GONE);
-        title.setText(activeName);
-        subtitle.setText(screen.equals("chat")?"История сообщений · локально":screen.equals("media")?"Фото, видео, голосовые и файлы":screen.equals("favorites")?"Твои сохранённые сообщения":screen.equals("analytics")?"Статистика · полностью офлайн":screen.equals("relationships")?"Личные события и этапы":screen.equals("echo")?"Повторяющиеся фразы":screen.equals("chronology")?"Периоды истории · вручную":screen.equals("cinema")?"Медиа по годам · офлайн":"Найди любое сообщение");
+        title.setText("media".equals(screen)? "Медиа":activeName);
+        subtitle.setText(screen.equals("chat")?"Переписка":screen.equals("media")?activeName:screen.equals("favorites")?"Твои сохранённые сообщения":screen.equals("analytics")?"Статистика · полностью офлайн":screen.equals("relationships")?"Личные события и этапы":screen.equals("echo")?"Повторяющиеся фразы":screen.equals("chronology")?"Периоды истории · вручную":screen.equals("cinema")?"Медиа по годам · офлайн":"Найди любое сообщение");
     }
     private void configureBars(){
         filterBar.removeAllViews();searchArea.removeAllViews();
@@ -2435,20 +2407,9 @@ public class MainActivity extends Activity {
             });
         },c.get(Calendar.YEAR),c.get(Calendar.MONTH),c.get(Calendar.DAY_OF_MONTH)).show();
     }
+    /** One tap on Add Chat opens the Android file picker; no duplicate import modal. */
     private void chooseFolder(){
-        // A single entry point with two Android picker types. A file picker cannot
-        // also grant directory-tree access, so offer both choices in ONE compact dialog.
-        LinearLayout options=column();options.setPadding(px(18),px(7),px(18),px(8));
-        TextView help=text("Файл HTML/ZIP/7z/RAR открывается как обычный чат. Если есть отдельные фото, видео и голосовые — лучше выбрать папку экспорта.",13,SUB);
-        help.setPadding(0,0,0,px(13));options.addView(help,p(-1,-2));
-        Button file=btn("Выбрать файл Telegram");options.addView(file,p(-1,51));
-        space(options,9);
-        Button folderChoice=btn("Выбрать папку Telegram");options.addView(folderChoice,p(-1,51));
-        final AlertDialog dialog=new FontDialog.Builder(this).setTitle("Импорт переписки")
-            .setView(options).setNegativeButton("Отмена",null).create();
-        file.setOnClickListener(v->{dialog.dismiss();chooseCompressedArchive();});
-        folderChoice.setOnClickListener(v->{dialog.dismiss();chooseExistingFolder();});
-        dialog.show();
+        chooseCompressedArchive();
     }
     private void chooseReadOnlyPreview(){
         Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -2476,7 +2437,7 @@ public class MainActivity extends Activity {
     @Override public void onBackPressed(){
         if("help".equals(screen)){leaveHelp();return;}
         if(floatingPanel!=null){closeFloatingRound();return;}
-        if(screen.equals("saved")||(!home&&returnScreen.isEmpty())){saveReadingProgress();home=true;screen="chat";searchReturnsToAnalytics=false;bottomNav.setVisibility(View.VISIBLE);showPage();return;}if(!returnScreen.isEmpty()){restoreReturn();return;}super.onBackPressed();}
+        if(screen.equals("saved")||(!home&&returnScreen.isEmpty())){saveReadingProgress();home=true;screen="chat";searchReturnsToAnalytics=false;bottomNav.setVisibility(View.GONE);showPage();return;}if(!returnScreen.isEmpty()){restoreReturn();return;}super.onBackPressed();}
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
         if(request==SAVE_CONVERSATION_PDF_REQUEST){
@@ -2601,7 +2562,7 @@ public class MainActivity extends Activity {
                 if(c!=null&&c.moveToFirst())name=c.getString(0);
             }catch(Exception ignored){}
             String low=name==null?"":name.toLowerCase(Locale.ROOT);
-            String ext=low.endsWith(".rar")?"rar":low.endsWith(".zip")?"zip":
+            String ext=low.endsWith(".rar")||low.endsWith(".rar5")?"rar":low.endsWith(".zip")?"zip":
                 low.endsWith(".7z")?"7z":low.endsWith(".html")||low.endsWith(".htm")?"html":"";
             if(ext.isEmpty()){toast("Выбери HTML, ZIP, 7z, RAR или папку экспорта");return;}
             final String displayName=name;
@@ -2616,11 +2577,11 @@ public class MainActivity extends Activity {
             archivePassword.setHint("Пароль архива, если есть");
             archivePassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
             FontDialog.Builder confirm=new FontDialog.Builder(this);
-            confirm.setTitle("Импорт "+displayName).setMessage("Архив распакуется во внутреннюю папку приложения. Для медиа потребуется свободное место."+
-                    ("rar".equals(ext)?" Импорт RAR с паролем пока не поддерживается.":""));
-            if("zip".equals(ext)||"7z".equals(ext))confirm.setView(archivePassword);
+            confirm.setTitle("Импорт "+displayName)
+                .setMessage("Сообщения откроются в переписке. Медиа из архива сохранятся локально. Если архив защищён, введи пароль.");
+            confirm.setView(archivePassword);
             confirm.setNegativeButton("Отмена",null).setPositiveButton("Импортировать",(d,w)->{
-                char[] password=("zip".equals(ext)||"7z".equals(ext))?archivePassword.getText().toString().toCharArray():null;
+                char[] password=archivePassword.getText().toString().toCharArray();
                 importCompressed(source,ext,displayName,password);
                 archivePassword.setText("");
             }).show();
@@ -2750,7 +2711,7 @@ public class MainActivity extends Activity {
         if(savedComposer!=null&&!screen.equals("saved"))savedComposer.setVisibility(View.GONE);
         if(scheduledPrefetch!=null){handler.removeCallbacks(scheduledPrefetch);scheduledPrefetch=null;}
         if(screen.equals("saved")){if(pdfButton!=null)pdfButton.setVisibility(View.GONE);renderSaved();return;}
-        if(!home)bottomNav.setVisibility(View.VISIBLE);
+        bottomNav.setVisibility(View.GONE);
         if(importing)return;if(floatingPanel==null)stopPlayback();refreshTabs();configureBars();renderPinnedBar();int token=++loadToken;
         loadingMore=false; // A stale asynchronous page must not block the new tab.
         if(home){renderHome();return;}
