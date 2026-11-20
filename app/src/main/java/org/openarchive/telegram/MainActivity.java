@@ -2228,10 +2228,11 @@ public class MainActivity extends Activity {
         playerPause=btn("⏸");playerStrip.addView(playerPause,p(38,40));playerPause.setOnClickListener(v->toggleActivePlayback());
         Button next=btn("⏭");playerStrip.addView(next,p(38,40));next.setOnClickListener(v->playAdjacent(true));
         Button close=btn("✕");playerStrip.addView(close,p(38,40));close.setOnClickListener(v->{closeFloatingRound();stopPlayback();});
-        bottomNav=row();bottomNav.setPadding(px(4),px(3),px(4),px(3));
+        bottomNav=row();bottomNav.setVisibility(View.GONE);
+        bottomNav.setPadding(px(4),px(3),px(4),px(3));
         bottomNav.setBackground(glass(PANEL,17));
         LinearLayout.LayoutParams navBounds=p(-1,46);navBounds.bottomMargin=px(4);base.addView(bottomNav,navBounds);
-        addTab("💬 Переписка","chat");addTab("▦ Медиа","media");
+        // The chat title leads directly to media. No redundant "Chat / Media" bar.
         toolArea=column();base.addView(toolArea,p(-1,-2));
         pinnedBar=row();base.addView(pinnedBar,p(-1,-2));
         filterBar=column();toolArea.addView(filterBar,p(-1,-2));
@@ -2467,7 +2468,7 @@ public class MainActivity extends Activity {
     @Override public void onBackPressed(){
         if("help".equals(screen)){leaveHelp();return;}
         if(floatingPanel!=null){closeFloatingRound();return;}
-        if(screen.equals("saved")||(!home&&returnScreen.isEmpty())){saveReadingProgress();home=true;screen="chat";searchReturnsToAnalytics=false;bottomNav.setVisibility(View.VISIBLE);showPage();return;}if(!returnScreen.isEmpty()){restoreReturn();return;}super.onBackPressed();}
+        if(screen.equals("saved")||(!home&&returnScreen.isEmpty())){saveReadingProgress();home=true;screen="chat";searchReturnsToAnalytics=false;bottomNav.setVisibility(View.GONE);showPage();return;}if(!returnScreen.isEmpty()){restoreReturn();return;}super.onBackPressed();}
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
         if(request==SAVE_CONVERSATION_PDF_REQUEST){
@@ -2768,7 +2769,7 @@ public class MainActivity extends Activity {
         if(savedComposer!=null&&!screen.equals("saved"))savedComposer.setVisibility(View.GONE);
         if(scheduledPrefetch!=null){handler.removeCallbacks(scheduledPrefetch);scheduledPrefetch=null;}
         if(screen.equals("saved")){if(pdfButton!=null)pdfButton.setVisibility(View.GONE);renderSaved();return;}
-        if(!home)bottomNav.setVisibility(View.VISIBLE);
+        bottomNav.setVisibility(View.GONE);
         if(importing)return;if(floatingPanel==null)stopPlayback();refreshTabs();configureBars();renderPinnedBar();int token=++loadToken;
         loadingMore=false; // A stale asynchronous page must not block the new tab.
         if(home){renderHome();return;}
@@ -4201,7 +4202,7 @@ public class MainActivity extends Activity {
     private void renderChronologyPage(){
         int token=++loadToken;
         if(home){screen="chat";showPage();return;}
-        bottomNav.setVisibility(View.VISIBLE);refreshTabs();
+        bottomNav.setVisibility(View.GONE);refreshTabs();
         title.setText("Хронология");subtitle.setText("Периоды истории · вручную");
         filterBar.removeAllViews();searchArea.removeAllViews();
         bottomPager.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
@@ -4282,7 +4283,7 @@ public class MainActivity extends Activity {
     private void renderCinemaPage(){
         int token=++loadToken;
         if(home){screen="chat";showPage();return;}
-        bottomNav.setVisibility(View.VISIBLE);refreshTabs();
+        bottomNav.setVisibility(View.GONE);refreshTabs();
         title.setText("Кинолента");subtitle.setText("Медиа по годам · офлайн");
         filterBar.removeAllViews();searchArea.removeAllViews();
         bottomPager.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
