@@ -61,6 +61,42 @@ public class RarCompatibilityRegressionTest {
             assertArrayEquals(original,java.nio.file.Files.readAllBytes(file.toPath()));
         }finally{file.delete();assertEquals("No temporary RAR copy may remain",before,cached());}
     }
+    /** Import path, not just read-only preview: extract actual encrypted RAR5 payloads
+     * through the same bounded Junrar routine that handles Telegram archives. */
+    @Test public void encryptedRar5ImportsWithPasswordAndRejectsWrongKey()throws Exception{
+        java.lang.reflect.Method unpack=ArchiveFileImport.class.getDeclaredMethod("extractRar",
+            Context.class,Uri.class,File.class,char[].class,ArchiveFileImport.Budget.class,
+            ArchiveFileImport.Progress.class);
+        unpack.setAccessible(true);
+        for(String fixture:new String[]{RAR5_DATA_PASSWORD,RAR5_HEADER_PASSWORD}){
+            File source=create(fixture);
+            byte[] original=java.nio.file.Files.readAllBytes(source.toPath());
+            File root=new File(ctx.getCacheDir(),"rar-import-qa-"+UUID.randomUUID().toString());
+            assertTrue(root.mkdirs());
+            try{
+                unpack.invoke(null,ctx,Uri.fromFile(source),root,"junrar".toCharArray(),
+                    new ArchiveFileImport.Budget(),(ArchiveFileImport.Progress)info->{});
+                File actual=new File(root,"file1.txt");
+                assertTrue("Encrypted RAR member was not materialized",actual.isFile());
+                assertEquals("file1\n",new String(java.nio.file.Files.readAllBytes(actual.toPath()),
+                    StandardCharsets.UTF_8));
+                assertArrayEquals("Original encrypted archive changed",original,
+                    java.nio.file.Files.readAllBytes(source.toPath()));
+            }finally{ArchiveFileImport.deleteTree(root);source.delete();}
+        }
+        File wrong=create(RAR5_DATA_PASSWORD);
+        String key=UUID.randomUUID().toString().replace("-","");
+        File extracted=new File(new File(ctx.getFilesDir(),"telegram_imports"),key);
+        try{
+            try{
+                ArchiveFileImport.extract(ctx,Uri.fromFile(wrong),"rar",key,
+                    "bad-password".toCharArray(),message->{});
+                fail("Wrong password must reject import");
+            }catch(Exception expected){}
+            assertFalse("Wrong password left a half-imported Telegram folder",extracted.exists());
+        }finally{wrong.delete();ArchiveFileImport.deleteTree(extracted);}
+    }
+
     @Test public void rar5EncryptedNamesRequireCorrectPassword()throws Exception{
         File file=create(RAR5_HEADER_PASSWORD);byte[] original=java.nio.file.Files.readAllBytes(file.toPath());Set<String> before=cached();
         try{
