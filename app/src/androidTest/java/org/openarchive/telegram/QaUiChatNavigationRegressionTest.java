@@ -58,7 +58,7 @@ public final class QaUiChatNavigationRegressionTest {
         return null;
     }
 
-    @Test public void importHasOnlyFileOrFolderInOneEntryPoint()throws Exception {
+    @Test public void oneImportButtonOpensSystemFilePickerWithoutIntermediateDialog()throws Exception {
         MainActivity a=rule.getActivity();
         inst.waitForIdleSync();
         inst.runOnMainSync(()->{
@@ -67,10 +67,10 @@ public final class QaUiChatNavigationRegressionTest {
             assertTrue(add.performClick());
         });
         device.waitForIdle();
-        assertNotNull("One import dialog",device.wait(Until.findObject(By.text("Импорт переписки")),2500));
-        assertNotNull("File option",device.findObject(By.text("Выбрать файл Telegram")));
-        assertNotNull("Folder option",device.findObject(By.text("Выбрать папку Telegram")));
-        assertNull("Old preview was incorrectly a third import source",device.findObject(By.textContains("Просмотреть файл или архив")));
+        assertNotNull("System picker should be open",
+            device.wait(Until.findObject(By.pkg("com.google.android.documentsui")),4000));
+        assertNull("Old duplicate import choice dialog must be gone",
+            device.findObject(By.text("Импорт переписки")));
         device.pressBack();device.waitForIdle();
     }
 
@@ -92,10 +92,14 @@ public final class QaUiChatNavigationRegressionTest {
                 try{
                     View pdf=(View)value(a,"pdfButton");
                     assertTrue("PDF dedicated header button visible",pdf.isShown());
+                    assertEquals("Redundant Chat/Media tabs must remain hidden",
+                        View.GONE,((View)value(a,"bottomNav")).getVisibility());
                     TextView title=(TextView)value(a,"title");
                     assertEquals("QA UI Chat",title.getText().toString());
                     assertTrue("Tapping chat name opens its media",title.performClick());
                     assertEquals("media",value(a,"screen"));
+                    assertEquals("chat",value(a,"returnScreen"));
+                    assertEquals(View.GONE,((View)value(a,"bottomNav")).getVisibility());
                     assertEquals(View.GONE,pdf.getVisibility());
                 }catch(Exception error){throw new AssertionError(error);}
             });
