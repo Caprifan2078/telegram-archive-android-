@@ -61,17 +61,21 @@ public final class QaUiChatNavigationRegressionTest {
     @Test public void importHasOnlyFileOrFolderInOneEntryPoint()throws Exception {
         MainActivity a=rule.getActivity();
         inst.waitForIdleSync();
-        inst.runOnMainSync(()->{
-            View add=findText(a.getWindow().getDecorView(),"＋   Добавить переписку");
-            assertNotNull("Single home import button",add);
-            assertTrue(add.performClick());
-        });
-        device.waitForIdle();
-        assertNotNull("One import dialog",device.wait(Until.findObject(By.text("Импорт переписки")),2500));
-        assertNotNull("File option",device.findObject(By.text("Выбрать файл Telegram")));
-        assertNotNull("Folder option",device.findObject(By.text("Выбрать папку Telegram")));
-        assertNull("Old preview was incorrectly a third import source",device.findObject(By.textContains("Просмотреть файл или архив")));
-        device.pressBack();device.waitForIdle();
+        // Android's file chooser is launched immediately: no second import modal.
+        android.content.IntentFilter filter=new android.content.IntentFilter(android.content.Intent.ACTION_OPEN_DOCUMENT);
+        android.app.Instrumentation.ActivityMonitor monitor=inst.addMonitor(
+            filter,new android.app.Instrumentation.ActivityResult(android.app.Activity.RESULT_CANCELED,null),true);
+        try{
+            inst.runOnMainSync(()->{
+                View add=findText(a.getWindow().getDecorView(),"＋   Добавить переписку");
+                assertNotNull("Single home import button",add);
+                assertTrue(add.performClick());
+            });
+            assertNotNull("One tap must open the Android document picker",
+                inst.waitForMonitorWithTimeout(monitor,4000));
+            assertNull("There must be no second file/folder chooser dialog",
+                device.findObject(By.text("Импорт переписки")));
+        }finally{inst.removeMonitor(monitor);}
     }
 
     @Test public void titleOpensMediaAndPdfIsSeparateChatAction()throws Exception {
@@ -96,7 +100,9 @@ public final class QaUiChatNavigationRegressionTest {
                     assertEquals("QA UI Chat",title.getText().toString());
                     assertTrue("Tapping chat name opens its media",title.performClick());
                     assertEquals("media",value(a,"screen"));
+                    assertEquals("chat",value(a,"returnScreen"));
                     assertEquals(View.GONE,pdf.getVisibility());
+                    assertEquals(View.GONE,((View)value(a,"bottomNav")).getVisibility());
                 }catch(Exception error){throw new AssertionError(error);}
             });
             idle(a);
