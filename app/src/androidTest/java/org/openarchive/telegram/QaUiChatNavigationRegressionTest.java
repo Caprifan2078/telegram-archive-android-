@@ -61,21 +61,22 @@ public final class QaUiChatNavigationRegressionTest {
     @Test public void importHasOnlyFileOrFolderInOneEntryPoint()throws Exception {
         MainActivity a=rule.getActivity();
         inst.waitForIdleSync();
-        // Android's file chooser is launched immediately: no second import modal.
-        android.content.IntentFilter filter=new android.content.IntentFilter(android.content.Intent.ACTION_OPEN_DOCUMENT);
-        android.app.Instrumentation.ActivityMonitor monitor=inst.addMonitor(
-            filter,new android.app.Instrumentation.ActivityResult(android.app.Activity.RESULT_CANCELED,null),true);
+        // Verify the real SAF picker, not an ActivityMonitor that can leave
+        // DocumentsUI running after a failed interception.
         try{
             inst.runOnMainSync(()->{
                 View add=findText(a.getWindow().getDecorView(),"＋   Добавить переписку");
                 assertNotNull("Single home import button",add);
                 assertTrue(add.performClick());
             });
-            assertNotNull("One tap must open the Android document picker",
-                inst.waitForMonitorWithTimeout(monitor,4000));
-            assertNull("There must be no second file/folder chooser dialog",
+            device.waitForIdle();
+            assertNotEquals("The system picker must open on the first tap",
+                a.getPackageName(),device.getCurrentPackageName());
+            assertNull("No duplicate file/folder dialog may appear",
                 device.findObject(By.text("Импорт переписки")));
-        }finally{inst.removeMonitor(monitor);}
+        }finally{
+            device.pressBack();device.waitForIdle();
+        }
     }
 
     @Test public void titleOpensMediaAndPdfIsSeparateChatAction()throws Exception {
