@@ -11,6 +11,12 @@ on:
       - 'app/build.gradle'
       - 'scripts/qa_clean_chat_screens.sh'
       - '.github/workflows/clean-chat-rar-20261120.yml'
+  pull_request:
+    branches: [qa/single-import-rar-clean-chat-20261120]
+    paths:
+      - 'app/src/androidTest/java/org/openarchive/telegram/**'
+      - 'app/src/main/java/org/openarchive/telegram/**'
+      - '.github/workflows/clean-chat-rar-20261120.yml'
   workflow_dispatch:
 permissions:
   contents: read
