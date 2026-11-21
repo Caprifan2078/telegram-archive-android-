@@ -11,6 +11,12 @@ on:
       - 'app/build.gradle'
       - 'scripts/qa_clean_chat_screens.sh'
       - '.github/workflows/clean-chat-rar-20261120.yml'
+  pull_request:
+    branches: [qa/single-import-rar-clean-chat-20261120]
+    paths:
+      - 'app/src/androidTest/java/org/openarchive/telegram/**'
+      - 'app/src/main/java/org/openarchive/telegram/**'
+      - '.github/workflows/clean-chat-rar-20261120.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -66,7 +72,7 @@ jobs:
           emulator-boot-timeout: 420
           script: |
             adb install deliver/Telegram_Archive_Viewer_0.51_Clean_Chat_QA_2026-11-20.apk
-            gradle --no-daemon --max-workers=2 connectedCleanChatQaAndroidTest -PqaCleanChatInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.Qa00NavigationCoreTest,org.openarchive.telegram.QaUiChatNavigationRegressionTest,org.openarchive.telegram.RarCompatibilityRegressionTest,org.openarchive.telegram.EncryptedTelegramImportRegressionTest,org.openarchive.telegram.QaStandaloneHtmlImportRegressionTest,org.openarchive.telegram.QaTrashRestoreRegressionTest,org.openarchive.telegram.UiSmokeTest'
+            gradle --no-daemon --max-workers=2 connectedCleanChatQaAndroidTest -PqaCleanChatInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.Qa00NavigationCoreTest,org.openarchive.telegram.QaUiChatNavigationRegressionTest,org.openarchive.telegram.RarCompatibilityRegressionTest,org.openarchive.telegram.EncryptedTelegramImportRegressionTest,org.openarchive.telegram.QaStandaloneHtmlImportRegressionTest,org.openarchive.telegram.QaTrashRestoreRegressionTest,org.openarchive.telegram.UiSmokeTest,org.openarchive.telegram.TgsRenderingIntegrationTest'
             bash scripts/qa_clean_chat_screens.sh
       - name: Upload real screenshots and XML reports
         if: always()
