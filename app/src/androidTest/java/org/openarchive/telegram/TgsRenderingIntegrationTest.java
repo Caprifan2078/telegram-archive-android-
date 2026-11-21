@@ -55,7 +55,7 @@ public class TgsRenderingIntegrationTest {
 
     private static void requireRejected(String json) throws Exception {
         try{
-            decodeFixture(json);
+            TgsPrecompSafety.requireAcyclic(new JSONObject(decodeFixture(json)));
             fail("Cyclic TGS precompositions must be rejected before rendering");
         }catch(java.io.IOException expected){
             assertNotNull(expected.getMessage());
@@ -80,6 +80,7 @@ public class TgsRenderingIntegrationTest {
             +"{\"id\":\"B\",\"layers\":[]}],"
             +"\"layers\":[{\"ty\":0,\"refId\":\"A\"}]}";
         assertEquals(json,decodeFixture(json));
+        TgsPrecompSafety.requireAcyclic(new JSONObject(decodeFixture(json)));
     }
 
 }
