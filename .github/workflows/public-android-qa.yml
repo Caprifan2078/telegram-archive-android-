@@ -1,6 +1,13 @@
 name: Public Android QA (Viewer 0.47)
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'gradle*'
+      - 'settings.gradle'
+      - '.github/workflows/public-android-qa.yml'
   push:
     branches: [main]
     paths-ignore:
@@ -30,14 +37,14 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
+      # GitHub standard Ubuntu runners already include the Android SDK.
+      # Avoid setup-android@v3 invoking the obsolete sdkmanager 'tools' package.
       - name: Gradle 8.11.1
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
       - name: Install Android SDK platform
-        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
       - name: Unit tests and QA-only APK
         run: gradle --no-daemon --stacktrace :app:testCompactQaUnitTest :app:assembleCompactQa
       - name: Upload QA APK (not a release)
