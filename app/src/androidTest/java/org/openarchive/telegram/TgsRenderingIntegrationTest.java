@@ -43,4 +43,43 @@ public class TgsRenderingIntegrationTest {
             assertTrue("TGS frame must be visible, not a blank tile",colored>10);
         }finally{drawable.clearComposition();output.recycle();}
     }
+
+    /** A malicious imported TGS must never reach the Lottie renderer with a cyclic precomp graph. */
+    private static String decodeFixture(String json) throws Exception {
+        java.io.ByteArrayOutputStream bytes=new java.io.ByteArrayOutputStream();
+        try(java.util.zip.GZIPOutputStream gzip=new java.util.zip.GZIPOutputStream(bytes)){
+            gzip.write(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+        return TgsPayload.decode(new java.io.ByteArrayInputStream(bytes.toByteArray()));
+    }
+
+    private static void requireRejected(String json) throws Exception {
+        try{
+            decodeFixture(json);
+            fail("Cyclic TGS precompositions must be rejected before rendering");
+        }catch(java.io.IOException expected){
+            assertNotNull(expected.getMessage());
+        }
+    }
+
+    @Test public void rejectsRecursivePrecompTgs() throws Exception {
+        String json="{\"fr\":60,\"assets\":[{\"id\":\"A\",\"layers\":[{\"ty\":0,\"refId\":\"A\"}]}],"
+            +"\"layers\":[{\"ty\":0,\"refId\":\"A\"}]}";
+        requireRejected(json);
+    }
+
+    @Test public void rejectsIndirectPrecompCycles() throws Exception {
+        String json="{\"fr\":60,\"assets\":[{\"id\":\"A\",\"layers\":[{\"ty\":0,\"refId\":\"B\"}]},"
+            +"{\"id\":\"B\",\"layers\":[{\"ty\":0,\"refId\":\"A\"}]}],"
+            +"\"layers\":[{\"ty\":0,\"refId\":\"A\"}]}";
+        requireRejected(json);
+    }
+
+    @Test public void acceptsNonRecursivePrecompTgs() throws Exception {
+        String json="{\"fr\":60,\"assets\":[{\"id\":\"A\",\"layers\":[{\"ty\":0,\"refId\":\"B\"}]},"
+            +"{\"id\":\"B\",\"layers\":[]}],"
+            +"\"layers\":[{\"ty\":0,\"refId\":\"A\"}]}";
+        assertEquals(json,decodeFixture(json));
+    }
+
 }
