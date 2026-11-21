@@ -5109,6 +5109,7 @@ public class MainActivity extends Activity {
                 try(InputStream raw=getContentResolver().openInputStream(uri)){
                     String json=TgsPayload.decode(raw);
                     JSONObject payload=new JSONObject(json);
+                    TgsPrecompSafety.requireAcyclic(payload);
                     if(!payload.has("layers")||!payload.has("fr")||payload.optDouble("fr")<=0)
                         throw new IOException("Неверный формат TGS");
                     LottieResult<LottieComposition> result=LottieCompositionFactory.fromJsonStringSync(json,null);
@@ -5166,6 +5167,7 @@ public class MainActivity extends Activity {
                     json=TgsPayload.decode(raw);
                 }
                 JSONObject obj=new JSONObject(json);
+                TgsPrecompSafety.requireAcyclic(obj);
                 if(!obj.has("layers")||!obj.has("fr")||obj.optDouble("op")-obj.optDouble("ip")>360)
                     throw new IOException("Некорректная TGS-анимация");
                 LottieResult<LottieComposition> result=LottieCompositionFactory.fromJsonStringSync(json,null);
