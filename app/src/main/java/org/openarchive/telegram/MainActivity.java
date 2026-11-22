@@ -170,6 +170,7 @@ public class MainActivity extends Activity {
     private String info="";
     private boolean analyticsCommonWords=false;
     private String analyticsSection="overview";
+    private boolean analyticsYearExpanded=false;
     private String analyticsUnit="month",analyticsSelectedAuthor="";
     private int analyticsCalendarYear=0;
     private String analyticsCompareFirst="",analyticsCompareSecond="";
@@ -244,6 +245,7 @@ public class MainActivity extends Activity {
                 pendingRestoreTop=state.getInt("ta_pending_chat_top",0);
             }
             analyticsSection=state.getString("ta_analytics_section","overview");
+            analyticsYearExpanded=state.getBoolean("ta_analytics_year_expanded",false);
             if(!java.util.Arrays.asList("overview","trends","rhythm","people","content").contains(analyticsSection))analyticsSection="overview";
             analyticsUnit=state.getString("ta_analytics_unit","month");
             analyticsSelectedAuthor=state.getString("ta_analytics_author","");
@@ -299,6 +301,7 @@ public class MainActivity extends Activity {
         state.putLong("ta_highlight_id",highlightId);state.putLong("ta_visible_id",lastVisibleMessage);state.putInt("ta_visible_top",lastVisibleTop);
         state.putLong("ta_pending_chat_id",pendingRestoreId);state.putInt("ta_pending_chat_top",pendingRestoreTop);
         state.putString("ta_analytics_section",analyticsSection);
+        state.putBoolean("ta_analytics_year_expanded",analyticsYearExpanded);
         state.putString("ta_analytics_unit",analyticsUnit);
         state.putString("ta_analytics_author",analyticsSelectedAuthor);
         state.putInt("ta_analytics_year",analyticsCalendarYear);
@@ -3248,10 +3251,16 @@ public class MainActivity extends Activity {
             LinearLayout.LayoutParams yearButton=p(-1,47);
             yearButton.setMargins(px(5),px(8),px(5),px(5));
             list.addView(openYear,yearButton);
-            LinearLayout yearDetails=column();yearDetails.setVisibility(View.GONE);
+            LinearLayout yearDetails=column();
+            yearDetails.setVisibility(analyticsYearExpanded?View.VISIBLE:View.GONE);
             list.addView(yearDetails,p(-1,-2));
+            if(analyticsYearExpanded){
+                renderWrappedCard(r,yearDetails);
+                openYear.setText("✦ Свернуть итоги года  ▴");
+            }
             openYear.setOnClickListener(v->{
                 boolean opening=yearDetails.getVisibility()!=View.VISIBLE;
+                analyticsYearExpanded=opening;
                 if(opening&&yearDetails.getChildCount()==0)renderWrappedCard(r,yearDetails);
                 yearDetails.setVisibility(opening?View.VISIBLE:View.GONE);
                 openYear.setText(opening?"✦ Свернуть итоги года  ▴":"✦ Итоги выбранного года  ▾");
