@@ -4518,6 +4518,216 @@ public class MainActivity extends Activity {
             });
         });
     }
+    /** Media grid is independent of the message ScrollView. RecyclerView recycles
+     * thumbnails so a chat with thousands of rounds never retains thousands of views. */
+    private boolean mediaGridEnabled(){
+        return getPreferences(MODE_PRIVATE).getBoolean("gallery_grid_"+mediaKind,
+            MediaGalleryState.defaultGrid(mediaKind));
+    }
+    private void updateMediaLayout(boolean preservePosition){
+        if(mediaRecycler==null||mediaAdapter==null)return;
+        int pos=0,offset=0;
+        if(preservePosition&&mediaLayout!=null){
+            pos=Math.max(0,mediaLayout.findFirstVisibleItemPosition());
+            View first=mediaLayout.findViewByPosition(pos);
+            if(first!=null)offset=first.getTop()-mediaRecycler.getPaddingTop();
+        }
+        final boolean grid=mediaGridEnabled();
+        int columns=grid?MediaGalleryState.clampColumns(mediaColumns):1;
+        mediaLayout=new androidx.recyclerview.widget.GridLayoutManager(this,columns);
+        final int width=columns;
+        mediaLayout.setSpanSizeLookup(new androidx.recyclerview.widget.GridLayoutManager.SpanSizeLookup(){
+            @Override public int getSpanSize(int position){
+                return mediaAdapter.isHeader(position)?width:1;
+            }
+        });
+        mediaRecycler.setLayoutManager(mediaLayout);
+        mediaRecycler.setZoom(grid,delta->changeMediaColumns(delta));
+        mediaAdapter.notifyDataSetChanged();
+        if(preservePosition&&mediaAdapter.getItemCount()>0)
+            mediaLayout.scrollToPositionWithOffset(Math.min(pos,mediaAdapter.getItemCount()-1),offset);
+        if(mediaZoomLabel!=null)mediaZoomLabel.setText(columns+" в ряд");
+        if(mediaZoomSeek!=null)mediaZoomSeek.setProgress(mediaColumns-2);
+    }
+    private void changeMediaColumns(int delta){
+        int next=MediaGalleryState.zoom(mediaColumns,delta);
+        if(next==mediaColumns||!"media".equals(screen))return;
+        mediaColumns=next;
+        getPreferences(MODE_PRIVATE).edit().putInt("gallery_columns",next).apply();
+        updateMediaLayout(true);
+    }
+    private void toggleMediaLayout(){
+        boolean next=!mediaGridEnabled();
+        getPreferences(MODE_PRIVATE).edit().putBoolean("gallery_grid_"+mediaKind,next).apply();
+        configureBars();
+        updateMediaLayout(true);
+    }
+    /** Fetch only the next 30 from SQLite; never reset scroll when the next page arrives. */
+    private void maybeAppendMedia(){
+        if(mediaRecycler==null||mediaLayout==null||mediaAppending
+            ||!"media".equals(screen)||home||importing||db==null
+            ||mediaLoaded>=mediaTotal||mediaAdapter.getItemCount()==0)return;
+        int last=mediaLayout.findLastVisibleItemPosition();
+        if(last<mediaAdapter.getItemCount()-10)return;
+        mediaAppending=true;
+        final MessageDb source=db;
+        final String archive=activeKey,filter=mediaKind;
+        final int token=loadToken,from=mediaLoaded;
+        worker.execute(()->{
+            List<MessageDb.Attachment> next;
+            try{next=source.mediaPage(filter,from,MediaGalleryState.PAGE_SIZE);}
+            catch(Exception error){
+                runOnUiThread(()->{
+                    if(token==loadToken&&"media".equals(screen))status.setText("Не удалось догрузить медиа. Прокрути ещё раз.");
+                    mediaAppending=false;
+                });return;
+            }
+            runOnUiThread(()->{
+                if(isFinishing()||token!=loadToken||db!=source||!archive.equals(activeKey)
+                    ||!"media".equals(screen)||!filter.equals(mediaKind)){mediaAppending=false;return;}
+                mediaAdapter.append(next);
+                mediaLoaded+=next.size();
+                if(next.isEmpty())mediaLoaded=mediaTotal;
+                mediaAppending=false;
+                status.setText("Показано "+mediaLoaded+" из "+mediaTotal+" · листай вниз");
+                if(mediaLoaded<mediaTotal)mediaRecycler.post(this::maybeAppendMedia);
+            });
+        });
+    }
+    /** Every header spans the full grid; dates group round/voice/audio galleries. */
+    private final class MediaGalleryAdapter extends androidx.recyclerview.widget.RecyclerView.Adapter<androidx.recyclerview.widget.RecyclerView.ViewHolder>{
+        private final ArrayList<Object> entries=new ArrayList<>();
+        private String lastGroup=null;
+        void reset(){entries.clear();lastGroup=null;notifyDataSetChanged();}
+        boolean isHeader(int position){return position>=0&&position<entries.size()&&entries.get(position) instanceof String;}
+        void append(List<MessageDb.Attachment> page){
+            int from=entries.size();
+            for(MessageDb.Attachment item:page){
+                boolean byDay=mediaGridEnabled()&&
+                    ("round".equals(mediaKind)||"voice".equals(mediaKind)||"audio".equals(mediaKind));
+                String group=byDay?day(item.date):MediaTimeline.month(item.date);
+                if(group==null||group.isEmpty())group="Без даты";
+                if(!group.equals(lastGroup)){
+                    entries.add(group);
+                    lastGroup=group;
+                }
+                entries.add(item);
+            }
+            if(entries.size()>from)notifyItemRangeInserted(from,entries.size()-from);
+        }
+        @Override public int getItemCount(){return entries.size();}
+        @Override public int getItemViewType(int position){return isHeader(position)?0:1;}
+        final class TileHolder extends androidx.recyclerview.widget.RecyclerView.ViewHolder {
+            final FrameLayout tile;
+            final ImageView image;
+            final TextView symbol,detail,selected;
+            TileHolder(FrameLayout frame){
+                super(frame);tile=frame;
+                image=new ImageView(MainActivity.this);image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                frame.addView(image,new FrameLayout.LayoutParams(-1,-1));
+                symbol=text("",24,FG);symbol.setGravity(Gravity.CENTER);
+                frame.addView(symbol,new FrameLayout.LayoutParams(-1,-1));
+                detail=text("",11,FG);detail.setSingleLine(true);
+                detail.setEllipsize(TextUtils.TruncateAt.END);
+                detail.setBackgroundColor(0xb600101a);
+                detail.setPadding(px(3),px(2),px(3),px(2));
+                frame.addView(detail,new FrameLayout.LayoutParams(-2,-2,Gravity.START|Gravity.BOTTOM));
+                selected=text("✓",18,FG);selected.setGravity(Gravity.CENTER);
+                selected.setBackground(shape(0xff247e8a,100));
+                frame.addView(selected,new FrameLayout.LayoutParams(px(24),px(24),Gravity.TOP|Gravity.END));
+            }
+        }
+        @Override public androidx.recyclerview.widget.RecyclerView.ViewHolder onCreateViewHolder(
+                android.view.ViewGroup parent,int type){
+            if(type==0){
+                TextView header=text("",14,FG);header.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+                header.setPadding(px(10),px(14),px(4),px(7));
+                header.setBackgroundColor(BG);
+                header.setLayoutParams(new androidx.recyclerview.widget.RecyclerView.LayoutParams(-1,-2));
+                return new androidx.recyclerview.widget.RecyclerView.ViewHolder(header){};
+            }
+            FrameLayout tile=new FrameLayout(MainActivity.this);
+            tile.setBackground(outlined(PANEL,10,false));
+            tile.setClipToOutline(true);
+            tile.setLayoutParams(new androidx.recyclerview.widget.RecyclerView.LayoutParams(-1,px(90)));
+            return new TileHolder(tile);
+        }
+        @Override public void onBindViewHolder(androidx.recyclerview.widget.RecyclerView.ViewHolder holder,int position){
+            Object entry=entries.get(position);
+            if(entry instanceof String){((TextView)holder.itemView).setText((String)entry);return;}
+            MessageDb.Attachment a=(MessageDb.Attachment)entry;
+            TileHolder h=(TileHolder)holder;
+            boolean grid=mediaGridEnabled();
+            int width=mediaRecycler.getWidth()-mediaRecycler.getPaddingLeft()-mediaRecycler.getPaddingRight();
+            if(width<=0)width=getResources().getDisplayMetrics().widthPixels-px(24);
+            int side=MediaGalleryState.tilePx(width,mediaColumns,px(2));
+            androidx.recyclerview.widget.RecyclerView.LayoutParams params=
+                new androidx.recyclerview.widget.RecyclerView.LayoutParams(-1,grid?side+px(3):px(72));
+            params.setMargins(px(2),px(2),px(2),px(2));
+            h.tile.setLayoutParams(params);
+            h.tile.setContentDescription(mediaLabel(a.kind)+" · "+day(a.date)+
+                " · нажми для открытия, удерживай для действий");
+            h.image.setImageDrawable(null);h.image.setTag(null);
+            h.image.setClipToOutline(false);
+            h.image.setVisibility(View.GONE);
+            h.symbol.setVisibility(View.GONE);
+            h.detail.setTag(null);
+            h.detail.setVisibility(View.VISIBLE);
+            h.selected.setVisibility(mediaSelection.containsKey(a.id)?View.VISIBLE:View.GONE);
+            if(grid){
+                h.image.setLayoutParams(new FrameLayout.LayoutParams(-1,-1));
+                h.symbol.setLayoutParams(new FrameLayout.LayoutParams(-1,-1));
+                h.detail.setLayoutParams(new FrameLayout.LayoutParams(-2,-2,Gravity.START|Gravity.BOTTOM));
+                h.detail.setTextSize(mediaColumns>=7?8:11);
+            }else{
+                h.image.setLayoutParams(new FrameLayout.LayoutParams(px(70),-1,Gravity.START));
+                h.symbol.setLayoutParams(new FrameLayout.LayoutParams(px(70),-1,Gravity.START));
+                FrameLayout.LayoutParams detailParams=new FrameLayout.LayoutParams(-1,-2,Gravity.CENTER_VERTICAL);
+                detailParams.leftMargin=px(80);h.detail.setLayoutParams(detailParams);
+                h.detail.setTextSize(13);
+            }
+            boolean picture="image".equals(a.kind)||"video".equals(a.kind)
+                ||"gif".equals(a.kind)||"sticker".equals(a.kind)||"round".equals(a.kind);
+            if(picture){
+                h.image.setVisibility(View.VISIBLE);
+                if("round".equals(a.kind)){
+                    h.image.setOutlineProvider(new ViewOutlineProvider(){
+                        @Override public void getOutline(View v,Outline o){
+                            o.setOval(0,0,v.getWidth(),v.getHeight());
+                        }
+                    });
+                    h.image.setClipToOutline(true);
+                }
+                if("sticker".equals(a.kind)&&isTgsPath(a.path)){
+                    h.symbol.setVisibility(View.VISIBLE);h.symbol.setText("◌");
+                    loadTgsPreview(a.path,h.tile);
+                }else loadThumbnail(a.path,"round".equals(a.kind)?"round":
+                    isVideoStickerPath(a.path)?"video":a.kind,h.image);
+            }else{
+                h.symbol.setVisibility(View.VISIBLE);
+                h.symbol.setText("voice".equals(a.kind)?"▂▆▃▇": "audio".equals(a.kind)?"♫":"▤");
+                h.symbol.setTextSize(grid?Math.max(14,Math.min(29,side/4)):24);
+            }
+            boolean video="video".equals(a.kind)||"round".equals(a.kind);
+            if(video){
+                h.detail.setText("▶");
+                if(!grid||side>=px(70))loadDuration(a.path,h.detail,"▶ ");
+            }else if(grid)h.detail.setText("voice".equals(a.kind)?"Голос":"audio".equals(a.kind)?"Музыка":
+                "gif".equals(a.kind)?"GIF":"sticker".equals(a.kind)?"Стикер":"");
+            else h.detail.setText(mediaLabel(a.kind)+" · "+day(a.date)+" · "+clip(filename(a.path),24));
+            if(grid&&("image".equals(a.kind)))h.detail.setVisibility(View.GONE);
+            h.tile.setOnClickListener(v->{
+                if(multiSelectMedia){
+                    toggleMediaSelection(a);
+                    h.selected.setVisibility(mediaSelection.containsKey(a.id)?View.VISIBLE:View.GONE);
+                }else openMedia(a);
+            });
+            h.tile.setOnLongClickListener(v->{
+                if(multiSelectMedia)toggleMediaSelection(a);else mediaActions(a);
+                return true;
+            });
+        }
+    }
     private void renderEmptyMediaState(){
         // A real empty state instead of a disabled pager and vague status message.
         LinearLayout empty=column();empty.setGravity(Gravity.CENTER);
