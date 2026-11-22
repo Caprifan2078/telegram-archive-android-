@@ -997,7 +997,7 @@ public class MainActivity extends Activity {
         int width=Math.min(px(348),getResources().getDisplayMetrics().widthPixels-px(38));
         FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(width,-1,Gravity.START);
         overlay.addView(pane,lp);
-        TextView app=text("Telegram Archive",18,FG);
+        TextView app=text("TELEGRAM ARCHIVE",16,FG);
         app.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
         app.setPadding(px(5),px(3),0,px(2));pane.addView(app);
         TextView desc=text("Чаты, файлы и настройки",12,SUB);
