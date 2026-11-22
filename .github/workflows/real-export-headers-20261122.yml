@@ -4,6 +4,7 @@ on:
     branches: [qa/real-export-7z-directory-zip-diagnostics-20261122]
     paths:
       - 'app/src/main/java/org/openarchive/telegram/ArchiveFileImport.java'
+      - 'app/build.gradle'
       - 'app/src/androidTest/java/org/openarchive/telegram/RealTelegramExportStructureRegressionTest.java'
       - '.github/workflows/real-export-headers-20261122.yml'
   workflow_dispatch:
@@ -27,16 +28,16 @@ jobs:
       - name: Android SDK
         run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
       - name: Assemble QA and tests
-        run: gradle --no-daemon --max-workers=2 assembleGalleryQa assembleGalleryQaAndroidTest testGalleryQaUnitTest -PqaGalleryInstrumentation=true
+        run: gradle --no-daemon --max-workers=2 assembleRealExportQa assembleRealExportQaAndroidTest testRealExportQaUnitTest -PqaRealExportInstrumentation=true
       - name: Verify isolated APK
         shell: bash
         run: |
           set -euo pipefail
-          apk=app/build/outputs/apk/galleryQa/app-galleryQa.apk
+          apk=app/build/outputs/apk/realExportQa/app-realExportQa.apk
           tools="$ANDROID_HOME/build-tools/35.0.0"
           test -s "$apk"
           "$tools/apksigner" verify --verbose "$apk"
-          "$tools/aapt" dump badging "$apk" | grep -q "package: name='org.openarchive.telegram.qa.gallery20261122'"
+          "$tools/aapt" dump badging "$apk" | grep -q "package: name='org.openarchive.telegram.qa.realexport20261122'"
           mkdir -p deliver
           cp "$apk" deliver/Telegram_Archive_Viewer_0.51_RealExport_7z_Zip_Fix_QA.apk
           (cd deliver && sha256sum *.apk > SHA256SUMS.txt)
@@ -56,7 +57,7 @@ jobs:
           emulator-boot-timeout: 420
           script: |
             adb install deliver/Telegram_Archive_Viewer_0.51_RealExport_7z_Zip_Fix_QA.apk
-            gradle --no-daemon --max-workers=2 connectedGalleryQaAndroidTest -PqaGalleryInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.RealTelegramExportStructureRegressionTest,org.openarchive.telegram.ArchivePasswordOnDemandRegressionTest,org.openarchive.telegram.SevenZTelegramImportRegressionTest,org.openarchive.telegram.EncryptedTelegramImportRegressionTest,org.openarchive.telegram.RarCompatibilityRegressionTest,org.openarchive.telegram.MediaInfiniteGalleryRegressionTest'
+            gradle --no-daemon --max-workers=2 connectedRealExportQaAndroidTest -PqaRealExportInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.RealTelegramExportStructureRegressionTest,org.openarchive.telegram.ArchivePasswordOnDemandRegressionTest,org.openarchive.telegram.SevenZTelegramImportRegressionTest,org.openarchive.telegram.EncryptedTelegramImportRegressionTest,org.openarchive.telegram.RarCompatibilityRegressionTest,org.openarchive.telegram.MediaInfiniteGalleryRegressionTest'
       - name: Test reports
         if: always()
         uses: actions/upload-artifact@v4
