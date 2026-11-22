@@ -1,0 +1,92 @@
+name: QA 2026-11-22 — infinite gallery pinch and import progress
+on:
+  push:
+    branches: [qa/infinite-gallery-pinch-import-progress-20261122]
+    paths:
+      - 'app/src/main/java/org/openarchive/telegram/MainActivity.java'
+      - 'app/src/main/java/org/openarchive/telegram/MessageDb.java'
+      - 'app/src/main/java/org/openarchive/telegram/MediaGalleryState.java'
+      - 'app/src/main/java/org/openarchive/telegram/MediaZoomRecyclerView.java'
+      - 'app/src/test/java/org/openarchive/telegram/MediaGalleryStateTest.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/MediaInfiniteGalleryRegressionTest.java'
+      - 'app/build.gradle'
+      - '.github/workflows/infinite-gallery-20261122.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  gallery-android11:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: Compile, run JVM tests and assemble QA APK
+        run: |
+          gradle --no-daemon --max-workers=2 assembleGalleryQa assembleGalleryQaAndroidTest testGalleryQaUnitTest -PqaGalleryInstrumentation=true
+      - name: Verify signed APK and package separation
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/galleryQa/app-galleryQa.apk
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          test -s "$apk"
+          "$tools/apksigner" verify --verbose "$apk"
+          "$tools/aapt" dump badging "$apk" | grep -q "package: name='org.openarchive.telegram.qa.gallery20261122'"
+          if "$tools/aapt" dump permissions "$apk" | grep -q 'android.permission.INTERNET'; then
+            echo "Unexpected INTERNET permission"; exit 1
+          fi
+          mkdir -p deliver
+          cp "$apk" deliver/Telegram_Archive_Viewer_0.51_Infinite_Gallery_QA_2026-11-22.apk
+          (cd deliver && sha256sum *.apk > SHA256SUMS.txt)
+      - name: Enable emulator KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Android 11 — gallery, archive imports and navigation
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: |
+            adb install deliver/Telegram_Archive_Viewer_0.51_Infinite_Gallery_QA_2026-11-22.apk
+            gradle --no-daemon --max-workers=2 connectedGalleryQaAndroidTest -PqaGalleryInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.MediaInfiniteGalleryRegressionTest,org.openarchive.telegram.ArchivePasswordOnDemandRegressionTest,org.openarchive.telegram.ArchivePasswordUiRegressionTest,org.openarchive.telegram.SevenZTelegramImportRegressionTest,org.openarchive.telegram.EncryptedTelegramImportRegressionTest,org.openarchive.telegram.RarCompatibilityRegressionTest,org.openarchive.telegram.QaUiChatNavigationRegressionTest,org.openarchive.telegram.Qa00NavigationCoreTest,org.openarchive.telegram.UiSmokeTest'
+            gradle --no-daemon --max-workers=2 connectedGalleryQaAndroidTest -PqaGalleryInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.QaVisualAuditScreenshotsTest'
+            mkdir -p visual-audit
+            adb pull /sdcard/Pictures/TelegramViewerVisualAudit/. visual-audit/
+            test "$(find visual-audit -name '*.png' | wc -l)" -eq 11
+      - name: Upload screenshots and test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TelegramViewer-InfiniteGallery-Android11-Visual-QA
+          retention-days: 7
+          path: |
+            visual-audit/*.png
+            app/build/outputs/androidTest-results/
+            app/build/reports/androidTests/
+      - name: Upload verified QA APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TelegramViewer-InfiniteGallery-0.51-QA-2026-11-22
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            deliver/*.apk
+            deliver/SHA256SUMS.txt
