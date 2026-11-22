@@ -2559,23 +2559,34 @@ public class MainActivity extends Activity {
             showReadOnlyPreview(selected,name);return;
         }
         if(request==57&&result==RESULT_OK&&data!=null&&data.getData()!=null){
-            Uri source=data.getData();String name="Telegram.zip";
+            Uri source=data.getData();String name="Выбранный файл";
             try(android.database.Cursor c=getContentResolver().query(source,new String[]{android.provider.OpenableColumns.DISPLAY_NAME},null,null,null)){
                 if(c!=null&&c.moveToFirst())name=c.getString(0);
             }catch(Exception ignored){}
             String low=name==null?"":name.toLowerCase(Locale.ROOT);
-            String ext=low.endsWith(".rar")||low.endsWith(".rar5")?"rar":low.endsWith(".zip")?"zip":
-                low.endsWith(".7z")?"7z":low.endsWith(".html")||low.endsWith(".htm")?"html":"";
-            if(ext.isEmpty()){toast("Выбери HTML, ZIP, 7z, RAR или папку экспорта");return;}
             final String displayName=name;
-            if("html".equals(ext)){
+            if(low.endsWith(".html")||low.endsWith(".htm")){
                 new FontDialog.Builder(this).setTitle("Импорт HTML Telegram")
-                    .setMessage("Сообщения откроются в обычном чате. Для фото, голосовых и видео нужен полный экспорт: выбери папку Telegram или архив с медиа.")
+                    .setMessage("Сообщения откроются как обычная переписка. Для медиа выбери полный экспорт Telegram.")
                     .setNegativeButton("Отмена",null)
                     .setPositiveButton("Импортировать",(d,w)->importSingleHtml(source,displayName)).show();
                 return;
             }
-            confirmArchiveImport(source,ext,displayName);
+            // Android file managers may call a 7z archive .zip (or omit extension).
+            // Read only the magic bytes off the UI thread, then import without
+            // ever showing a password prompt for unencrypted archives.
+            status.setVisibility(View.VISIBLE);status.setText("Проверяю архив…");
+            worker.execute(()->{
+                try{
+                    String format=ArchiveFileImport.detectFormat(this,source,displayName);
+                    runOnUiThread(()->importCompressed(source,format,displayName,null));
+                }catch(Exception error){
+                    runOnUiThread(()->new FontDialog.Builder(this)
+                        .setTitle("Этот файл не является поддерживаемым архивом")
+                        .setMessage(error.getMessage()==null?"Выбери ZIP, 7z или RAR":error.getMessage())
+                        .setPositiveButton("Закрыть",null).show());
+                }
+            });
             return;
         }
         if(request!=PICK_FOLDER||result!=RESULT_OK||data==null||data.getData()==null)return;
@@ -2645,22 +2656,25 @@ public class MainActivity extends Activity {
         });
     }
 
+    /** Only invoked AFTER the extractor confirms that a password is required. */
     private void confirmArchiveImport(Uri source,String ext,String displayName){
         EditText archivePassword=new EditText(this);
         archivePassword.setSingleLine(true);
-        archivePassword.setHint("Пароль, если архив защищён");
+        archivePassword.setHint("Пароль от архива");
         archivePassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT|
             android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
         archivePassword.setTextColor(FG);
         archivePassword.setHintTextColor(SUB);
         archivePassword.setPadding(px(18),px(10),px(18),px(10));
-        new FontDialog.Builder(this).setTitle("Импорт "+displayName)
-            .setMessage("ZIP, 7z и RAR с паролем поддерживаются. Если пароля нет, оставь поле пустым.")
+        new FontDialog.Builder(this).setTitle("Этот архив защищён паролем")
+            .setMessage("Введи пароль для открытия "+displayName+". Пароль не сохраняется.")
             .setView(archivePassword).setNegativeButton("Отмена",null)
-            .setPositiveButton("Импортировать",(d,w)->{
-                String typed=archivePassword.getText().toString();
-                char[] password=typed.isEmpty()?null:typed.toCharArray();
+            .setPositiveButton("Открыть",(d,w)->{
+                char[] password=archivePassword.getText().toString().toCharArray();
                 archivePassword.setText("");
+                if(password.length==0){
+                    toast("Пароль не указан");return;
+                }
                 importCompressed(source,ext,displayName,password);
             }).show();
     }
@@ -2687,14 +2701,26 @@ public class MainActivity extends Activity {
                 ArchiveFileImport.deleteTree(new java.io.File(new java.io.File(getFilesDir(),"telegram_imports"),key));
                 deleteDatabase("telegram_"+key+".db");
                 String message=error.getMessage()==null?"Файл не удалось распаковать":error.getMessage();
+                boolean auth=ArchiveFileImport.isPasswordFailure(error);
+                boolean missing=password==null||password.length==0;
                 runOnUiThread(()->{
                     importing=false;folderButton.setEnabled(true);
                     status.setVisibility(View.VISIBLE);
                     status.setText("Импорт не завершён");
+                    if(auth){
+                        // Show a password entry only after the extractor has seen
+                        // an encrypted entry/header, or rejected an entered key.
+                        if(missing){confirmArchiveImport(source,extension,label);return;}
+                        new FontDialog.Builder(this).setTitle("Пароль не подошёл")
+                            .setMessage("Архив не открылся с этим паролем. Проверь раскладку, регистр и символы. Исходный файл не изменён.")
+                            .setNegativeButton("Закрыть",null)
+                            .setPositiveButton("Другой пароль",(d,w)->confirmArchiveImport(source,extension,label)).show();
+                        return;
+                    }
                     new FontDialog.Builder(this).setTitle("Не удалось импортировать архив")
-                        .setMessage(message+"\nИсходный файл не изменён. Если это RAR с паролем, проверь пароль и повтори.")
+                        .setMessage(message+"\nИсходный файл не изменён. Проверь, что внутри есть экспорт Telegram в HTML.")
                         .setNegativeButton("Закрыть",null)
-                        .setPositiveButton("Повторить",(d,w)->confirmArchiveImport(source,extension,label))
+                        .setPositiveButton("Повторить",(d,w)->importCompressed(source,extension,label,null))
                         .show();
                 });
             }finally{if(password!=null)java.util.Arrays.fill(password,'\0');}
