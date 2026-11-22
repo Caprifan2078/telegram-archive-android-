@@ -60,7 +60,10 @@ public final class AnalyticsSectionNavigationRegressionTest {
                 assertTrue("Tab must be clickable: "+label,chip.isClickable());
                 chip.performClick();
                 assertEquals(expectedSection,field(a,"analyticsSection"));
-                assertTrue("Selected section visible",((View)chip.getParent()).isShown());
+                View active=find(a.getWindow().getDecorView(),"Раздел анализа: "+label,true);
+                assertNotNull("Current tab must remain after render",active);
+                assertTrue("Chosen section should be selected",active.isSelected());
+                assertTrue("Chosen tab must stay visible",active.isShown());
             }catch(Exception e){throw new AssertionError(e);}
         });
         instrument.waitForIdleSync();
