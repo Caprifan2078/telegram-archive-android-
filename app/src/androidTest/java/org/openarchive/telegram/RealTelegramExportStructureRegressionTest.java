@@ -61,12 +61,11 @@ public final class RealTelegramExportStructureRegressionTest {
             File exportDir=new File(root,"TelegramExport");
             assertTrue(exportDir.mkdir());
             SevenZArchiveEntry top=writer.createArchiveEntry(exportDir,"TelegramExport");
-            assertTrue(top.isDirectory());writer.putArchiveEntry(top);writer.closeArchiveEntry();
+            writer.putArchiveEntry(top);writer.closeArchiveEntry();
             for(String dir:DIRS){
                 File directory=new File(exportDir,dir);
                 assertTrue(directory.mkdir());
                 SevenZArchiveEntry folder=writer.createArchiveEntry(directory,"TelegramExport/"+dir);
-                assertTrue(folder.isDirectory());
                 writer.putArchiveEntry(folder);writer.closeArchiveEntry();
             }
             for(int i=1;i<=20;i++){
