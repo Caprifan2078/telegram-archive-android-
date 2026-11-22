@@ -232,7 +232,12 @@ final class ArchiveFileImport {
             byte[] bytes=new byte[128*1024];
             while((entry=archive.getNextEntry())!=null){
                 String name=entry.getName();budget.next(name==null?"":name);
-                BackupEntryPolicy.requireSafe(name,entry.isDirectory());
+                // Unlike ZIP, 7z stores real directory entries without a trailing
+                // slash (e.g. "round_video_messages"). Validate them as directories
+                // while preserving traversal, absolute-path and link protection.
+                String safeName=entry.isDirectory()&&name!=null&&!name.endsWith("/")
+                    ?name+"/":name;
+                BackupEntryPolicy.requireSafe(safeName,entry.isDirectory());
                 if(entry.isDirectory())continue;
                 if(entry.getSize()>MAX_ENTRY)throw new IOException("7z содержит слишком большой файл");
                 File target=safeFile(root,name);
