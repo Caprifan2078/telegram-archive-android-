@@ -2281,11 +2281,52 @@ public class MainActivity extends Activity {
             }
             filterBar.addView(hsv,p(-1,44));
             if("favorites".equals(screen))return;
-            LinearLayout mediaTools=row();
-            Button selection=btn(multiSelectMedia?"☑ Выбрано "+mediaSelection.size():"☐ Выбрать несколько");
-            mediaTools.addView(selection,new LinearLayout.LayoutParams(0,px(42),1));
-            selection.setOnClickListener(v->{
-                if(multiSelectMedia){clearMediaSelection();}else{multiSelectMedia=true;selectedMediaArchive=activeKey;}
+            // One compact media toolbar; advanced actions live in its overflow menu.
+            LinearLayout mediaTools=row();mediaTools.setGravity(Gravity.CENTER_VERTICAL);
+            Button layoutMode=btn(mediaGridEnabled()?"☷  Список":"▦  Сетка");
+            mediaTools.addView(layoutMode,p(92,42));
+            layoutMode.setContentDescription(mediaGridEnabled()?
+                "Перейти к списку медиа":"Перейти к масштабируемой галерее");
+            layoutMode.setOnClickListener(v->toggleMediaLayout());
+            mediaZoomSeek=null;mediaZoomLabel=null;
+            if(mediaGridEnabled()&&MediaGalleryState.supportsGrid(mediaKind)){
+                TextView small=text("2",11,SUB);small.setGravity(Gravity.CENTER);
+                mediaTools.addView(small,p(14,42));
+                mediaZoomSeek=new android.widget.SeekBar(this);
+                mediaZoomSeek.setMax(7);mediaZoomSeek.setProgress(mediaColumns-2);
+                mediaZoomSeek.setContentDescription("Размер сетки: от двух до девяти элементов в ряд");
+                mediaTools.addView(mediaZoomSeek,new LinearLayout.LayoutParams(0,42,1));
+                TextView big=text("9",11,SUB);big.setGravity(Gravity.CENTER);
+                mediaTools.addView(big,p(14,42));
+                mediaZoomLabel=text(mediaColumns+" в ряд",11,ACCENT);
+                mediaZoomLabel.setGravity(Gravity.CENTER);
+                mediaTools.addView(mediaZoomLabel,p(61,42));
+                mediaZoomSeek.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener(){
+                    @Override public void onProgressChanged(android.widget.SeekBar seek,int value,boolean fromUser){
+                        if(fromUser)changeMediaColumns(value+2-mediaColumns);
+                    }
+                    @Override public void onStartTrackingTouch(android.widget.SeekBar seek){}
+                    @Override public void onStopTrackingTouch(android.widget.SeekBar seek){}
+                });
+            }else{
+                TextView hint=text("Нажми на файл или удерживай для действий",11,SUB);
+                hint.setSingleLine(true);hint.setEllipsize(TextUtils.TruncateAt.END);
+                mediaTools.addView(hint,new LinearLayout.LayoutParams(0,42,1));
+            }
+            Button more=btn("⋯");more.setContentDescription("Выбор, коллекции и поиск повторов");
+            mediaTools.addView(more,p(46,42));
+            more.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Действия с медиа")
+                .setItems(new String[]{multiSelectMedia?"Снять выделение":"Выбрать несколько",
+                    "Мои коллекции","Найти одинаковые файлы"},(d,index)->{
+                    if(index==0){
+                        if(multiSelectMedia)clearMediaSelection();
+                        else{multiSelectMedia=true;selectedMediaArchive=activeKey;}
+                        showPage();
+                    }else if(index==1)showCollectionPicker();
+                    else inspectDuplicateMedia();
+                }).setNegativeButton("Закрыть",null).show());
+            filterBar.addView(mediaTools,p(-1,46));
+            if(multiSelectMedia){clearMediaSelection();}else{multiSelectMedia=true;selectedMediaArchive=activeKey;}
                 showPage();
             });
             Button collections=btn("Коллекции");mediaTools.addView(collections,new LinearLayout.LayoutParams(0,px(42),1));
