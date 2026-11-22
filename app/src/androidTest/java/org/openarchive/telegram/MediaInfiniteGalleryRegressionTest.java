@@ -69,7 +69,7 @@ public final class MediaInfiniteGalleryRegressionTest {
             assertEquals(View.GONE,((View)field(activity,"bottomPager")).getVisibility());
             onUi(activity,()->gallery.scrollToPosition(29));
             waitFor(activity,"mediaLoaded",60);
-            onUi(activity,()->gallery.scrollToPosition(65));
+            onUi(activity,()->gallery.scrollToPosition(59));
             waitFor(activity,"mediaLoaded",90);
             onUi(activity,()->{
                 try{invoke(activity,"changeMediaColumns",new Class<?>[]{int.class},6);}
