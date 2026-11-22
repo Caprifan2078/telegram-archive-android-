@@ -122,6 +122,11 @@ public final class AnalyticsSectionNavigationRegressionTest {
                 assertNotNull(has(a,"Кто сколько написал"));
                 assertNotNull(has(a,"Интервал между сообщениями участников"));
                 assertNull(has(a,"Самые частые слова"));
+                View details=has(a,"Подробности  ▾");
+                assertNotNull("Participant breakdown must remain available on tap",details);
+                details.performClick();
+                assertNotNull("Expanded participant must show media breakdown",
+                    has(a,"Вложений пока нет"));
             });
             navigate(a,"Медиа и слова","content");
             instrument.runOnMainSync(()->{
