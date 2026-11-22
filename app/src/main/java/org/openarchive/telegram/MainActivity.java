@@ -2212,6 +2212,8 @@ public class MainActivity extends Activity {
         FrameLayout scrollHost=new FrameLayout(this);
         base.addView(scrollHost,new LinearLayout.LayoutParams(-1,0,1));
         scrollHost.addView(scroll,new FrameLayout.LayoutParams(-1,-1));
+        mediaColumns=MediaGalleryState.clampColumns(
+            getPreferences(MODE_PRIVATE).getInt("gallery_columns",3));
         mediaRecycler=new MediaZoomRecyclerView(this);
         mediaRecycler.setVisibility(View.GONE);
         mediaRecycler.setClipToPadding(false);
@@ -2862,8 +2864,9 @@ public class MainActivity extends Activity {
                 }
                 boolean gallery="media".equals(tab),find="search".equals(tab),favs="favorites".equals(tab);
                 int count=gallery?db.mediaCount(kind):db.count(find?search:"",find&&deepMode,find&&deepMode?who:"",find&&deepMode&&hasMedia,favs);
-                int pos=count==0?0:Math.min(requested,Math.max(0,count-1));
-                List<MessageDb.Attachment> attachments=gallery?db.mediaPage(kind,pos,MEDIA_PAGE):null;
+                int pos=gallery?0:(count==0?0:Math.min(requested,Math.max(0,count-1)));
+                List<MessageDb.Attachment> attachments=gallery?
+                    db.mediaPage(kind,0,MediaGalleryState.PAGE_SIZE):null;
                 List<MessageDb.Item> messages=gallery?null:db.page(pos,tab.equals("chat")?Math.max(PAGE,autoLoaded):tab.equals("search")?Math.max(PAGE,searchLoaded):PAGE,find?search:"",find&&deepMode,find&&deepMode?who:"",find&&deepMode&&hasMedia,favs);
                 Map<Long,List<MessageDb.Attachment>> links=messages==null?new HashMap<>():db.attachmentsForMessages(messages);
                 Map<Long,MessageDb.ReplyInfo> replies=messages==null?new HashMap<>():db.replyPreviews(messages);
@@ -2876,8 +2879,26 @@ public class MainActivity extends Activity {
                         list.setBackground(custom!=null?custom:new ChatWallpaper(wallpaperIndex,wallpaperOpacity/100f,themeIndex==2));
                     }
                     else list.setBackgroundColor(BG);
-                    if(gallery){renderMedia(attachments);scheduleMediaPrefetch(token,kind,pos+attachments.size(),count);}
-                    else {lastLoadedMessageId=messages.isEmpty()?-1:messages.get(messages.size()-1).id;renderMessages(messages,links,replies,find,false);}
+                    if(gallery){
+                        mediaLoaded=attachments.size();mediaTotal=count;mediaAppending=false;
+                        mediaAdapter.reset();mediaAdapter.append(attachments);
+                        updateMediaLayout(false);
+                        if(count==0){
+                            mediaRecycler.setVisibility(View.GONE);
+                            scroll.setVisibility(View.VISIBLE);
+                            renderEmptyMediaState();
+                        }else{
+                            scroll.setVisibility(View.GONE);
+                            mediaRecycler.setVisibility(View.VISIBLE);
+                            mediaRecycler.post(this::maybeAppendMedia);
+                        }
+                        scheduleMediaPrefetch(token,kind,mediaLoaded,count);
+                    }else {
+                        scroll.setVisibility(View.VISIBLE);
+                        mediaRecycler.setVisibility(View.GONE);
+                        lastLoadedMessageId=messages.isEmpty()?-1:messages.get(messages.size()-1).id;
+                        renderMessages(messages,links,replies,find,false);
+                    }
                     animateEntrance();
                     if("search".equals(tab)&&pendingSearchScroll>=0){
                         final int restoreY=pendingSearchScroll;pendingSearchScroll=-1;
@@ -2892,23 +2913,22 @@ public class MainActivity extends Activity {
                     }
                     // A pager with no items (or just one page) is dead UI.
                     // Keep it for galleries/favorites only when multiple pages exist.
-                    bottomPager.setVisibility((gallery||favs)&&count>getLimit()?View.VISIBLE:View.GONE);
+                    bottomPager.setVisibility(favs&&count>getLimit()?View.VISIBLE:View.GONE);
                     int shown=gallery?attachments.size():messages.size();
                     verticalTimeline.setVisibility("chat".equals(tab)?View.VISIBLE:View.GONE);
                     if("chat".equals(tab))verticalTimeline.setPosition(pos,count);
                     pageLabel.setText(count==0?"Нет данных":(pos+1)+"–"+(pos+shown)+" / "+count);
                     backPage.setEnabled(pos>0);nextPage.setEnabled(pos+shown<count);
-                    if(gallery){
-                        if(filterBar.getChildCount()>1)filterBar.getChildAt(1).setVisibility(count==0?View.GONE:View.VISIBLE);
-                        if(count==0)renderEmptyMediaState();
-                    }
+                    if(gallery&&filterBar.getChildCount()>1)
+                        filterBar.getChildAt(1).setVisibility(count==0?View.GONE:View.VISIBLE);
                     if(count>0&&"chat".equals(tab)){
                         status.setText("");status.setVisibility(View.GONE);
                     }else status.setVisibility(View.VISIBLE);
                     if(count==0)status.setText(gallery?"":
                             "chat".equals(tab)?"В этой переписке пока нет сообщений.":
                             "Ничего не найдено — попробуй другой запрос или выбери папку.");
-                    else if(!"chat".equals(tab))status.setText("media".equals(tab)?"Нажми на файл, чтобы открыть":
+                    else if(!"chat".equals(tab))status.setText("media".equals(tab)?
+                            "Показано "+mediaLoaded+" из "+count+" · листай вниз":
                             "search".equals(tab)?(search.isEmpty()?"Введите слово или фразу":("Сообщений: "+count+"  ·  Точных вхождений «"+clip(search,28)+"»: "+stats.literalOccurrences+(deepMode?"":"  ·  Быстрый поиск учитывает начала слов"))):
                             "favorites".equals(tab)?"Твои избранные сообщения": "История · удерживай сообщение для действий");
                 });
@@ -5135,6 +5155,8 @@ public class MainActivity extends Activity {
             List<MessageDb.Attachment> media=db.collectionMedia(collection.id,200);
             runOnUiThread(()->{
                 if(!archive.equals(activeKey)||isFinishing())return;
+                mediaRecycler.setVisibility(View.GONE);
+                scroll.setVisibility(View.VISIBLE);
                 list.removeAllViews();list.setBackgroundColor(BG);
                 TextView header=text("← Назад в медиатеку · "+collection.name,17,FG);
                 header.setPadding(px(12),px(15),px(12),px(15));list.addView(header);
