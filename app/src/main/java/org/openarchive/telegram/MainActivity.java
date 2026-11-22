@@ -2036,7 +2036,8 @@ public class MainActivity extends Activity {
             final int index=i;
             LinearLayout item=row();item.setPadding(px(12),px(6),px(8),px(6));
             item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2e5aaad8),outlined(PANEL,14,false),null));
-            ImageView symbol=new ImageView(this);symbol.setImageResource(drawerIconFor(labels[i]));symbol.setColorFilter(ACCENT);
+            ImageView symbol=new ImageView(this);
+            symbol.setImageDrawable(new MenuOutlineIcon(labels[i],ACCENT));
             LinearLayout.LayoutParams iconSize=p(22,22);iconSize.rightMargin=px(13);item.addView(symbol,iconSize);
             TextView label=text(labels[i],15,FG);item.addView(label,new LinearLayout.LayoutParams(0,-2,1));
             LinearLayout.LayoutParams itemSize=p(-1,43);itemSize.bottomMargin=px(3);content.addView(item,itemSize);
