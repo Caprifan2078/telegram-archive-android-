@@ -93,6 +93,8 @@ import java.util.concurrent.Executors;
 /** Offline Telegram-style archive. No INTERNET permission, no uploads or telemetry. */
 public class MainActivity extends Activity {
     private int relationshipPageIndex=0;
+    private boolean historyEventsExpanded=false;
+    private String chronologySection="overview";
     // Read-only side-by-side workspaces. The first archive is always the active chat.
     private String dualSecondKey="",dualSecondName="";
     private int dualYear=LocalDate.now().getYear(),dualMonth=0;
@@ -3825,13 +3827,23 @@ public class MainActivity extends Activity {
     private void renderRelationshipsPage(){
         int token=++loadToken;
         if(home){screen="chat";showPage();return;}
-        prepareRelationshipScreen("Хронология","Важные события и периоды из твоих сообщений.");
-        Button stages=btn("Мои периоды истории");list.addView(stages,p(-1,52));
-        stages.setOnClickListener(v->{screen="chronology";showPage();});
-        Button backToChat=btn("+ Отметить событие в переписке");list.addView(backToChat,p(-1,52));
+        prepareRelationshipScreen("Хронология","События, периоды и воспоминания — по разделам.");
+        analyticsText(list,"Выбери раздел. Подробные списки не занимают весь экран сразу.",SUB,12);
+        Button events=btn(historyEventsExpanded?"01 · События переписки  ▴":"01 · События переписки  ▾");
+        list.addView(events,p(-1,52));
+        events.setContentDescription("Раскрыть или свернуть ленту событий");
+        events.setOnClickListener(v->{
+            historyEventsExpanded=!historyEventsExpanded;
+            renderRelationshipsPage();
+        });
+        Button stages=btn("02 · Мои периоды истории  ›");list.addView(stages,p(-1,52));
+        stages.setOnClickListener(v->{chronologySection="overview";screen="chronology";showPage();});
+        Button cinemaShortcut=btn("03 · Кинолента медиа по годам  ›");list.addView(cinemaShortcut,p(-1,52));
+        cinemaShortcut.setOnClickListener(v->{screen="cinema";showPage();});
+        Button backToChat=btn("+ Отметить событие в переписке");list.addView(backToChat,p(-1,46));
         backToChat.setOnClickListener(v->{screen="chat";showPage();
             toast("Удерживай важное сообщение и выбери «Добавить событие истории»");});
-        analyticsText(list,"Отметки личные: исходная переписка не меняется.",SUB,12);
+        analyticsText(list,"Все отметки личные: оригинальные сообщения и файлы не изменяются.",SUB,12);
         Button more=btn("Другие инструменты истории  ▾");list.addView(more,p(-1,46));
         LinearLayout advanced=column();advanced.setVisibility(View.GONE);list.addView(advanced,p(-1,-2));
         more.setOnClickListener(v->{
@@ -3847,11 +3859,13 @@ public class MainActivity extends Activity {
         sharedMemories.setOnClickListener(v->chooseDualChat("dual_memories"));
         Button comparison=btn("Календари двух переписок");advanced.addView(comparison,p(-1,48));
         comparison.setOnClickListener(v->chooseParallelCalendar());
-        Button cinema=btn("Кинолента медиа по годам");advanced.addView(cinema,p(-1,48));
-        cinema.setOnClickListener(v->{screen="cinema";showPage();});
         Button health=btn("Проверить сохранность медиа");advanced.addView(health,p(-1,48));
         health.setOnClickListener(v->showMediaHealth());
         LinearLayout eventsHolder=column();list.addView(eventsHolder,p(-1,-2));
+        if(!historyEventsExpanded){
+            status.setText("");status.setVisibility(View.GONE);
+            return;
+        }
         final MessageDb source=db;final String key=activeKey;
         worker.execute(()->{
             try{
