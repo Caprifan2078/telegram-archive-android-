@@ -185,6 +185,22 @@ public final class QaVisualAuditScreenshotsTest {
                 catch(Exception e){throw new AssertionError(e);}
             });
             shot(a,"11-analytics");
+            // Tap the actual accessible section chips; don't fake the panel by calling render methods.
+            String[][] walkthrough={
+                {"Графики","12-analytics-graphs"},
+                {"Ритм","13-analytics-rhythm"},
+                {"Участники","14-analytics-people"},
+                {"Медиа и слова","15-analytics-content"},
+                {"Обзор","16-analytics-overview-return"}
+            };
+            for(String[] step:walkthrough){
+                androidx.test.uiautomator.UiObject2 chip=device.wait(
+                    androidx.test.uiautomator.Until.findObject(
+                        androidx.test.uiautomator.By.desc("Раздел анализа: "+step[0])),5000);
+                assertNotNull("Analytics tab disappeared: "+step[0],chip);
+                chip.click();
+                shot(a,step[1]);
+            }
             // MediaStore screenshots stay available to CI after app uninstall.
         }finally{
             idle(a);
