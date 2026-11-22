@@ -52,6 +52,22 @@ public final class ChatVisualConsistencyRegressionTest {
         inst.waitForIdleSync();
     }
 
+    @Test public void chatMenuOutlineIconsMatchTheirActions()throws Exception{
+        java.lang.reflect.Field f=MenuOutlineIcon.class.getDeclaredField("type");
+        f.setAccessible(true);
+        Object[][] expected={
+            {"Найти сообщение",6},
+            {"Перейти к дате",11},
+            {"Анализ диалога",12},
+            {"Хронология",9},
+            {"Управление чатом",7},
+            {"Все инструменты",13}
+        };
+        for(Object[] pair:expected){
+            MenuOutlineIcon icon=new MenuOutlineIcon((String)pair[0],0xff77c8ee);
+            assertEquals("Wrong semantic outline for "+pair[0],(int)pair[1],f.getInt(icon));
+        }
+    }
     @Test public void shortChatHasReadableDatesMinimalHeaderAndNoScrubber()throws Exception{
         MainActivity activity=rule.getActivity();
         String key="visual_chat_"+UUID.randomUUID().toString().replace("-","");
