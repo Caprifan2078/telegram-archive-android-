@@ -118,7 +118,15 @@ android {
             signingConfig signingConfigs.debug
         }
     }
-    testBuildType (project.findProperty('qaRealExportInstrumentation') == 'true' ? 'realExportQa' : (project.findProperty('qaGalleryInstrumentation') == 'true' ? 'galleryQa' : (project.findProperty('qaPasswordInstrumentation') == 'true' ? 'passwordOnDemandQa' : (project.findProperty('qaCleanChatInstrumentation') == 'true' ? 'cleanChatQa' : (project.findProperty('qaUiStructureInstrumentation') == 'true' ? 'uiStructureQa' : (project.findProperty('qaUiPolishInstrumentation') == 'true' ? 'uiPolishQa' : (project.findProperty('qaUiReviewInstrumentation') == 'true' ? 'uiReviewQa' : (project.findProperty('qaHandoffInstrumentation') == 'true' ? 'handoffQa' : (project.findProperty('qaStableInstrumentation') == 'true' ? 'stableQa' : 'compactQa')))))))))
+    // New app ID: never overwrite gallery/real-export QA archives signed by a different CI key.
+    buildTypes {
+        roundChronologyQa {
+            initWith compactQa
+            applicationIdSuffix '.roundchron20261122'
+            signingConfig signingConfigs.debug
+        }
+    }
+    testBuildType (project.findProperty('qaRoundChronologyInstrumentation') == 'true' ? 'roundChronologyQa' : (project.findProperty('qaRealExportInstrumentation') == 'true' ? 'realExportQa' : (project.findProperty('qaGalleryInstrumentation') == 'true' ? 'galleryQa' : (project.findProperty('qaPasswordInstrumentation') == 'true' ? 'passwordOnDemandQa' : (project.findProperty('qaCleanChatInstrumentation') == 'true' ? 'cleanChatQa' : (project.findProperty('qaUiStructureInstrumentation') == 'true' ? 'uiStructureQa' : (project.findProperty('qaUiPolishInstrumentation') == 'true' ? 'uiPolishQa' : (project.findProperty('qaUiReviewInstrumentation') == 'true' ? 'uiReviewQa' : (project.findProperty('qaHandoffInstrumentation') == 'true' ? 'handoffQa' : (project.findProperty('qaStableInstrumentation') == 'true' ? 'stableQa' : 'compactQa'))))))))))
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17

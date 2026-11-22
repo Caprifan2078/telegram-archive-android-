@@ -93,6 +93,8 @@ import java.util.concurrent.Executors;
 /** Offline Telegram-style archive. No INTERNET permission, no uploads or telemetry. */
 public class MainActivity extends Activity {
     private int relationshipPageIndex=0;
+    private boolean historyEventsExpanded=false;
+    private String chronologySection="overview";
     // Read-only side-by-side workspaces. The first archive is always the active chat.
     private String dualSecondKey="",dualSecondName="";
     private int dualYear=LocalDate.now().getYear(),dualMonth=0;
@@ -175,6 +177,11 @@ public class MainActivity extends Activity {
     private volatile int playbackGeneration=0;
     private Runnable progressUpdater;private MessageDb.Attachment playingAttachment;private LinearLayout playerStrip;private TextView playerText;private Button playerPause;private FrameLayout inlineHolder;private int floatingStart=0;
     private RoundControls activeRound;
+    // Remember the original message tile when a playing round video floats away.
+    // It must be restored when the user scrolls back, not left as a grey placeholder.
+    private FrameLayout autoFloatSourceHolder;
+    private ImageView autoFloatSourcePoster;
+    private TextView autoFloatSourceOverlay;
     private TextView activeAudioButton;
     private SeekBar activeVoiceSeek;private boolean voiceSeekDragging;
     private static final class RoundControls {
@@ -1927,13 +1934,56 @@ public class MainActivity extends Activity {
         }
     }
     private void checkAutoFloat(){
-        if(player==null||inlineHolder==null||floatingPanel!=null||!screen.equals("chat"))return;
+        if(home||!"chat".equals(screen)||scroll==null)return;
+        int[] viewport=new int[2];
+        scroll.getLocationOnScreen(viewport);
+        int viewportTop=viewport[1],viewportBottom=viewportTop+scroll.getHeight();
+
+        if(floatingPanel!=null){
+            // Auto-floating is reversible; a manually opened bubble stays where it is.
+            if(!autoFloating||autoFloatSourceHolder==null||!autoFloatSourceHolder.isAttachedToWindow())return;
+            int[] tile=new int[2];
+            autoFloatSourceHolder.getLocationOnScreen(tile);
+            if(!RoundPlaybackTarget.isMostlyVisible(tile[1],
+                tile[1]+autoFloatSourceHolder.getHeight(),viewportTop,viewportBottom))return;
+
+            MessageDb.Attachment attachment=playingAttachment;
+            FrameLayout sourceHolder=autoFloatSourceHolder;
+            ImageView sourcePoster=autoFloatSourcePoster;
+            TextView sourceOverlay=autoFloatSourceOverlay;
+            if(attachment==null||sourcePoster==null||sourceOverlay==null){closeFloatingRound();return;}
+            int resumeMs=0;
+            boolean resumePlaying=true;
+            try{if(player!=null){resumeMs=Math.max(0,player.getCurrentPosition());resumePlaying=player.isPlaying();}}
+            catch(Exception ignored){}
+            FrameLayout oldPanel=floatingPanel;
+            floatingPanel=null;autoFloating=false;
+            autoFloatSourceHolder=null;autoFloatSourcePoster=null;autoFloatSourceOverlay=null;
+            stopPlayback();
+            root.removeView(oldPanel);
+            sourcePoster.setVisibility(View.VISIBLE);
+            sourceOverlay.setVisibility(View.VISIBLE);
+            startRoundPlayback(attachment,sourceHolder,sourcePoster,sourceOverlay,resumeMs,resumePlaying);
+            return;
+        }
+        if(player==null||inlineHolder==null||!inlineHolder.isAttachedToWindow())return;
         try{if(!player.isPlaying())return;}catch(Exception badState){return;}
-        int[] p=new int[2],viewport=new int[2];inlineHolder.getLocationOnScreen(p);scroll.getLocationOnScreen(viewport);
-        if(p[1]+inlineHolder.getHeight()<viewport[1]||p[1]>viewport[1]+scroll.getHeight()){
-            if(playingAttachment!=null&&playingAttachment.kind.equals("round")){
-                int ms=0;try{ms=player.getCurrentPosition();}catch(Exception ignored){}
-                floatingStart=ms;showFloatingRound(playingAttachment);autoFloating=true;
+        int[] tile=new int[2];inlineHolder.getLocationOnScreen(tile);
+        if(RoundPlaybackTarget.isOutside(tile[1],tile[1]+inlineHolder.getHeight(),
+            viewportTop,viewportBottom)){
+            if(playingAttachment!=null&&"round".equals(playingAttachment.kind)){
+                RoundControls controls=inlineHolder.getTag() instanceof RoundControls
+                    ?(RoundControls)inlineHolder.getTag():null;
+                if(controls==null||controls.preview==null||controls.overlay==null)return;
+                FrameLayout origin=inlineHolder;
+                MessageDb.Attachment attachment=playingAttachment;
+                int resumeMs=0;try{resumeMs=Math.max(0,player.getCurrentPosition());}catch(Exception ignored){}
+                floatingStart=resumeMs;
+                showFloatingRound(attachment);
+                autoFloatSourceHolder=origin;
+                autoFloatSourcePoster=controls.preview;
+                autoFloatSourceOverlay=controls.overlay;
+                autoFloating=true;
             }
         }
     }
@@ -2165,6 +2215,8 @@ public class MainActivity extends Activity {
         navBack=btn("‹");navBack.setTextSize(25);navBack.setGravity(Gravity.CENTER);
         head.addView(navBack,p(42,42));
         navBack.setOnClickListener(v->{if("help".equals(screen)){leaveHelp();return;}
+            if(floatingPanel!=null){closeFloatingRound();return;}
+            if(backWithinHistory())return;
             // Android Back already restores the previous search/media/analytics
             // context when jumping into a message. The header Back button must
             // follow the same path rather than unexpectedly throwing users home.
@@ -2205,9 +2257,9 @@ public class MainActivity extends Activity {
         playerText=text("Воспроизведение",13,FG);playerText.setSingleLine(true);
         playerText.setEllipsize(TextUtils.TruncateAt.END);
         playerStrip.addView(playerText,new LinearLayout.LayoutParams(0,-2,1));
-        Button prev=btn("⏮");playerStrip.addView(prev,p(38,40));prev.setOnClickListener(v->playAdjacent(false));
-        playerPause=btn("⏸");playerStrip.addView(playerPause,p(38,40));playerPause.setOnClickListener(v->toggleActivePlayback());
-        Button next=btn("⏭");playerStrip.addView(next,p(38,40));next.setOnClickListener(v->playAdjacent(true));
+        Button prev=btn("⏮");prev.setContentDescription("Предыдущее медиа");playerStrip.addView(prev,p(38,40));prev.setOnClickListener(v->playAdjacent(false));
+        playerPause=btn("⏸");playerPause.setContentDescription("Пауза или продолжить");playerStrip.addView(playerPause,p(38,40));playerPause.setOnClickListener(v->toggleActivePlayback());
+        Button next=btn("⏭");next.setContentDescription("Следующее медиа");playerStrip.addView(next,p(38,40));next.setOnClickListener(v->playAdjacent(true));
         Button close=btn("✕");playerStrip.addView(close,p(38,40));close.setOnClickListener(v->{closeFloatingRound();stopPlayback();});
         bottomNav=row();bottomNav.setPadding(px(4),px(3),px(4),px(3));
         bottomNav.setBackground(glass(PANEL,17));
@@ -2496,10 +2548,30 @@ public class MainActivity extends Activity {
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         startActivityForResult(i,PICK_FOLDER);
     }
+    /** Android Back and header Back follow the same history hierarchy. */
+    private boolean backWithinHistory(){
+        if(home)return false;
+        if("chronology".equals(screen)){
+            if(!"overview".equals(chronologySection)){
+                chronologySection="overview";renderChronologyPage();
+            }else{
+                screen="relationships";showPage();
+            }
+            return true;
+        }
+        if("relationships".equals(screen)&&historyEventsExpanded){
+            historyEventsExpanded=false;renderRelationshipsPage();return true;
+        }
+        return false;
+    }
     @Override public void onBackPressed(){
         if("help".equals(screen)){leaveHelp();return;}
         if(floatingPanel!=null){closeFloatingRound();return;}
-        if(screen.equals("saved")||(!home&&returnScreen.isEmpty())){saveReadingProgress();home=true;screen="chat";searchReturnsToAnalytics=false;bottomNav.setVisibility(View.GONE);showPage();return;}if(!returnScreen.isEmpty()){restoreReturn();return;}super.onBackPressed();}
+        if(backWithinHistory())return;
+        if(screen.equals("saved")||(!home&&returnScreen.isEmpty())){saveReadingProgress();home=true;screen="chat";searchReturnsToAnalytics=false;bottomNav.setVisibility(View.GONE);showPage();return;}
+        if(!returnScreen.isEmpty()){restoreReturn();return;}
+        super.onBackPressed();
+    }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
         if(request==SAVE_CONVERSATION_PDF_REQUEST){
@@ -3777,13 +3849,23 @@ public class MainActivity extends Activity {
     private void renderRelationshipsPage(){
         int token=++loadToken;
         if(home){screen="chat";showPage();return;}
-        prepareRelationshipScreen("Хронология","Важные события и периоды из твоих сообщений.");
-        Button stages=btn("Мои периоды истории");list.addView(stages,p(-1,52));
-        stages.setOnClickListener(v->{screen="chronology";showPage();});
-        Button backToChat=btn("+ Отметить событие в переписке");list.addView(backToChat,p(-1,52));
+        prepareRelationshipScreen("Хронология","События, периоды и воспоминания — по разделам.");
+        analyticsText(list,"Выбери раздел. Подробные списки не занимают весь экран сразу.",SUB,12);
+        Button events=btn(historyEventsExpanded?"01 · События переписки  ▴":"01 · События переписки  ▾");
+        list.addView(events,p(-1,52));
+        events.setContentDescription("Раскрыть или свернуть ленту событий");
+        events.setOnClickListener(v->{
+            historyEventsExpanded=!historyEventsExpanded;
+            renderRelationshipsPage();
+        });
+        Button stages=btn("02 · Мои периоды истории  ›");list.addView(stages,p(-1,52));
+        stages.setOnClickListener(v->{chronologySection="overview";screen="chronology";showPage();});
+        Button cinemaShortcut=btn("03 · Кинолента медиа по годам  ›");list.addView(cinemaShortcut,p(-1,52));
+        cinemaShortcut.setOnClickListener(v->{screen="cinema";showPage();});
+        Button backToChat=btn("+ Отметить событие в переписке");list.addView(backToChat,p(-1,46));
         backToChat.setOnClickListener(v->{screen="chat";showPage();
             toast("Удерживай важное сообщение и выбери «Добавить событие истории»");});
-        analyticsText(list,"Отметки личные: исходная переписка не меняется.",SUB,12);
+        analyticsText(list,"Все отметки личные: оригинальные сообщения и файлы не изменяются.",SUB,12);
         Button more=btn("Другие инструменты истории  ▾");list.addView(more,p(-1,46));
         LinearLayout advanced=column();advanced.setVisibility(View.GONE);list.addView(advanced,p(-1,-2));
         more.setOnClickListener(v->{
@@ -3799,11 +3881,13 @@ public class MainActivity extends Activity {
         sharedMemories.setOnClickListener(v->chooseDualChat("dual_memories"));
         Button comparison=btn("Календари двух переписок");advanced.addView(comparison,p(-1,48));
         comparison.setOnClickListener(v->chooseParallelCalendar());
-        Button cinema=btn("Кинолента медиа по годам");advanced.addView(cinema,p(-1,48));
-        cinema.setOnClickListener(v->{screen="cinema";showPage();});
         Button health=btn("Проверить сохранность медиа");advanced.addView(health,p(-1,48));
         health.setOnClickListener(v->showMediaHealth());
         LinearLayout eventsHolder=column();list.addView(eventsHolder,p(-1,-2));
+        if(!historyEventsExpanded){
+            status.setText("");status.setVisibility(View.GONE);
+            return;
+        }
         final MessageDb source=db;final String key=activeKey;
         worker.execute(()->{
             try{
@@ -4306,85 +4390,132 @@ public class MainActivity extends Activity {
             }
         });}catch(Exception error){runOnUiThread(()->{if(token==loadToken)analyticsText(container,"Не удалось прочитать периоды",SUB,14);});}});
     }
+    /** A section hub, not a stack of every chronological report on one page. */
     private void renderChronologyPage(){
-        int token=++loadToken;
+        final int token=++loadToken;
         if(home){screen="chat";showPage();return;}
-        bottomNav.setVisibility(View.VISIBLE);refreshTabs();
-        title.setText("Хронология");subtitle.setText("Периоды истории · вручную");
+        bottomNav.setVisibility(View.GONE);
+        title.setText("Хронология");subtitle.setText("Этапы, даты и графики · офлайн");
         filterBar.removeAllViews();searchArea.removeAllViews();
         bottomPager.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
         list.removeAllViews();list.setBackgroundColor(BG);
-        status.setVisibility(View.VISIBLE);status.setText("Загружаю периоды…");
+        status.setVisibility(View.VISIBLE);status.setText("Загружаю выбранный раздел…");
+        scroll.post(()->{if("chronology".equals(screen))scroll.scrollTo(0,0);});
+
         TextView heading=text("Периоды истории",21,FG);heading.setTypeface(null,Typeface.BOLD);
         heading.setPadding(px(12),px(11),px(12),px(6));list.addView(heading);
-        analyticsText(list,"Отмечай важные этапы по сообщениям или задавай даты вручную.",SUB,13);
-        Button addCalendar=btn("+ Добавить период по датам");
-        list.addView(addCalendar,p(-1,46));addCalendar.setOnClickListener(v->editCalendarPeriod(null));
-        Button startFromChat=btn("Отметить начало в переписке");
-        list.addView(startFromChat,p(-1,46));
-        startFromChat.setOnClickListener(v->{screen="chat";showPage();
-            toast("Удерживай сообщение → Отметить начало периода");});
-        Button expandHelp=btn("Как это работает  ▾");list.addView(expandHelp,p(-1,41));
-        LinearLayout helper=column();helper.setVisibility(View.GONE);list.addView(helper,p(-1,-2));
-        analyticsText(helper,"Удерживай первое сообщение, выбери «Отметить начало периода». Затем удерживай последнее сообщение и отметь конец. Название периода можно задать после выбора границ.",SUB,13);
-        Button twoChats=btn("Общая линия двух переписок");
-        helper.addView(twoChats,p(-1,43));twoChats.setOnClickListener(v->chooseDualChat("dual_memories"));
-        Button back=btn("‹ Все события");helper.addView(back,p(-1,42));
-        back.setOnClickListener(v->{screen="relationships";showPage();});
-        expandHelp.setOnClickListener(v->{
-            boolean show=helper.getVisibility()!=View.VISIBLE;
-            helper.setVisibility(show?View.VISIBLE:View.GONE);
-            expandHelp.setText(show?"Скрыть подсказки  ▴":"Как это работает  ▾");
-        });
-        LinearLayout calendar=column();list.addView(calendar,p(-1,-2));renderCalendarPeriods(calendar,db,activeKey,token);
-        final MessageDb source=db, initial=db;final String archive=activeKey;
+        analyticsText(list,"Открывай только то, что нужно. Все записи хранятся локально.",SUB,12);
+        Button stages=btn("01 · Этапы переписки  ›");list.addView(stages,p(-1,51));
+        stages.setOnClickListener(v->{chronologySection="stages";renderChronologyPage();});
+        Button calendarButton=btn("02 · Периоды по датам  ›");list.addView(calendarButton,p(-1,51));
+        calendarButton.setOnClickListener(v->{chronologySection="calendar";renderChronologyPage();});
+        Button charts=btn("03 · Сравнение этапов  ›");list.addView(charts,p(-1,51));
+        charts.setOnClickListener(v->{chronologySection="chart";renderChronologyPage();});
+        Button events=btn("04 · Лента событий  ›");list.addView(events,p(-1,51));
+        events.setOnClickListener(v->{historyEventsExpanded=true;screen="relationships";showPage();});
+        final String section=chronologySection;
+        if("overview".equals(section)){
+            analyticsText(list,"Этапы — промежутки между сообщениями; периоды по датам можно создавать вручную. Графики и события открываются отдельно, без бесконечных таблиц.",SUB,13);
+            status.setText("");status.setVisibility(View.GONE);
+            return;
+        }
+        Button sections=btn("‹ К разделам хронологии");list.addView(sections,p(-1,43));
+        sections.setOnClickListener(v->{chronologySection="overview";renderChronologyPage();});
+        if("calendar".equals(section)){
+            Button add=btn("+ Добавить период по датам");list.addView(add,p(-1,49));
+            add.setOnClickListener(v->editCalendarPeriod(null));
+            LinearLayout calendar=column();list.addView(calendar,p(-1,-2));
+            renderCalendarPeriods(calendar,db,activeKey,token);
+            status.setText("");status.setVisibility(View.GONE);
+            return;
+        }
+        if("stages".equals(section)){
+            Button fromChat=btn("+ Отметить начало периода в переписке");
+            list.addView(fromChat,p(-1,49));
+            fromChat.setOnClickListener(v->{screen="chat";showPage();toast("Удерживай сообщение → Отметить начало периода");});
+            Button help=btn("Как создать этап  ▾");list.addView(help,p(-1,42));
+            LinearLayout explanation=column();explanation.setVisibility(View.GONE);list.addView(explanation,p(-1,-2));
+            analyticsText(explanation,"Удерживай первое сообщение → отметь начало периода. Затем удерживай последнее → отметь конец. Исходная переписка остаётся нетронутой.",SUB,13);
+            help.setOnClickListener(v->{
+                boolean open=explanation.getVisibility()!=View.VISIBLE;
+                explanation.setVisibility(open?View.VISIBLE:View.GONE);
+                help.setText(open?"Скрыть подсказку  ▴":"Как создать этап  ▾");
+            });
+        }
+        final MessageDb source=db;final String archive=activeKey;
         worker.execute(()->{
             try{
-                List<ConversationPeriods.Chapter> stages=source.periods();
+                List<ConversationPeriods.Chapter> chapters=source.periods();
                 LinkedHashMap<Long,ConversationPeriods.Stats> stats=new LinkedHashMap<>();
-                for(ConversationPeriods.Chapter stage:stages)stats.put(stage.id,source.periodStats(stage));
-                LinkedHashMap<Long,List<MessageDb.Attachment>> phaseMedia=new LinkedHashMap<>();
-                for(ConversationPeriods.Chapter stage:stages)phaseMedia.put(stage.id,source.relationshipMedia(-stage.id));
+                for(ConversationPeriods.Chapter chapter:chapters)
+                    stats.put(chapter.id,source.periodStats(chapter));
+                LinkedHashMap<Long,List<MessageDb.Attachment>> media=new LinkedHashMap<>();
+                if("stages".equals(section))
+                    for(ConversationPeriods.Chapter chapter:chapters)
+                        media.put(chapter.id,source.relationshipMedia(-chapter.id));
                 runOnUiThread(()->{
-                    if(isFinishing()||token!=loadToken||!archive.equals(activeKey)||db!=initial)return;
-                    // The calendar section already contains a single empty-state hint.
-                    // Do not repeat another paragraph below the primary actions.
-                    long peak=1;for(ConversationPeriods.Stats st:stats.values())for(long n:st.bins)peak=Math.max(peak,n);
-                    final long maximum=peak;
-                    renderPeriodOverlay(stages,stats);
-                    int index=0;
-                    for(ConversationPeriods.Chapter stage:stages){
-                        ConversationPeriods.Stats st=stats.get(stage.id);
-                        LinearLayout card=analyticsCard((++index)+". "+stage.name);
-                        analyticsText(card,"Сообщения "+stage.start.messageId+" : "+stage.start.offset+
-                            " — "+stage.end.messageId+" : "+stage.end.offset,SUB,11);
-                        if(!stage.note.isEmpty())analyticsText(card,"Заметка: "+stage.note,FG,13);
-                        analyticsText(card,"Сообщений: "+st.messages+" · медиа: "+st.media+
-                            " · активных дней: "+st.activeDays+" · сообщений/активный день: "+
-                            String.format(Locale.ROOT,"%.1f",st.dailyAverage()),FG,13);
-                        analyticsText(card,"Даты: "+st.firstDate+" — "+st.lastDate+
-                            " · график: 12 равных частей этого периода, общая шкала для всех этапов",SUB,11);
-                        renderPeriodBars(card,st,maximum);
-                        List<MessageDb.Attachment> phaseAttachments=phaseMedia.get(stage.id);
-                        if(phaseAttachments!=null)for(MessageDb.Attachment a:phaseAttachments){
-                            Button media=btn("▣ "+mediaLabel(a.kind)+" · открыть вложение");
-                            card.addView(media,p(-1,42));media.setOnClickListener(v->openMedia(a));
+                    if(isFinishing()||token!=loadToken||!archive.equals(activeKey)||db!=source
+                            ||!"chronology".equals(screen)||!section.equals(chronologySection))return;
+                    if("chart".equals(section)){
+                        if(chapters.size()<2)
+                            analyticsText(list,"Для сравнения нужны минимум два отмеченных этапа.",SUB,13);
+                        else renderPeriodOverlay(chapters,stats);
+                    }else if("stages".equals(section)){
+                        if(chapters.isEmpty())
+                            analyticsText(list,"Пока нет этапов. Создай первый через сообщение в переписке.",SUB,13);
+                        long peak=1;
+                        for(ConversationPeriods.Stats st:stats.values())
+                            for(long n:st.bins)peak=Math.max(peak,n);
+                        final long maximum=peak;
+                        int order=0;
+                        for(ConversationPeriods.Chapter chapter:chapters){
+                            final ConversationPeriods.Stats st=stats.get(chapter.id);
+                            LinearLayout card=analyticsCard((++order)+". "+chapter.name);
+                            analyticsText(card,st.firstDate+" — "+st.lastDate+"  ·  "+st.messages+" сообщений",ACCENT,12);
+                            Button expand=btn("Подробнее об этапе  ▾");card.addView(expand,p(-1,43));
+                            LinearLayout details=column();details.setVisibility(View.GONE);card.addView(details,p(-1,-2));
+                            expand.setOnClickListener(v->{
+                                boolean opening=details.getVisibility()!=View.VISIBLE;
+                                if(opening&&details.getChildCount()==0){
+                                    if(!chapter.note.isEmpty())analyticsText(details,chapter.note,FG,13);
+                                    analyticsText(details,"Медиа: "+st.media+" · активных дней: "+st.activeDays+
+                                        " · сообщений в активный день: "+
+                                        String.format(Locale.ROOT,"%.1f",st.dailyAverage()),FG,13);
+                                    analyticsText(details,"Начало: #"+chapter.start.messageId+
+                                        " · конец: #"+chapter.end.messageId,SUB,12);
+                                    renderPeriodBars(details,st,maximum);
+                                    List<MessageDb.Attachment> attachments=media.get(chapter.id);
+                                    if(attachments!=null)for(MessageDb.Attachment attachment:attachments){
+                                        Button file=btn("Открыть · "+mediaLabel(attachment.kind));
+                                        details.addView(file,p(-1,42));
+                                        file.setOnClickListener(w->openMedia(attachment));
+                                    }
+                                    Button link=btn("+ Прикрепить медиа");details.addView(link,p(-1,43));
+                                    link.setOnClickListener(w->chooseRelationshipAttachment(-chapter.id,0));
+                                    LinearLayout actions=row();details.addView(actions,p(-1,44));
+                                    Button jump=btn("↗ К началу");actions.addView(jump,new LinearLayout.LayoutParams(0,-1,1f));
+                                    jump.setOnClickListener(w->jump(chapter.start.messageId,"chronology"));
+                                    Button remove=btn("Удалить этап");actions.addView(remove,new LinearLayout.LayoutParams(0,-1,1f));
+                                    remove.setOnClickListener(w->new FontDialog.Builder(this)
+                                        .setTitle("Удалить «"+chapter.name+"»?")
+                                        .setMessage("Удалится только твоя отметка. Переписка и медиа останутся.")
+                                        .setNegativeButton("Отмена",null)
+                                        .setPositiveButton("Удалить",(d,which)->worker.execute(()->{
+                                            source.removePeriod(chapter.id);
+                                            runOnUiThread(()->{if(archive.equals(activeKey)&&"chronology".equals(screen))renderChronologyPage();});
+                                        })).show());
+                                }
+                                details.setVisibility(opening?View.VISIBLE:View.GONE);
+                                expand.setText(opening?"Свернуть подробности  ▴":"Подробнее об этапе  ▾");
+                            });
                         }
-                        Button link=btn("+ Прикрепить фото, кружок или файл к этапу");card.addView(link,p(-1,46));
-                        link.setOnClickListener(v->chooseRelationshipAttachment(-stage.id,0));
-                        LinearLayout buttons=row();card.addView(buttons,p(-1,42));
-                        Button jump=btn("↗ Начало");buttons.addView(jump,new LinearLayout.LayoutParams(0,-1,1));
-                        jump.setOnClickListener(v->jump(stage.start.messageId,"chronology"));
-                        Button remove=btn("Удалить этап");buttons.addView(remove,new LinearLayout.LayoutParams(0,-1,1));
-                        remove.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Удалить «"+stage.name+"»?")
-                            .setMessage("Удалится только твоя отметка периода. Переписка и медиа не изменятся.")
-                            .setNegativeButton("Отмена",null).setPositiveButton("Удалить",(d,w)->worker.execute(()->{
-                                source.removePeriod(stage.id);runOnUiThread(()->{if(archive.equals(activeKey))renderChronologyPage();});
-                            })).show());
                     }
                     status.setText("");status.setVisibility(View.GONE);
                 });
-            }catch(Exception e){runOnUiThread(()->{if(token==loadToken)status.setText("Ошибка хронологии: "+e.getMessage());});}
+            }catch(Exception e){
+                runOnUiThread(()->{if(token==loadToken&&archive.equals(activeKey))
+                    status.setText("Ошибка хронологии: "+e.getMessage());});
+            }
         });
     }
     private void renderCinemaPage(){
@@ -5698,6 +5829,9 @@ public class MainActivity extends Activity {
         startInlineRound(path,holder,poster,overlay,0);
     }
     private void startInlineRound(String path,FrameLayout holder,ImageView poster,TextView overlay,int resumeMs){
+        startInlineRound(path,holder,poster,overlay,resumeMs,true);
+    }
+    private void startInlineRound(String path,FrameLayout holder,ImageView poster,TextView overlay,int resumeMs,boolean resumePlaying){
         // A repeated Telegram MP4 path does not identify a specific message.
         // Only tapping the active tile toggles the current decoder.
         if(player!=null&&RoundPlaybackTarget.isSameTarget(playingPath,path,inlineHolder,holder)){
@@ -5747,7 +5881,8 @@ public class MainActivity extends Activity {
                                 catch(IllegalStateException failure){toast("Не удалось восстановить позицию видео");}
                             }
                             mp.start();
-                            if(playerPause!=null)playerPause.setText("⏸");
+                            if(!resumePlaying)mp.pause();
+                            if(playerPause!=null)playerPause.setText(mp.isPlaying()?"⏸":"▶");
                             diagnose[0]=new Runnable(){
                                 @Override public void run(){
                                     if(generation!=playbackGeneration||player!=mp||activeTexture!=texture)return;
@@ -6198,7 +6333,10 @@ public class MainActivity extends Activity {
         startRoundPlayback(attachment,target,poster,overlay,0);
     }
     private void startRoundPlayback(MessageDb.Attachment attachment,FrameLayout target,ImageView poster,TextView overlay,int resumeMs){
-        startInlineRound(attachment.path,target,poster,overlay,resumeMs);
+        startRoundPlayback(attachment,target,poster,overlay,resumeMs,true);
+    }
+    private void startRoundPlayback(MessageDb.Attachment attachment,FrameLayout target,ImageView poster,TextView overlay,int resumeMs,boolean resumePlaying){
+        startInlineRound(attachment.path,target,poster,overlay,resumeMs,resumePlaying);
         playingAttachment=attachment;
         inlineHolder=target;
         if(playerStrip!=null){
@@ -6468,6 +6606,8 @@ public class MainActivity extends Activity {
        try{startActivity(intent);}catch(Exception e){toast("Не удалось открыть видео-сообщение");}
     }
     private void closeFloatingRound(){
+       autoFloating=false;
+       autoFloatSourceHolder=null;autoFloatSourcePoster=null;autoFloatSourceOverlay=null;
        if(floatingPanel!=null){FrameLayout p=floatingPanel;floatingPanel=null;stopPlayback();root.removeView(p);}
     }
     private void showFloatingRound(MessageDb.Attachment a){
@@ -6491,7 +6631,7 @@ public class MainActivity extends Activity {
         round.addView(play,new FrameLayout.LayoutParams(-1,-1));
         // One close button: ✕ on the media-player strip at the top right.
         round.setContentDescription("Плавающее видеосообщение. Проведи пальцем для перемещения; нажми для паузы.");
-        round.setOnClickListener(v->startInlineRound(a.path,round,preview,play));
+        round.setOnClickListener(v->startRoundPlayback(a,round,preview,play));
         round.setOnTouchListener(new View.OnTouchListener(){
             float downX,downY,originX,originY;long downAt;boolean dragged;
             @Override public boolean onTouch(View v,MotionEvent event){
