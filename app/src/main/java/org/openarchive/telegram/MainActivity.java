@@ -2238,7 +2238,7 @@ public class MainActivity extends Activity {
         subtitle.setSingleLine(true);subtitle.setEllipsize(TextUtils.TruncateAt.END);headings.addView(subtitle,p(-1,19));
         pdfButton=btn("PDF");pdfButton.setContentDescription("Сохранить переписку в PDF");head.addView(pdfButton,p(44,42));
         pdfButton.setOnClickListener(v->{if(!home&&"chat".equals(screen))chooseConversationPdf();});
-        headerActions=btn("≡");headerActions.setContentDescription("Другие инструменты переписки");head.addView(headerActions,p(42,42));
+        headerActions=btn("⋯");headerActions.setContentDescription("Другие инструменты переписки");head.addView(headerActions,p(42,42));
         headerActions.setOnClickListener(v->showConversationMenu(headerActions));
         title.setOnClickListener(v->openChatMediaFromHeader());
         headings.setOnClickListener(v->openChatMediaFromHeader());
@@ -2301,7 +2301,7 @@ public class MainActivity extends Activity {
             }
         });
         verticalTimeline=new VerticalTimeline();
-        scrollHost.addView(verticalTimeline,new FrameLayout.LayoutParams(px(25),-1,Gravity.END));
+        scrollHost.addView(verticalTimeline,new FrameLayout.LayoutParams(px(20),-1,Gravity.END));
         list=column();list.setPadding(px(3),px(6),px(3),px(14));scroll.addView(list);
         LinearLayout bottom=row();bottomPager=bottom;base.addView(bottom,p(-1,52));
         backPage=btn("‹ Назад");nextPage=btn("Далее ›");pageLabel=text("",12,SUB);pageLabel.setGravity(Gravity.CENTER);
@@ -2341,7 +2341,7 @@ public class MainActivity extends Activity {
         if(headerLogo!=null)headerLogo.setVisibility(View.GONE);
         if(folderButton!=null)folderButton.setVisibility(View.GONE);
         title.setText("media".equals(screen)? "Медиа":activeName);
-        subtitle.setText(screen.equals("chat")?"Переписка":screen.equals("media")?activeName:screen.equals("favorites")?"Твои сохранённые сообщения":screen.equals("analytics")?"Статистика · полностью офлайн":screen.equals("relationships")?"Личные события и этапы":screen.equals("echo")?"Повторяющиеся фразы":screen.equals("chronology")?"Периоды истории · вручную":screen.equals("cinema")?"Медиа по годам · офлайн":"Найди любое сообщение");
+        subtitle.setText(screen.equals("chat")?"Медиа — по названию чата":screen.equals("media")?activeName:screen.equals("favorites")?"Твои сохранённые сообщения":screen.equals("analytics")?"Статистика · полностью офлайн":screen.equals("relationships")?"Личные события и этапы":screen.equals("echo")?"Повторяющиеся фразы":screen.equals("chronology")?"Периоды истории · вручную":screen.equals("cinema")?"Медиа по годам · офлайн":"Найди любое сообщение");
     }
     private void configureBars(){
         filterBar.removeAllViews();searchArea.removeAllViews();
@@ -2978,7 +2978,8 @@ public class MainActivity extends Activity {
                         }else scroll.post(()->{if(token==loadToken&&"analytics".equals(screen))scroll.scrollTo(0,0);});
                         bottomPager.setVisibility(View.GONE);
                         verticalTimeline.setVisibility(View.GONE);
-                        status.setText("Статистика рассчитана локально · ничего не отправлено");
+                        // The dashboard itself explains offline processing; no duplicate status banner.
+                        status.setText("");status.setVisibility(View.GONE);
                     });
                     return;
                 }
@@ -3035,7 +3036,8 @@ public class MainActivity extends Activity {
                     // Keep it for galleries/favorites only when multiple pages exist.
                     bottomPager.setVisibility(favs&&count>getLimit()?View.VISIBLE:View.GONE);
                     int shown=gallery?attachments.size():messages.size();
-                    verticalTimeline.setVisibility("chat".equals(tab)?View.VISIBLE:View.GONE);
+                    // Keep the chat scrubber only for long histories, not a 14-message sample.
+                    verticalTimeline.setVisibility("chat".equals(tab)&&count>120?View.VISIBLE:View.GONE);
                     if("chat".equals(tab))verticalTimeline.setPosition(pos,count);
                     pageLabel.setText(count==0?"Нет данных":(pos+1)+"–"+(pos+shown)+" / "+count);
                     backPage.setEnabled(pos>0);nextPage.setEnabled(pos+shown<count);
@@ -3701,7 +3703,12 @@ public class MainActivity extends Activity {
         return m.find()?m.group(1):clip(s,22);
     }
     private void dateSeparator(String date){
-        TextView d=text(date.isEmpty()?"Дата неизвестна":date,11,SUB);d.setGravity(Gravity.CENTER);
+        String label=date.isEmpty()?"Дата неизвестна":date;
+        try{
+            ChatTrends.Moment parsed=ChatTrends.parse(date);
+            if(parsed!=null)label=parsed.day.format(java.time.format.DateTimeFormatter.ofPattern("d MMMM yyyy",Locale.forLanguageTag("ru-RU")));
+        }catch(Exception ignored){} // Unrecognized export dates remain visible verbatim.
+        TextView d=text(label,11,SUB);d.setGravity(Gravity.CENTER);
         d.setPadding(px(12),px(7),px(12),px(7));d.setBackground(shape(0xff23384b,14));
         LinearLayout r=row();r.setGravity(Gravity.CENTER);LinearLayout.LayoutParams rp=p(-1,38);rp.topMargin=px(10);list.addView(r,rp);r.addView(d);
     }
@@ -6762,9 +6769,11 @@ public class MainActivity extends Activity {
        VerticalTimeline(){super(MainActivity.this);}
        void setPosition(int p,int c){position=p;count=c;invalidate();}
        @Override protected void onDraw(Canvas c){
-         super.onDraw(c);float x=getWidth()-px(10),top=px(13),bottom=getHeight()-px(13);
-         brush.setColor(0xff42657f);brush.setStrokeWidth(px(4));c.drawLine(x,top,x,bottom,brush);
-         float ratio=count<=1?0:(float)position/(count-1);brush.setColor(ACCENT);c.drawCircle(x,top+(bottom-top)*ratio,px(5),brush);
+         super.onDraw(c);float x=getWidth()-px(5),top=px(13),bottom=getHeight()-px(13);
+         brush.setColor(themeIndex==2?0x554b7897:0x88536f88);
+         brush.setStrokeWidth(px(2));c.drawLine(x,top,x,bottom,brush);
+         float ratio=count<=1?0:(float)position/(count-1);
+         brush.setColor(ACCENT);c.drawCircle(x,top+(bottom-top)*ratio,px(3),brush);
        }
        @Override public boolean onTouchEvent(MotionEvent e){
          if(!screen.equals("chat"))return false;
