@@ -102,7 +102,14 @@ android {
             signingConfig signingConfigs.debug
         }
     }
-    testBuildType (project.findProperty('qaPasswordInstrumentation') == 'true' ? 'passwordOnDemandQa' : (project.findProperty('qaCleanChatInstrumentation') == 'true' ? 'cleanChatQa' : (project.findProperty('qaUiStructureInstrumentation') == 'true' ? 'uiStructureQa' : (project.findProperty('qaUiPolishInstrumentation') == 'true' ? 'uiPolishQa' : (project.findProperty('qaUiReviewInstrumentation') == 'true' ? 'uiReviewQa' : (project.findProperty('qaHandoffInstrumentation') == 'true' ? 'handoffQa' : (project.findProperty('qaStableInstrumentation') == 'true' ? 'stableQa' : 'compactQa')))))))
+    buildTypes {
+        galleryQa {
+            initWith compactQa
+            applicationIdSuffix '.gallery20261122'
+            signingConfig signingConfigs.debug
+        }
+    }
+    testBuildType (project.findProperty('qaGalleryInstrumentation') == 'true' ? 'galleryQa' : (project.findProperty('qaPasswordInstrumentation') == 'true' ? 'passwordOnDemandQa' : (project.findProperty('qaCleanChatInstrumentation') == 'true' ? 'cleanChatQa' : (project.findProperty('qaUiStructureInstrumentation') == 'true' ? 'uiStructureQa' : (project.findProperty('qaUiPolishInstrumentation') == 'true' ? 'uiPolishQa' : (project.findProperty('qaUiReviewInstrumentation') == 'true' ? 'uiReviewQa' : (project.findProperty('qaHandoffInstrumentation') == 'true' ? 'handoffQa' : (project.findProperty('qaStableInstrumentation') == 'true' ? 'stableQa' : 'compactQa'))))))))
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
