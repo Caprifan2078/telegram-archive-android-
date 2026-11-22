@@ -3075,6 +3075,13 @@ public class MainActivity extends Activity {
         card.addView(label,p(-1,18));
         card.setContentDescription(caption+": "+value);
     }
+    private String friendlyAnalyticsDate(String date){
+        try{
+            ChatTrends.Moment parsed=ChatTrends.parse(date);
+            if(parsed!=null)return parsed.day.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy",Locale.forLanguageTag("ru-RU")));
+        }catch(Exception ignored){}
+        return date==null?"":date;
+    }
     /** Minimal local navigation: do not render every heavy graph when the screen opens. */
     private void selectAnalyticsSection(String next){
         if(next.equals(analyticsSection))return;
@@ -3099,8 +3106,8 @@ public class MainActivity extends Activity {
             shape(0xffffffff,12)));
         chip.setContentDescription("Раздел анализа: "+label);
         chip.setSelected(selected);
-        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,px(43),1f);
-        params.setMargins(px(3),px(3),px(3),px(3));
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,px(39),1f);
+        params.setMargins(px(3),px(2),px(3),px(2));
         row.addView(chip,params);
         chip.setOnClickListener(v->selectAnalyticsSection(section));
     }
@@ -3116,7 +3123,7 @@ public class MainActivity extends Activity {
     private void renderAnalytics(ChatAnalytics.Snapshot r){
         // One calm header, a small section switcher, then ONLY the requested panel.
         LinearLayout hero=column();
-        hero.setPadding(px(15),px(14),px(15),px(14));
+        hero.setPadding(px(14),px(10),px(14),px(10));
         int heroTop=themeIndex==2?0xffe0edf8:mixColors(PANEL,ACCENT,.14f);
         int heroBottom=themeIndex==2?0xffedf5fb:mixColors(PANEL,BG,.18f);
         hero.setBackground(gradient(heroTop,heroBottom,19));
@@ -3127,20 +3134,20 @@ public class MainActivity extends Activity {
         eyebrow.setTypeface(null,Typeface.BOLD);
         eyebrow.setLetterSpacing(.1f);
         hero.addView(eyebrow,p(-1,-2));
-        TextView heading=text("Анализ переписки",22,FG);
+        TextView heading=text("Анализ переписки",20,FG);
         heading.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
-        heading.setPadding(0,px(7),0,px(6));
+        heading.setPadding(0,px(5),0,px(4));
         hero.addView(heading,p(-1,-2));
-        TextView explanation=text("Только твои данные. Без отправки в интернет и оценки отношений.",12,SUB);
+        TextView explanation=text("Только на устройстве · ничего не отправляем",11,SUB);
         hero.addView(explanation,p(-1,-2));
         LinearLayout navigation=column();
         navigation.setPadding(px(2),0,px(2),px(5));
         list.addView(navigation,p(-1,-2));
-        LinearLayout first=row();navigation.addView(first,p(-1,49));
+        LinearLayout first=row();navigation.addView(first,p(-1,44));
         analyticsNavChip(first,"Обзор","overview");
         analyticsNavChip(first,"Графики","trends");
         analyticsNavChip(first,"Ритм","rhythm");
-        LinearLayout second=row();navigation.addView(second,p(-1,49));
+        LinearLayout second=row();navigation.addView(second,p(-1,44));
         analyticsNavChip(second,"Участники","people");
         analyticsNavChip(second,"Медиа и слова","content");
         if(r.totalMessages==0){
@@ -3228,7 +3235,7 @@ public class MainActivity extends Activity {
         analyticsLine(snapshot,"Слов",r.totalWords);
         analyticsLine(snapshot,"Активных дней",r.days.size());
         if(!r.firstDay.isEmpty())
-            analyticsText(snapshot,"Период: "+r.firstDay+" — "+r.lastDay,SUB,12);
+            analyticsText(snapshot,"Период: "+friendlyAnalyticsDate(r.firstDay)+" — "+friendlyAnalyticsDate(r.lastDay),SUB,12);
         Button expandOverview=btn("Все показатели  ▾");
         LinearLayout.LayoutParams expandParams=p(-1,42);
         expandParams.setMargins(px(5),px(2),px(5),px(3));
