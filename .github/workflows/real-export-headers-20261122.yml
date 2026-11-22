@@ -1,0 +1,78 @@
+name: QA 2026-11-22 — real Telegram export folder headers ZIP 7z
+on:
+  push:
+    branches: [qa/real-export-7z-directory-zip-diagnostics-20261122]
+    paths:
+      - 'app/src/main/java/org/openarchive/telegram/ArchiveFileImport.java'
+      - 'app/src/androidTest/java/org/openarchive/telegram/RealTelegramExportStructureRegressionTest.java'
+      - '.github/workflows/real-export-headers-20261122.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate-import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Android SDK
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: Assemble QA and tests
+        run: gradle --no-daemon --max-workers=2 assembleGalleryQa assembleGalleryQaAndroidTest testGalleryQaUnitTest -PqaGalleryInstrumentation=true
+      - name: Verify isolated APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/galleryQa/app-galleryQa.apk
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          test -s "$apk"
+          "$tools/apksigner" verify --verbose "$apk"
+          "$tools/aapt" dump badging "$apk" | grep -q "package: name='org.openarchive.telegram.qa.gallery20261122'"
+          mkdir -p deliver
+          cp "$apk" deliver/Telegram_Archive_Viewer_0.51_RealExport_7z_Zip_Fix_QA.apk
+          (cd deliver && sha256sum *.apk > SHA256SUMS.txt)
+      - name: Enable emulator KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Android 11 — real export regression plus password imports
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: |
+            adb install deliver/Telegram_Archive_Viewer_0.51_RealExport_7z_Zip_Fix_QA.apk
+            gradle --no-daemon --max-workers=2 connectedGalleryQaAndroidTest -PqaGalleryInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.RealTelegramExportStructureRegressionTest,org.openarchive.telegram.ArchivePasswordOnDemandRegressionTest,org.openarchive.telegram.SevenZTelegramImportRegressionTest,org.openarchive.telegram.EncryptedTelegramImportRegressionTest,org.openarchive.telegram.RarCompatibilityRegressionTest,org.openarchive.telegram.MediaInfiniteGalleryRegressionTest'
+      - name: Test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-export-zip-7z-android-test-reports
+          retention-days: 7
+          path: |
+            app/build/outputs/androidTest-results/
+            app/build/reports/androidTests/
+      - name: Verified QA APK and SHA256
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TelegramViewer-RealExport-7z-Zip-2026-11-22
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            deliver/*.apk
+            deliver/SHA256SUMS.txt
