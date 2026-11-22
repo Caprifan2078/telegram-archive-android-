@@ -2342,14 +2342,7 @@ public class MainActivity extends Activity {
                     else inspectDuplicateMedia();
                 }).setNegativeButton("Закрыть",null).show());
             filterBar.addView(mediaTools,p(-1,46));
-            if(multiSelectMedia){clearMediaSelection();}else{multiSelectMedia=true;selectedMediaArchive=activeKey;}
-                showPage();
-            });
-            Button collections=btn("Коллекции");mediaTools.addView(collections,new LinearLayout.LayoutParams(0,px(42),1));
-            collections.setOnClickListener(v->showCollectionPicker());
-            Button duplicates=btn("≡");duplicates.setContentDescription("Поиск одинаковых медиа");
-            mediaTools.addView(duplicates,p(47,42));duplicates.setOnClickListener(v->inspectDuplicateMedia());
-            filterBar.addView(mediaTools,p(-1,46));
+
             if(multiSelectMedia){
                 LinearLayout actions=row();
                 Button save=btn("↓ Сохранить "+mediaSelection.size());
