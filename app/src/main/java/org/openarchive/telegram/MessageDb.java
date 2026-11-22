@@ -683,6 +683,7 @@ class MessageDb extends SQLiteOpenHelper {
     private String mediaWhere(String kind){
         switch(kind){
             case "all":return "";
+            case "visual":return " WHERE a.kind IN ('image','video')";
             case "photos":return " WHERE a.kind='image'";
             case "videos":return " WHERE a.kind='video'";
             case "audio":return " WHERE a.kind='audio'";
