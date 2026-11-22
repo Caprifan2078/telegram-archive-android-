@@ -123,8 +123,8 @@ public class MainActivity extends Activity {
     private boolean pendingBatchDownloads=false;
 
 
-    private static final String[] MEDIA_KEYS={"all","image","video","favorite","round","voice","audio","file","gif","sticker"};
-    private static final String[] MEDIA_LABELS={"Всё","Фото","Видео","Избранное","Кружки","Голосовые","Музыка","Файлы","GIF","Стикеры"};
+    private static final String[] MEDIA_KEYS={"visual","image","video","round","voice","audio","file","gif","sticker","all","favorite"};
+    private static final String[] MEDIA_LABELS={"Фото и видео","Фото","Видео","Кружки","Голосовые","Музыка","Файлы","GIF","Стикеры","Все файлы","Избранное"};
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private final ExecutorService mediaWorker=Executors.newFixedThreadPool(2);
     private final Handler handler=new Handler(Looper.getMainLooper());
@@ -147,11 +147,18 @@ public class MainActivity extends Activity {
     private VerticalTimeline verticalTimeline;
     private final int[] participantColors={0xff315c79,0xff665184,0xff326c65,0xff75513f,0xff5d607f,0xff724d68,0xff52683a,0xff426884};
     private LinearLayout base,list,filterBar,bottomNav,searchArea,toolArea,savedComposer;
+    private MediaZoomRecyclerView mediaRecycler;
+    private MediaGalleryAdapter mediaAdapter;
+    private androidx.recyclerview.widget.GridLayoutManager mediaLayout;
+    private int mediaColumns=3,mediaLoaded=0,mediaTotal=0;
+    private boolean mediaAppending=false;
+    private TextView mediaZoomLabel;
+    private android.widget.SeekBar mediaZoomSeek;
     private ScrollView scroll;private TextView title,subtitle,status,pageLabel,headerLogo;private Button pdfButton;private Button navBack,menuButton;private String lastRenderedDay="";
     private EditText searchInput,authorInput;private CheckBox mediaOnly;
     private String restoredQueryDraft=null,restoredAuthorDraft=null;private Boolean restoredMediaDraft=null;
     private Button backPage,nextPage,quickButton,deepButton,folderButton,backButton,headerActions;
-    private String screen="chat",mediaKind="all",q="",byAuthor="",mine="",returnScreen="";
+    private String screen="chat",mediaKind="visual",q="",byAuthor="",mine="",returnScreen="";
     private boolean deep=false,onlyMedia=false,importing=false,searchReturnsToAnalytics=false;
     private int chatOffset=0,searchOffset=0,mediaOffset=0,favOffset=0,total=0,loadToken=0;
     private int searchReturnScroll=-1,pendingSearchScroll=-1;
@@ -1385,6 +1392,8 @@ public class MainActivity extends Activity {
             .setInterpolator(new DecelerateInterpolator()).start();
     }
     private void renderHome(){
+        if(mediaRecycler!=null)mediaRecycler.setVisibility(View.GONE);
+        if(scroll!=null)scroll.setVisibility(View.VISIBLE);
         list.setBackgroundColor(BG);
         savedComposer.setVisibility(View.GONE);
         final int homeToken=++loadToken;list.removeAllViews();list.setTag("home-list");pinnedBar.removeAllViews();filterBar.removeAllViews();searchArea.removeAllViews();
@@ -2203,6 +2212,19 @@ public class MainActivity extends Activity {
         FrameLayout scrollHost=new FrameLayout(this);
         base.addView(scrollHost,new LinearLayout.LayoutParams(-1,0,1));
         scrollHost.addView(scroll,new FrameLayout.LayoutParams(-1,-1));
+        mediaRecycler=new MediaZoomRecyclerView(this);
+        mediaRecycler.setVisibility(View.GONE);
+        mediaRecycler.setClipToPadding(false);
+        mediaRecycler.setPadding(px(2),px(6),px(2),px(16));
+        mediaRecycler.setItemAnimator(null);
+        mediaAdapter=new MediaGalleryAdapter();
+        mediaRecycler.setAdapter(mediaAdapter);
+        scrollHost.addView(mediaRecycler,new FrameLayout.LayoutParams(-1,-1));
+        mediaRecycler.addOnScrollListener(new androidx.recyclerview.widget.RecyclerView.OnScrollListener(){
+            @Override public void onScrolled(androidx.recyclerview.widget.RecyclerView rv,int dx,int dy){
+                if(dy>=0)maybeAppendMedia();
+            }
+        });
         verticalTimeline=new VerticalTimeline();
         scrollHost.addView(verticalTimeline,new FrameLayout.LayoutParams(px(25),-1,Gravity.END));
         list=column();list.setPadding(px(3),px(6),px(3),px(14));scroll.addView(list);
@@ -2741,6 +2763,11 @@ public class MainActivity extends Activity {
     private int getLimit(){return screen.equals("media")?MEDIA_PAGE:PAGE;}
     private void setOffset(int x){switch(screen){case "media":mediaOffset=x;break;case "search":searchOffset=x;break;case "favorites":favOffset=x;break;default:chatOffset=x;}}
     private void showPage(){
+        if(mediaRecycler!=null){
+            boolean showingGallery="media".equals(screen)&&!home;
+            mediaRecycler.setVisibility(showingGallery?View.VISIBLE:View.GONE);
+            scroll.setVisibility(showingGallery?View.GONE:View.VISIBLE);
+        }
         if("help".equals(screen)){renderHelpPage();return;}
         if("dual_compare".equals(screen)||"dual_memories".equals(screen)){
             renderDualChatScreen();return;
