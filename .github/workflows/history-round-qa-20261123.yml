@@ -52,7 +52,7 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 420
           script: |
-            gradle --no-daemon --max-workers=2 connectedHistoryRoundQaAndroidTest -PqaHistoryRoundInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.RelationshipPaginationRegressionTest,org.openarchive.telegram.ChronologyHubRegressionTest,org.openarchive.telegram.RoundPlayerActivityTest,org.openarchive.telegram.MediaInfiniteGalleryRegressionTest'
+            gradle --no-daemon --max-workers=2 connectedHistoryRoundQaAndroidTest -PqaHistoryRoundInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.RelationshipPaginationRegressionTest,org.openarchive.telegram.FloatingRoundLifecycleRegressionTest,org.openarchive.telegram.ChronologyHubRegressionTest,org.openarchive.telegram.RoundPlayerActivityTest,org.openarchive.telegram.MediaInfiniteGalleryRegressionTest'
       - name: Test reports
         if: always()
         uses: actions/upload-artifact@v4
