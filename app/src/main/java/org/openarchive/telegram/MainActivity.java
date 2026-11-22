@@ -2642,16 +2642,19 @@ public class MainActivity extends Activity {
             // Android file managers may call a 7z archive .zip (or omit extension).
             // Read only the magic bytes off the UI thread, then import without
             // ever showing a password prompt for unencrypted archives.
-            status.setVisibility(View.VISIBLE);status.setText("Проверяю архив…");
+            beginImportProgress("Проверяю выбранный архив…");
             worker.execute(()->{
                 try{
                     String format=ArchiveFileImport.detectFormat(this,source,displayName);
                     runOnUiThread(()->importCompressed(source,format,displayName,null));
                 }catch(Exception error){
-                    runOnUiThread(()->new FontDialog.Builder(this)
+                    runOnUiThread(()->{
+                        endImportProgress();
+                        new FontDialog.Builder(this)
                         .setTitle("Этот файл не является поддерживаемым архивом")
                         .setMessage(error.getMessage()==null?"Выбери ZIP, 7z или RAR":error.getMessage())
-                        .setPositiveButton("Закрыть",null).show());
+                        .setPositiveButton("Закрыть",null).show();
+                    });
                 }
             });
             return;
@@ -5867,12 +5870,17 @@ public class MainActivity extends Activity {
     }
     private String formatTime(int s){return String.format(Locale.ROOT,"%d:%02d",s/60,s%60);}
     private void loadDuration(String path,TextView target){
+        loadDuration(path,target,"");
+    }
+    private void loadDuration(String path,TextView target,String prefix){
         if(folder==null)return;
         DocumentFolder current=folder;int token=loadToken;
         String requestedArchive=activeKey;
         String root=current.rootId();
         String cacheKey=requestedArchive.length()+":"+requestedArchive+root.length()+":"+root+path;
-        String cached=durations.get(cacheKey);if(cached!=null){target.setText(cached);return;}
+        target.setTag(cacheKey);
+        String cached=durations.get(cacheKey);
+        if(cached!=null){target.setText(prefix+cached);return;}
         mediaWorker.execute(()->{
             String time=null;
             try{Uri uri=current.resolve(path);if(uri!=null){MediaMetadataRetriever reader=new MediaMetadataRetriever();
@@ -5884,7 +5892,8 @@ public class MainActivity extends Activity {
                 if(!isFinishing()&&token==loadToken&&current==folder&&requestedArchive.equals(activeKey)){
                     // A missing or temporarily inaccessible original must not poison the cache.
                     if(result!=null)durations.put(cacheKey,result);
-                    target.setText(result==null?"00:00":result);
+                    if(cacheKey.equals(target.getTag()))
+                        target.setText(prefix+(result==null?"—":result));
                 }
             });
         });
