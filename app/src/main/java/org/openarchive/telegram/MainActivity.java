@@ -169,6 +169,8 @@ public class MainActivity extends Activity {
     private long highlightId=-1;private long lastVisibleMessage=-1;private int lastVisibleTop=0;private final Map<Long,View> renderedMessageViews=new HashMap<>();private long pendingRestoreId=-1;private int pendingRestoreTop=0;private boolean restoringBackup=false;private boolean fullBackupMode=true;private char[] backupPassword=null;private String selectedBackupName="";
     private String info="";
     private boolean analyticsCommonWords=false;
+    private String analyticsSection="overview";
+    private boolean analyticsYearExpanded=false;
     private String analyticsUnit="month",analyticsSelectedAuthor="";
     private int analyticsCalendarYear=0;
     private String analyticsCompareFirst="",analyticsCompareSecond="";
@@ -242,6 +244,9 @@ public class MainActivity extends Activity {
                 pendingRestoreId=state.getLong("ta_pending_chat_id",-1);
                 pendingRestoreTop=state.getInt("ta_pending_chat_top",0);
             }
+            analyticsSection=state.getString("ta_analytics_section","overview");
+            analyticsYearExpanded=state.getBoolean("ta_analytics_year_expanded",false);
+            if(!java.util.Arrays.asList("overview","trends","rhythm","people","content").contains(analyticsSection))analyticsSection="overview";
             analyticsUnit=state.getString("ta_analytics_unit","month");
             analyticsSelectedAuthor=state.getString("ta_analytics_author","");
             analyticsCalendarYear=state.getInt("ta_analytics_year",0);
@@ -295,6 +300,8 @@ public class MainActivity extends Activity {
             state.putInt("ta_search_scroll",pendingSearchScroll);
         state.putLong("ta_highlight_id",highlightId);state.putLong("ta_visible_id",lastVisibleMessage);state.putInt("ta_visible_top",lastVisibleTop);
         state.putLong("ta_pending_chat_id",pendingRestoreId);state.putInt("ta_pending_chat_top",pendingRestoreTop);
+        state.putString("ta_analytics_section",analyticsSection);
+        state.putBoolean("ta_analytics_year_expanded",analyticsYearExpanded);
         state.putString("ta_analytics_unit",analyticsUnit);
         state.putString("ta_analytics_author",analyticsSelectedAuthor);
         state.putInt("ta_analytics_year",analyticsCalendarYear);
@@ -1048,7 +1055,7 @@ public class MainActivity extends Activity {
             sideMenuItem(group,dialog,pane,"◷  Воспоминания двух чатов","Общая временная линия двух переписок",()->{
                 if(home){toast("Сначала открой переписку");return;}chooseDualChat("dual_memories");});
             sideMenuItem(group,dialog,pane,"▥  Анализ диалога","Графики, активность и сравнения",()->{
-                if(home){toast("Сначала открой переписку");return;}screen="analytics";showPage();});
+                if(home){toast("Сначала открой переписку");return;}analyticsSection="overview";screen="analytics";showPage();});
             sideMenuItem(group,dialog,pane,"⌁  В этот день","Сообщения в эту дату разных лет",()->{
                 if(home){toast("Сначала открой переписку");return;}
                 LocalDate today=LocalDate.now();showOnThisDay(today.getMonthValue(),today.getDayOfMonth());});
@@ -2065,7 +2072,7 @@ public class MainActivity extends Activity {
             if(x.contains("начало")){chatOffset=0;showPage();}
             else if(x.contains("конец")){worker.execute(()->{int n=db.totalMessages();runOnUiThread(()->{chatOffset=Math.max(0,n-PAGE);showPage();});});}
             else if(x.contains("Закрепл"))showPinList();
-            else if(x.contains("Анализ")){screen="analytics";showPage();}
+            else if(x.contains("Анализ")){analyticsSection="overview";screen="analytics";showPage();}
             else if(x.contains("Цвета"))participantSettings();else chatPicker();return true;
         });menu.show();
     }
@@ -2085,7 +2092,7 @@ public class MainActivity extends Activity {
         Runnable[] actions={
             ()->{screen="search";showPage();},
             this::chooseDate,
-            ()->{screen="analytics";showPage();},
+            ()->{analyticsSection="overview";screen="analytics";showPage();},
             ()->{screen="relationships";showPage();},
             ()->showChatActions(activeKey,activeName),
             this::showSideMenu
@@ -2231,7 +2238,7 @@ public class MainActivity extends Activity {
         subtitle.setSingleLine(true);subtitle.setEllipsize(TextUtils.TruncateAt.END);headings.addView(subtitle,p(-1,19));
         pdfButton=btn("PDF");pdfButton.setContentDescription("Сохранить переписку в PDF");head.addView(pdfButton,p(44,42));
         pdfButton.setOnClickListener(v->{if(!home&&"chat".equals(screen))chooseConversationPdf();});
-        headerActions=btn("≡");headerActions.setContentDescription("Другие инструменты переписки");head.addView(headerActions,p(42,42));
+        headerActions=btn("⋯");headerActions.setContentDescription("Другие инструменты переписки");head.addView(headerActions,p(42,42));
         headerActions.setOnClickListener(v->showConversationMenu(headerActions));
         title.setOnClickListener(v->openChatMediaFromHeader());
         headings.setOnClickListener(v->openChatMediaFromHeader());
@@ -2294,7 +2301,7 @@ public class MainActivity extends Activity {
             }
         });
         verticalTimeline=new VerticalTimeline();
-        scrollHost.addView(verticalTimeline,new FrameLayout.LayoutParams(px(25),-1,Gravity.END));
+        scrollHost.addView(verticalTimeline,new FrameLayout.LayoutParams(px(20),-1,Gravity.END));
         list=column();list.setPadding(px(3),px(6),px(3),px(14));scroll.addView(list);
         LinearLayout bottom=row();bottomPager=bottom;base.addView(bottom,p(-1,52));
         backPage=btn("‹ Назад");nextPage=btn("Далее ›");pageLabel=text("",12,SUB);pageLabel.setGravity(Gravity.CENTER);
@@ -2334,7 +2341,7 @@ public class MainActivity extends Activity {
         if(headerLogo!=null)headerLogo.setVisibility(View.GONE);
         if(folderButton!=null)folderButton.setVisibility(View.GONE);
         title.setText("media".equals(screen)? "Медиа":activeName);
-        subtitle.setText(screen.equals("chat")?"Переписка":screen.equals("media")?activeName:screen.equals("favorites")?"Твои сохранённые сообщения":screen.equals("analytics")?"Статистика · полностью офлайн":screen.equals("relationships")?"Личные события и этапы":screen.equals("echo")?"Повторяющиеся фразы":screen.equals("chronology")?"Периоды истории · вручную":screen.equals("cinema")?"Медиа по годам · офлайн":"Найди любое сообщение");
+        subtitle.setText(screen.equals("chat")?"Медиа — по названию чата":screen.equals("media")?activeName:screen.equals("favorites")?"Твои сохранённые сообщения":screen.equals("analytics")?"Статистика · полностью офлайн":screen.equals("relationships")?"Личные события и этапы":screen.equals("echo")?"Повторяющиеся фразы":screen.equals("chronology")?"Периоды истории · вручную":screen.equals("cinema")?"Медиа по годам · офлайн":"Найди любое сообщение");
     }
     private void configureBars(){
         filterBar.removeAllViews();searchArea.removeAllViews();
@@ -2551,6 +2558,9 @@ public class MainActivity extends Activity {
     /** Android Back and header Back follow the same history hierarchy. */
     private boolean backWithinHistory(){
         if(home)return false;
+        if("analytics".equals(screen)&&!"overview".equals(analyticsSection)){
+            selectAnalyticsSection("overview");return true;
+        }
         if("chronology".equals(screen)){
             if(!"overview".equals(chronologySection)){
                 chronologySection="overview";renderChronologyPage();
@@ -2968,7 +2978,8 @@ public class MainActivity extends Activity {
                         }else scroll.post(()->{if(token==loadToken&&"analytics".equals(screen))scroll.scrollTo(0,0);});
                         bottomPager.setVisibility(View.GONE);
                         verticalTimeline.setVisibility(View.GONE);
-                        status.setText("Статистика рассчитана локально · ничего не отправлено");
+                        // The dashboard itself explains offline processing; no duplicate status banner.
+                        status.setText("");status.setVisibility(View.GONE);
                     });
                     return;
                 }
@@ -3025,7 +3036,8 @@ public class MainActivity extends Activity {
                     // Keep it for galleries/favorites only when multiple pages exist.
                     bottomPager.setVisibility(favs&&count>getLimit()?View.VISIBLE:View.GONE);
                     int shown=gallery?attachments.size():messages.size();
-                    verticalTimeline.setVisibility("chat".equals(tab)?View.VISIBLE:View.GONE);
+                    // Keep the chat scrubber only for long histories, not a 14-message sample.
+                    verticalTimeline.setVisibility("chat".equals(tab)&&count>120?View.VISIBLE:View.GONE);
                     if("chat".equals(tab))verticalTimeline.setPosition(pos,count);
                     pageLabel.setText(count==0?"Нет данных":(pos+1)+"–"+(pos+shown)+" / "+count);
                     backPage.setEnabled(pos>0);nextPage.setEnabled(pos+shown<count);
@@ -3063,39 +3075,98 @@ public class MainActivity extends Activity {
         card.addView(label,p(-1,18));
         card.setContentDescription(caption+": "+value);
     }
+    private String friendlyAnalyticsDate(String date){
+        try{
+            ChatTrends.Moment parsed=ChatTrends.parse(date);
+            if(parsed!=null)return parsed.day.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy",Locale.forLanguageTag("ru-RU")));
+        }catch(Exception ignored){}
+        return date==null?"":date;
+    }
+    /** Minimal local navigation: do not render every heavy graph when the screen opens. */
+    private void selectAnalyticsSection(String next){
+        if(next.equals(analyticsSection))return;
+        analyticsSection=next;
+        if("analytics".equals(screen)&&lastAnalytics!=null){
+            final ChatAnalytics.Snapshot report=lastAnalytics;
+            list.removeAllViews();
+            renderAnalytics(report);
+            scroll.post(()->{if("analytics".equals(screen)&&next.equals(analyticsSection))scroll.scrollTo(0,0);});
+        }
+    }
+    private void analyticsNavChip(LinearLayout row,String label,String section){
+        boolean selected=section.equals(analyticsSection);
+        TextView chip=text(label,13,selected?FG:SUB);
+        chip.setTypeface(Typeface.create("sans-serif-medium",selected?Typeface.BOLD:Typeface.NORMAL));
+        chip.setGravity(Gravity.CENTER);
+        chip.setMaxLines(1);
+        chip.setEllipsize(TextUtils.TruncateAt.END);
+        chip.setBackground(new RippleDrawable(
+            ColorStateList.valueOf(themeIndex==2?0x2279a8ce:0x447ad2ff),
+            selected?outlined(CHIP,12,true):outlined(PANEL,12,false),
+            shape(0xffffffff,12)));
+        chip.setContentDescription("Раздел анализа: "+label);
+        chip.setSelected(selected);
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,px(39),1f);
+        params.setMargins(px(3),px(2),px(3),px(2));
+        row.addView(chip,params);
+        chip.setOnClickListener(v->selectAnalyticsSection(section));
+    }
+    private void analyticsSectionHeading(String label,String hint){
+        TextView heading=text(label,18,FG);
+        heading.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+        heading.setPadding(px(11),px(13),px(10),px(4));
+        list.addView(heading,p(-1,-2));
+        TextView subtitle=text(hint,12,SUB);
+        subtitle.setPadding(px(11),0,px(11),px(8));
+        list.addView(subtitle,p(-1,-2));
+    }
     private void renderAnalytics(ChatAnalytics.Snapshot r){
-        TextView heading=text("Анализ переписки",21,FG);heading.setTypeface(null,Typeface.BOLD);
-        heading.setPadding(px(10),px(9),px(8),px(4));list.addView(heading);
-        TextView note=text("Самое важное о переписке · только на устройстве",12,SUB);
-        note.setPadding(px(11),0,px(11),px(11));list.addView(note);
-
-        // A useful first screen: key numbers before explanations and long charts.
-        LinearLayout glance=row();glance.setGravity(Gravity.TOP);
-        glance.setPadding(px(5),0,px(5),px(2));list.addView(glance,p(-1,-2));
-        addAnalyticsMetric(glance,"Сообщений",r.totalMessages);
-        addAnalyticsMetric(glance,"Людей",r.people.size());
-        addAnalyticsMetric(glance,"Медиа",r.totalMedia);
-
-        Button expandOverview=btn("Подробные показатели  ▾");
-        LinearLayout.LayoutParams expandParams=p(-1,42);
-        expandParams.setMargins(px(5),px(7),px(5),px(2));
-        list.addView(expandOverview,expandParams);
-        LinearLayout overview=analyticsCard("Общая картина");
-        overview.setVisibility(View.GONE);
-        expandOverview.setOnClickListener(v->{
-            boolean show=overview.getVisibility()!=View.VISIBLE;
-            overview.setVisibility(show?View.VISIBLE:View.GONE);
-            expandOverview.setText(show?"Скрыть подробные показатели  ▴":"Подробные показатели  ▾");
-        });
-        analyticsLine(overview,"Сообщений",r.totalMessages);
-        analyticsLine(overview,"Участников / отправителей",r.people.size());
-        analyticsLine(overview,"Слов",r.totalWords);
-        analyticsLine(overview,"Символов (Unicode)",r.totalCharacters);
-        analyticsLine(overview,"Медиа и файлов",r.totalMedia);
-        if(!r.firstDay.isEmpty())analyticsText(overview,"Период: "+r.firstDay+" — "+r.lastDay+" · активных дней: "+r.days.size(),SUB,12);
-        if(r.totalMessages==0){analyticsText(overview,"В этой переписке пока нет сообщений.",SUB,13);return;}
-        renderWrappedCard(r);
-        renderTimeAnalytics(r);
+        // One calm header, a small section switcher, then ONLY the requested panel.
+        LinearLayout hero=column();
+        hero.setPadding(px(14),px(10),px(14),px(10));
+        int heroTop=themeIndex==2?0xffe0edf8:mixColors(PANEL,ACCENT,.14f);
+        int heroBottom=themeIndex==2?0xffedf5fb:mixColors(PANEL,BG,.18f);
+        hero.setBackground(gradient(heroTop,heroBottom,19));
+        LinearLayout.LayoutParams hp=p(-1,-2);
+        hp.setMargins(px(5),px(3),px(5),px(9));
+        list.addView(hero,hp);
+        TextView eyebrow=text("ЛОКАЛЬНАЯ СТАТИСТИКА",10,ACCENT);
+        eyebrow.setTypeface(null,Typeface.BOLD);
+        eyebrow.setLetterSpacing(.1f);
+        hero.addView(eyebrow,p(-1,-2));
+        TextView heading=text("Анализ переписки",20,FG);
+        heading.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+        heading.setPadding(0,px(5),0,px(4));
+        hero.addView(heading,p(-1,-2));
+        TextView explanation=text("Только на устройстве · ничего не отправляем",11,SUB);
+        hero.addView(explanation,p(-1,-2));
+        LinearLayout navigation=column();
+        navigation.setPadding(px(2),0,px(2),px(5));
+        list.addView(navigation,p(-1,-2));
+        LinearLayout first=row();navigation.addView(first,p(-1,44));
+        analyticsNavChip(first,"Обзор","overview");
+        analyticsNavChip(first,"Графики","trends");
+        analyticsNavChip(first,"Ритм","rhythm");
+        LinearLayout second=row();navigation.addView(second,p(-1,44));
+        analyticsNavChip(second,"Участники","people");
+        analyticsNavChip(second,"Медиа и слова","content");
+        if(r.totalMessages==0){
+            LinearLayout empty=analyticsCard("Нет сообщений для анализа");
+            analyticsText(empty,"Импортируй переписку — здесь появятся её показатели, графики и медиатека.",SUB,13);
+            return;
+        }
+        if("trends".equals(analyticsSection)){
+            analyticsSectionHeading("Динамика сообщений","Дни, недели, месяцы, годы — с точными значениями.");
+            renderTimeAnalytics(r);
+            return;
+        }
+        if("rhythm".equals(analyticsSection)){
+            analyticsSectionHeading("Когда вы общаетесь","Время, календарь и распределение по дням недели.");
+            renderTimeAnalytics(r);
+            return;
+        }
+        if("people".equals(analyticsSection)){
+            analyticsSectionHeading("Участники переписки","Вклад каждого отправителя и сравнение активности.");
         LinearLayout people=analyticsCard("Кто сколько написал");
         int shown=0;
         for(ChatAnalytics.Person person:r.people){
@@ -3109,13 +3180,30 @@ public class MainActivity extends Activity {
             if(weight>0){View filled=new View(this);filled.setBackground(shape(authorColor(person.display),8));
                 bar.addView(filled,new LinearLayout.LayoutParams(0,-1,weight));}
             if(weight<1000)bar.addView(new View(this),new LinearLayout.LayoutParams(0,-1,1000-weight));
-            analyticsText(people,"Слов: "+person.words+" ("+fmtPct(ChatAnalytics.percent(person.words,r.totalWords))+"%)"+
-                " · символов: "+person.characters+" · вложений: "+person.attachments+
-                " ("+fmtPct(ChatAnalytics.percent(person.attachments,r.totalMedia))+"%)",SUB,12);
-            analyticsText(people,"Фото: "+person.kind("image")+" · кружков: "+person.kind("round")+
-                " · голосовых: "+person.kind("voice")+" · видео: "+person.kind("video")+
-                " · GIF: "+person.kind("gif")+" · файлов: "+person.kind("file")+
-                " · музыки: "+person.kind("audio")+" · стикеров: "+person.kind("sticker"),SUB,11);
+            analyticsText(people,"Слов: "+person.words+"  ·  вложений: "+person.attachments,SUB,12);
+            Button morePerson=btn("Подробности  ▾");
+            morePerson.setContentDescription("Подробнее об участнике "+person.display);
+            LinearLayout.LayoutParams moreParams=p(-1,38);
+            moreParams.setMargins(px(4),px(1),px(4),px(11));people.addView(morePerson,moreParams);
+            LinearLayout details=column();details.setPadding(px(8),px(2),px(6),px(10));
+            details.setVisibility(View.GONE);people.addView(details,p(-1,-2));
+            morePerson.setOnClickListener(v->{
+                boolean open=details.getVisibility()!=View.VISIBLE;
+                if(open&&details.getChildCount()==0){
+                    analyticsText(details,"Слов: "+person.words+" ("+
+                        fmtPct(ChatAnalytics.percent(person.words,r.totalWords))+"%)"+
+                        " · символов: "+person.characters,SUB,12);
+                    analyticsText(details,"Вложений: "+person.attachments+" ("+
+                        fmtPct(ChatAnalytics.percent(person.attachments,r.totalMedia))+"%)",SUB,12);
+                    String[] keys={"image","round","voice","video","gif","file","audio","sticker"};
+                    String[] names={"Фото","Кружки","Голосовые","Видео","GIF","Файлы","Музыка","Стикеры"};
+                    for(int type=0;type<keys.length;type++)
+                        if(person.kind(keys[type])>0)analyticsLine(details,names[type],person.kind(keys[type]));
+                    if(person.attachments==0)analyticsText(details,"Вложений пока нет",SUB,12);
+                }
+                details.setVisibility(open?View.VISIBLE:View.GONE);
+                morePerson.setText(open?"Свернуть подробности  ▴":"Подробности  ▾");
+            });
         }
         if(r.people.size()>35)analyticsText(people,"Показаны первые 35 участников из "+r.people.size()+". В общих итогах учтены все.",SUB,12);
         LinearLayout response=analyticsCard("Интервал между сообщениями участников");
@@ -3124,6 +3212,11 @@ public class MainActivity extends Activity {
                 fmtPct(r.meanSwitchMinutes)+" минут · пар сообщений: "+r.switchCount,FG,14);
             analyticsText(response,"Учитываются соседние сообщения разных отправителей с датой и перерывом до 24 часов. Это приблизительная оценка темпа общения, а не подтверждённое время ответа на конкретное сообщение. В группах точность особенно ограничена.",SUB,11);
         }else analyticsText(response,"Не удалось собрать подходящие пары сообщений.",SUB,12);
+            renderParticipantComparison(r);
+            return;
+        }
+        if("content".equals(analyticsSection)){
+            analyticsSectionHeading("О чём переписка","Фотографии, видео, голосовые, частые слова и активные даты.");
         LinearLayout media=analyticsCard("Медиатека по типам");
         String[] kinds={"image","video","round","voice","audio","gif","sticker","file"};
         String[] titles={"Фото","Обычные видео","Видеосообщения","Голосовые","Музыка/аудио","GIF","Стикеры","Файлы"};
@@ -3146,6 +3239,59 @@ public class MainActivity extends Activity {
             ranked.sort((a,b)->{int diff=Long.compare(b.getValue(),a.getValue());return diff!=0?diff:a.getKey().compareTo(b.getKey());});
             for(int i=0;i<Math.min(8,ranked.size());i++)analyticsLine(days,ranked.get(i).getKey(),ranked.get(i).getValue());
         }
+            return;
+        }
+        analyticsSectionHeading("Главное о переписке","Короткая сводка без длинных таблиц и графиков.");
+        LinearLayout glance=row();glance.setGravity(Gravity.TOP);
+        glance.setPadding(px(5),0,px(5),px(6));list.addView(glance,p(-1,-2));
+        addAnalyticsMetric(glance,"Сообщений",r.totalMessages);
+        addAnalyticsMetric(glance,"Людей",r.people.size());
+        addAnalyticsMetric(glance,"Медиа",r.totalMedia);
+
+        LinearLayout snapshot=analyticsCard("Сводка");
+        analyticsLine(snapshot,"Слов",r.totalWords);
+        analyticsLine(snapshot,"Активных дней",r.days.size());
+        if(!r.firstDay.isEmpty())
+            analyticsText(snapshot,"Период: "+friendlyAnalyticsDate(r.firstDay)+" — "+friendlyAnalyticsDate(r.lastDay),SUB,12);
+        Button expandOverview=btn("Все показатели  ▾");
+        LinearLayout.LayoutParams expandParams=p(-1,42);
+        expandParams.setMargins(px(5),px(2),px(5),px(3));
+        list.addView(expandOverview,expandParams);
+        LinearLayout overview=analyticsCard("Подробные показатели");
+        overview.setVisibility(View.GONE);
+        expandOverview.setOnClickListener(v->{
+            boolean show=overview.getVisibility()!=View.VISIBLE;
+            overview.setVisibility(show?View.VISIBLE:View.GONE);
+            expandOverview.setText(show?"Скрыть показатели  ▴":"Все показатели  ▾");
+        });
+        analyticsLine(overview,"Сообщений",r.totalMessages);
+        analyticsLine(overview,"Участников / отправителей",r.people.size());
+        analyticsLine(overview,"Слов",r.totalWords);
+        analyticsLine(overview,"Символов (Unicode)",r.totalCharacters);
+        analyticsLine(overview,"Медиа и файлов",r.totalMedia);
+        if(!r.firstDay.isEmpty())
+            analyticsText(overview,"Активных дней: "+r.days.size(),SUB,12);
+
+        if(r.trends!=null&&!r.trends.all.days.isEmpty()){
+            Button openYear=btn("✦ Итоги выбранного года  ▾");
+            LinearLayout.LayoutParams yearButton=p(-1,47);
+            yearButton.setMargins(px(5),px(8),px(5),px(5));
+            list.addView(openYear,yearButton);
+            LinearLayout yearDetails=column();
+            yearDetails.setVisibility(analyticsYearExpanded?View.VISIBLE:View.GONE);
+            list.addView(yearDetails,p(-1,-2));
+            if(analyticsYearExpanded){
+                renderWrappedCard(r,yearDetails);
+                openYear.setText("✦ Свернуть итоги года  ▴");
+            }
+            openYear.setOnClickListener(v->{
+                boolean opening=yearDetails.getVisibility()!=View.VISIBLE;
+                analyticsYearExpanded=opening;
+                if(opening&&yearDetails.getChildCount()==0)renderWrappedCard(r,yearDetails);
+                yearDetails.setVisibility(opening?View.VISIBLE:View.GONE);
+                openYear.setText(opening?"✦ Свернуть итоги года  ▴":"✦ Итоги выбранного года  ▾");
+            });
+        }
         Button methodology=btn("Как рассчитана статистика  ▾");
         LinearLayout.LayoutParams explainButton=p(-1,43);
         explainButton.setMargins(px(6),px(12),px(6),px(4));
@@ -3160,13 +3306,13 @@ public class MainActivity extends Activity {
         analyticsText(about,"Отправители объединяются без учёта регистра и лишних пробелов. Каждое вложение считается отдельно; одно сообщение может содержать несколько файлов. Слова считаются по Unicode-буквам и цифрам. Системные сообщения из старых импортов могут иметь ошибочно назначенного автора — для уточнения нужен повторный импорт HTML.",SUB,12);
         analyticsText(about,"Число медиа основано на индексированных ссылках HTML: отсутствующий на диске файл тоже учитывается. Получатель в группе не определяется только по имени отправителя. Нажатие на слово открывает поиск.",SUB,12);
     }
-    private void renderWrappedCard(ChatAnalytics.Snapshot report){
+    private void renderWrappedCard(ChatAnalytics.Snapshot report,LinearLayout destination){
         if(report.trends==null||report.trends.all.days.isEmpty())return;
         int latest=ChatTrends.latestYear(report.trends.all);
         int first=ChatTrends.earliestYear(report.trends.all);
         if(analyticsCalendarYear<first||analyticsCalendarYear>latest)analyticsCalendarYear=latest;
         WrappedSummary wrap=WrappedSummary.create(report.trends,analyticsCalendarYear);
-        LinearLayout card=analyticsCard("✦ Итоги года · Telegram Archive Wrapped");
+        LinearLayout card=analyticsCard("✦ Итоги года",destination);
         TextView choose=text("◉ Выбран "+wrap.year+" год  ·  изменить год",15,ACCENT);
         choose.setPadding(px(7),px(12),px(7),px(12));card.addView(choose);
         choose.setOnClickListener(v->{
@@ -3225,8 +3371,10 @@ public class MainActivity extends Activity {
         });
     }
     private void renderTimeAnalytics(ChatAnalytics.Snapshot report){
-        LinearLayout controls=analyticsCard("Графики активности");
+        boolean graphs="trends".equals(analyticsSection);
+        LinearLayout controls=analyticsCard(graphs?"Графики активности":"Настройки времени");
         analyticsText(controls,"Считаются по времени из экспорта Telegram. Часовой пояс берётся из исходного экспорта без пересчёта.",SUB,11);
+        if(graphs){
         HorizontalScrollView switchScroll=new HorizontalScrollView(this);switchScroll.setHorizontalScrollBarEnabled(false);
         LinearLayout switches=row();
         switchScroll.addView(switches);controls.addView(switchScroll,p(-1,-2));
@@ -3239,6 +3387,7 @@ public class MainActivity extends Activity {
             chip.setBackground(shape(period.equals(analyticsUnit)?ACCENT:CHIP,13));
             LinearLayout.LayoutParams pp=p(-2,-2);pp.rightMargin=px(5);switches.addView(chip,pp);
             chip.setOnClickListener(v->{analyticsUnit=period;refreshAnalyticsView();});
+        }
         }
         String chosenName="Все участники";
         for(ChatAnalytics.Person person:report.people)if(person.key.equals(analyticsSelectedAuthor))chosenName=person.display;
@@ -3255,6 +3404,7 @@ public class MainActivity extends Activity {
             }).setNegativeButton("Отмена",null).show();
         });
         ChatTrends.Activity activity=report.trends.forPerson(analyticsSelectedAuthor);
+        if(graphs){
         ChatTrends.Series values=ChatTrends.series(activity,analyticsUnit);
         if(values.values.length==0){analyticsText(controls,"Нет сообщений с распознанной датой.",SUB,13);}
         else {
@@ -3284,6 +3434,8 @@ public class MainActivity extends Activity {
             analyticsBarChart(singleYear,yearMonths.labels,yearMonths.details,yearMonths.values,29,114);
             analyticsText(singleYear,"Перечислены все месяцы с января по декабрь; длина полосы показывает количество сообщений.",SUB,11);
         }
+            return;
+        }
         LinearLayout hours=analyticsCard("Когда пишут · 00:00–24:00");
         analyticsText(hours,"Час отправки сообщения по исходной отметке времени, 00:00–23:59.",SUB,11);
         ArrayList<String> hLabels=new ArrayList<>(),hFull=new ArrayList<>();
@@ -3299,7 +3451,6 @@ public class MainActivity extends Activity {
         analyticsText(heat,AnalyticsDisplayCopy.HEATMAP_DESCRIPTION,SUB,12);
         analyticsHeatmap(heat,activity);
         renderAnnualCalendar(activity);
-        renderParticipantComparison(report);
         LinearLayout facts=analyticsCard("Интересные факты об активности");
         analyticsLine(facts,"Дней с сообщениями",activity.days.size());
         analyticsLine(facts,"Самая длинная серия активных дней",activity.longestStreak());
@@ -3547,10 +3698,15 @@ public class MainActivity extends Activity {
         int b=(int)(Color.blue(from)*(1-ratio)+Color.blue(to)*ratio);
         return Color.rgb(r,g,b);
     }
-    private LinearLayout analyticsCard(String caption){
-        LinearLayout card=column();card.setPadding(px(13),px(12),px(13),px(14));card.setBackground(shape(PANEL,18));
-        LinearLayout.LayoutParams lp=p(-1,-2);lp.setMargins(px(5),px(5),px(5),px(11));list.addView(card,lp);
-        TextView title=text(caption,16,FG);title.setTypeface(null,Typeface.BOLD);title.setPadding(0,0,0,px(8));card.addView(title);
+    private LinearLayout analyticsCard(String caption){return analyticsCard(caption,list);}
+    private LinearLayout analyticsCard(String caption,LinearLayout destination){
+        LinearLayout card=column();card.setPadding(px(14),px(13),px(14),px(15));
+        card.setBackground(glass(PANEL,18));
+        LinearLayout.LayoutParams lp=p(-1,-2);lp.setMargins(px(5),px(5),px(5),px(11));
+        destination.addView(card,lp);
+        TextView title=text(caption,16,FG);
+        title.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+        title.setPadding(0,0,0,px(9));card.addView(title);
         return card;
     }
     private void analyticsLine(LinearLayout parent,String name,long value){
@@ -3571,7 +3727,12 @@ public class MainActivity extends Activity {
         return m.find()?m.group(1):clip(s,22);
     }
     private void dateSeparator(String date){
-        TextView d=text(date.isEmpty()?"Дата неизвестна":date,11,SUB);d.setGravity(Gravity.CENTER);
+        String label=date.isEmpty()?"Дата неизвестна":date;
+        try{
+            ChatTrends.Moment parsed=ChatTrends.parse(date);
+            if(parsed!=null)label=parsed.day.format(java.time.format.DateTimeFormatter.ofPattern("d MMMM yyyy",Locale.forLanguageTag("ru-RU")));
+        }catch(Exception ignored){} // Unrecognized export dates remain visible verbatim.
+        TextView d=text(label,11,SUB);d.setGravity(Gravity.CENTER);
         d.setPadding(px(12),px(7),px(12),px(7));d.setBackground(shape(0xff23384b,14));
         LinearLayout r=row();r.setGravity(Gravity.CENTER);LinearLayout.LayoutParams rp=p(-1,38);rp.topMargin=px(10);list.addView(r,rp);r.addView(d);
     }
@@ -6632,9 +6793,11 @@ public class MainActivity extends Activity {
        VerticalTimeline(){super(MainActivity.this);}
        void setPosition(int p,int c){position=p;count=c;invalidate();}
        @Override protected void onDraw(Canvas c){
-         super.onDraw(c);float x=getWidth()-px(10),top=px(13),bottom=getHeight()-px(13);
-         brush.setColor(0xff42657f);brush.setStrokeWidth(px(4));c.drawLine(x,top,x,bottom,brush);
-         float ratio=count<=1?0:(float)position/(count-1);brush.setColor(ACCENT);c.drawCircle(x,top+(bottom-top)*ratio,px(5),brush);
+         super.onDraw(c);float x=getWidth()-px(5),top=px(13),bottom=getHeight()-px(13);
+         brush.setColor(themeIndex==2?0x554b7897:0x88536f88);
+         brush.setStrokeWidth(px(2));c.drawLine(x,top,x,bottom,brush);
+         float ratio=count<=1?0:(float)position/(count-1);
+         brush.setColor(ACCENT);c.drawCircle(x,top+(bottom-top)*ratio,px(3),brush);
        }
        @Override public boolean onTouchEvent(MotionEvent e){
          if(!screen.equals("chat"))return false;
