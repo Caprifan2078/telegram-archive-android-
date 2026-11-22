@@ -3180,13 +3180,30 @@ public class MainActivity extends Activity {
             if(weight>0){View filled=new View(this);filled.setBackground(shape(authorColor(person.display),8));
                 bar.addView(filled,new LinearLayout.LayoutParams(0,-1,weight));}
             if(weight<1000)bar.addView(new View(this),new LinearLayout.LayoutParams(0,-1,1000-weight));
-            analyticsText(people,"Слов: "+person.words+" ("+fmtPct(ChatAnalytics.percent(person.words,r.totalWords))+"%)"+
-                " · символов: "+person.characters+" · вложений: "+person.attachments+
-                " ("+fmtPct(ChatAnalytics.percent(person.attachments,r.totalMedia))+"%)",SUB,12);
-            analyticsText(people,"Фото: "+person.kind("image")+" · кружков: "+person.kind("round")+
-                " · голосовых: "+person.kind("voice")+" · видео: "+person.kind("video")+
-                " · GIF: "+person.kind("gif")+" · файлов: "+person.kind("file")+
-                " · музыки: "+person.kind("audio")+" · стикеров: "+person.kind("sticker"),SUB,11);
+            analyticsText(people,"Слов: "+person.words+"  ·  вложений: "+person.attachments,SUB,12);
+            Button morePerson=btn("Подробности  ▾");
+            morePerson.setContentDescription("Подробнее об участнике "+person.display);
+            LinearLayout.LayoutParams moreParams=p(-1,38);
+            moreParams.setMargins(px(4),px(1),px(4),px(11));people.addView(morePerson,moreParams);
+            LinearLayout details=column();details.setPadding(px(8),px(2),px(6),px(10));
+            details.setVisibility(View.GONE);people.addView(details,p(-1,-2));
+            morePerson.setOnClickListener(v->{
+                boolean open=details.getVisibility()!=View.VISIBLE;
+                if(open&&details.getChildCount()==0){
+                    analyticsText(details,"Слов: "+person.words+" ("+
+                        fmtPct(ChatAnalytics.percent(person.words,r.totalWords))+"%)"+
+                        " · символов: "+person.characters,SUB,12);
+                    analyticsText(details,"Вложений: "+person.attachments+" ("+
+                        fmtPct(ChatAnalytics.percent(person.attachments,r.totalMedia))+"%)",SUB,12);
+                    String[] keys={"image","round","voice","video","gif","file","audio","sticker"};
+                    String[] names={"Фото","Кружки","Голосовые","Видео","GIF","Файлы","Музыка","Стикеры"};
+                    for(int type=0;type<keys.length;type++)
+                        if(person.kind(keys[type])>0)analyticsLine(details,names[type],person.kind(keys[type]));
+                    if(person.attachments==0)analyticsText(details,"Вложений пока нет",SUB,12);
+                }
+                details.setVisibility(open?View.VISIBLE:View.GONE);
+                morePerson.setText(open?"Свернуть подробности  ▴":"Подробности  ▾");
+            });
         }
         if(r.people.size()>35)analyticsText(people,"Показаны первые 35 участников из "+r.people.size()+". В общих итогах учтены все.",SUB,12);
         LinearLayout response=analyticsCard("Интервал между сообщениями участников");
