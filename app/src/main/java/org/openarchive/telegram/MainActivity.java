@@ -2914,6 +2914,8 @@ public class MainActivity extends Activity {
     private int getLimit(){return screen.equals("media")?MEDIA_PAGE:PAGE;}
     private void setOffset(int x){switch(screen){case "media":mediaOffset=x;break;case "search":searchOffset=x;break;case "favorites":favOffset=x;break;default:chatOffset=x;}}
     private void showPage(){
+        // Floating video is chat-only; never leave a detached grey surface over other pages.
+        if((home||!"chat".equals(screen))&&floatingPanel!=null)closeFloatingRound();
         if(mediaRecycler!=null){
             boolean showingGallery="media".equals(screen)&&!home;
             mediaRecycler.setVisibility(showingGallery?View.VISIBLE:View.GONE);
@@ -5201,6 +5203,8 @@ public class MainActivity extends Activity {
                 }
                 wrap.requestLayout();
             }
+            // Replace an earlier floating video rather than leaving its stale window visible.
+            if(floatingPanel!=null)closeFloatingRound();
             startRoundPlayback(a,holder,preview,overlay);
         });
         holder.setOnLongClickListener(v->{mediaActions(a);return true;});
@@ -6713,6 +6717,8 @@ public class MainActivity extends Activity {
         handler.removeCallbacks(deferredReadingSave);
         handler.removeCallbacks(deferredFloatingCheck);
         saveReadingProgress();
+        // Releasing a codec is insufficient: the floating FrameLayout would remain grey.
+        closeFloatingRound();
         stopPlayback();
         super.onPause();
     }
