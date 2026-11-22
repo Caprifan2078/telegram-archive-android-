@@ -1,4 +1,4 @@
-name: QA visual coherence — 23 November 2026
+name: QA chat and analytics visual cohesion — 2026-11-23
 on:
   push:
     branches: [qa/analytics-chat-cohesion-audit-20261123]
@@ -6,7 +6,7 @@ on:
 permissions:
   contents: read
 jobs:
-  synthetic-visual-walkthrough:
+  visual-review-and-regressions:
     if: github.event.repository.private == false
     runs-on: ubuntu-latest
     timeout-minutes: 48
@@ -23,14 +23,29 @@ jobs:
           gradle-version: '8.11.1'
       - name: Android SDK
         run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
-      - name: Build installable QA and screenshot instrumentation
-        run: gradle --no-daemon --max-workers=2 assembleHistoryRoundQa assembleHistoryRoundQaAndroidTest -PqaHistoryRoundInstrumentation=true
+      - name: Compile, run JVM tests and package standalone QA variant
+        run: gradle --no-daemon --max-workers=2 assembleVisualCoherenceQa assembleVisualCoherenceQaAndroidTest testVisualCoherenceQaUnitTest -PqaVisualCoherenceInstrumentation=true
+      - name: Check signed identity and keep existing user APKs untouched
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/visualCoherenceQa/app-visualCoherenceQa.apk
+          test -s "$apk"
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/apksigner" verify --verbose "$apk"
+          "$tools/aapt" dump badging "$apk" | grep -q "package: name='org.openarchive.telegram.qa.visualcoherence20261123'"
+          if "$tools/aapt" dump permissions "$apk" | grep -q 'android.permission.INTERNET'; then
+            echo "Unexpected INTERNET permission"; exit 1
+          fi
+          mkdir -p deliver
+          cp "$apk" deliver/TelegramArchiveViewer_VisualQA_20261123.apk
+          (cd deliver && sha256sum *.apk > SHA256SUMS.txt)
       - name: Enable emulator KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Tap screens and capture eleven real Android 11 screens
+      - name: Tap real screens and run Android 11 UI regressions
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
@@ -39,22 +54,15 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-boot-timeout: 420
-          script: |
-            set +e
-            gradle --no-daemon --max-workers=2 connectedHistoryRoundQaAndroidTest -PqaHistoryRoundInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.QaVisualAuditScreenshotsTest'
-            outcome=$?
-            mkdir -p ui-captures/before
-            adb shell ls -al /sdcard/Pictures/TelegramViewerVisualAudit || true
-            adb pull /sdcard/Pictures/TelegramViewerVisualAudit/. ui-captures/before/ || true
-            exit "$outcome"
-      - name: Print selected PNG captures for visual code review
+          script: gradle --no-daemon --max-workers=2 connectedVisualCoherenceQaAndroidTest -PqaVisualCoherenceInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.QaVisualAuditScreenshotsTest,org.openarchive.telegram.AnalyticsSectionNavigationRegressionTest,org.openarchive.telegram.QaUiChatNavigationRegressionTest,org.openarchive.telegram.UiSmokeTest,org.openarchive.telegram.ChronologyHubRegressionTest,org.openarchive.telegram.MediaInfiniteGalleryRegressionTest' && mkdir -p ui-captures/review && adb pull /sdcard/Pictures/TelegramViewerVisualAudit/. ui-captures/review/
+      - name: Print selected synthetic Android PNG captures for inspection
         if: always()
         shell: bash
         run: |
           python3 - <<'PY'
           import base64,pathlib
-          folder=pathlib.Path("ui-captures/before")
-          for name in ("05-chat","11-analytics"):
+          folder=pathlib.Path("ui-captures/review")
+          for name in ("05-chat","07-chat-menu","09-chronology-home","11-analytics","12-analytics-graphs","14-analytics-people","15-analytics-content"):
               p=folder/(name+".png")
               if not p.exists():
                   print("UI_CAPTURE_MISSING "+str(p));continue
@@ -63,20 +71,31 @@ jobs:
               for pos in range(0,len(encoded),12000):print(encoded[pos:pos+12000])
               print("UI_CAPTURE_END "+name)
           PY
-      - name: Upload original synthetic walkthrough screenshots
+      - name: Upload 16 real synthetic screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: TelegramViewer-Visual-Walkthrough-20261123
+          name: TelegramViewer-16-Screen-Visual-Audit-20261123
           retention-days: 7
           if-no-files-found: warn
           path: ui-captures/
-      - name: Upload instrumentation reports
+      - name: Upload Android instrumentation results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: TelegramViewer-Visual-Walkthrough-Test-Reports
+          name: TelegramViewer-Visual-UI-Test-Reports-20261123
           retention-days: 7
           path: |
             app/build/outputs/androidTest-results/
             app/build/reports/androidTests/
+            app/build/test-results/
+      - name: Upload signed and verified standalone review APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TelegramViewer-Visual-Cohesion-QA-APK-20261123
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            deliver/*.apk
+            deliver/SHA256SUMS.txt
