@@ -94,7 +94,13 @@ final class ArchiveFileImport {
             if(selected==null)throw new IOException("В архиве не обнаружены messages.html или messages2.html. Экспортируй чат Telegram в формате HTML");
             progress.update("Распаковано файлов: "+budget.count+"; найден экспорт Telegram");
             return selected;
-        }catch(Exception fail){deleteTree(root);throw fail;}
+        }catch(Exception fail){
+            deleteTree(root);
+            if((password==null||password.length==0)&&isPasswordFailure(fail))
+                throw new PasswordRequired(suffix.toUpperCase(Locale.ROOT)+
+                    " защищён паролем. Введи пароль от архива.",fail);
+            throw fail;
+        }
     }
     private static File safeFile(File root,String raw) throws IOException{
         if(raw==null)throw new IOException("Отсутствует имя файла");
