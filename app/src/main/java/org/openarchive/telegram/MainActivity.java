@@ -147,6 +147,7 @@ public class MainActivity extends Activity {
     private VerticalTimeline verticalTimeline;
     private final int[] participantColors={0xff315c79,0xff665184,0xff326c65,0xff75513f,0xff5d607f,0xff724d68,0xff52683a,0xff426884};
     private LinearLayout base,list,filterBar,bottomNav,searchArea,toolArea,savedComposer;
+    private LinearLayout importProgressPanel;private TextView importProgressText;
     private MediaZoomRecyclerView mediaRecycler;
     private MediaGalleryAdapter mediaAdapter;
     private androidx.recyclerview.widget.GridLayoutManager mediaLayout;
@@ -2185,6 +2186,19 @@ public class MainActivity extends Activity {
         headings.setContentDescription("Открыть медиатеку переписки");
         folderButton=btn("＋");folderButton.setTextSize(22);head.addView(folderButton,p(41,42));
         folderButton.setOnClickListener(v->chooseFolder());
+        importProgressPanel=row();importProgressPanel.setGravity(Gravity.CENTER_VERTICAL);
+        importProgressPanel.setPadding(px(12),px(8),px(12),px(8));
+        importProgressPanel.setBackground(outlined(PANEL,13,false));
+        android.widget.ProgressBar spinner=new android.widget.ProgressBar(this,null,
+            android.R.attr.progressBarStyleSmall);
+        spinner.setIndeterminate(true);
+        importProgressPanel.addView(spinner,p(28,28));
+        importProgressText=text("Готовлю импорт…",13,FG);
+        importProgressText.setPadding(px(12),0,0,0);
+        importProgressPanel.addView(importProgressText,new LinearLayout.LayoutParams(0,-2,1));
+        importProgressPanel.setVisibility(View.GONE);
+        LinearLayout.LayoutParams progressSize=p(-1,46);progressSize.bottomMargin=px(6);
+        base.addView(importProgressPanel,progressSize);
         playerStrip=row();playerStrip.setVisibility(View.GONE);
         playerStrip.setPadding(px(10),0,px(5),0);playerStrip.setBackground(outlined(PANEL,16,true));
         LinearLayout.LayoutParams playerBounds=p(-1,49);playerBounds.bottomMargin=px(6);base.addView(playerStrip,playerBounds);
@@ -2656,11 +2670,26 @@ public class MainActivity extends Activity {
         }).setNegativeButton("Отмена",null).show();
     }
     /** Index a standalone Telegram HTML without replacing another chat or inventing media. */
+    /** Only actual extraction/import stages; no fabricated percent completed. */
+    private void beginImportProgress(String message){
+        if(importProgressPanel!=null)importProgressPanel.setVisibility(View.VISIBLE);
+        updateImportProgress(message);
+    }
+    private void updateImportProgress(String message){
+        if(importProgressText!=null)importProgressText.setText(message);
+        if(status!=null){status.setVisibility(View.VISIBLE);status.setText(message);}
+    }
+    private void postImportProgress(String message){
+        runOnUiThread(()->{if(importing)updateImportProgress(message);});
+    }
+    private void endImportProgress(){
+        if(importProgressPanel!=null)importProgressPanel.setVisibility(View.GONE);
+    }
     private void importSingleHtml(Uri source,String label){
         if(importing)return;
         importing=true;
         if(folderButton!=null)folderButton.setEnabled(false);
-        status.setText("Читаю HTML и создаю переписку…");
+        beginImportProgress("Читаю HTML и создаю переписку…");
         final String key=UUID.randomUUID().toString().replace("-","");
         final java.io.File root=new java.io.File(new java.io.File(getFilesDir(),"telegram_imports"),key);
         worker.execute(()->{
@@ -2682,11 +2711,12 @@ public class MainActivity extends Activity {
                 try{
                     TelegramImporter.importFiles(getContentResolver(),
                         new DocumentFolder(getContentResolver(),root),fresh,
-                        message->runOnUiThread(()->status.setText(message)));
+                        this::postImportProgress);
                     if(fresh.totalMessages()==0)throw new IOException("Не найдены сообщения Telegram в HTML");
                 }finally{fresh.close();}
                 runOnUiThread(()->{
                     importing=false;
+                    endImportProgress();
                     if(folderButton!=null)folderButton.setEnabled(true);
                     try{
                         JSONObject entry=new JSONObject();
@@ -2700,6 +2730,7 @@ public class MainActivity extends Activity {
                 deleteDatabase("telegram_"+key+".db");
                 runOnUiThread(()->{
                     importing=false;
+                    endImportProgress();
                     if(folderButton!=null)folderButton.setEnabled(true);
                     status.setText("Импорт HTML не завершён");
                     new FontDialog.Builder(this).setTitle("HTML не импортирован")
@@ -2733,15 +2764,23 @@ public class MainActivity extends Activity {
     }
     private void importCompressed(Uri source,String extension,String label,char[] password){
         if(importing){if(password!=null)java.util.Arrays.fill(password,'\0');return;}
-        importing=true;folderButton.setEnabled(false);status.setText("Распаковка "+label+"…");
+        importing=true;folderButton.setEnabled(false);
+        beginImportProgress("Распаковываю «"+label+"»…");
         String key=UUID.randomUUID().toString().replace("-","");
         worker.execute(()->{
             try{
-                java.io.File root=ArchiveFileImport.extract(this,source,extension,key,password,msg->runOnUiThread(()->status.setText(msg)));
+                java.io.File root=ArchiveFileImport.extract(this,source,extension,key,password,
+                    this::postImportProgress);
+                postImportProgress("Читаю сообщения Telegram…");
                 MessageDb fresh=new MessageDb(this,key);
-                try{TelegramImporter.importFiles(getContentResolver(),new DocumentFolder(getContentResolver(),root),fresh,msg->runOnUiThread(()->status.setText(msg)));}finally{fresh.close();}
+                try{
+                    TelegramImporter.importFiles(getContentResolver(),
+                        new DocumentFolder(getContentResolver(),root),fresh,this::postImportProgress);
+                    if(fresh.totalMessages()==0)
+                        throw new IOException("В архиве не найдены сообщения Telegram.");
+                }finally{fresh.close();}
                 runOnUiThread(()->{
-                    importing=false;folderButton.setEnabled(true);
+                    importing=false;endImportProgress();folderButton.setEnabled(true);
                     try{
                         JSONObject o=new JSONObject();o.put("key",key);o.put("name",label);
                         o.put("tree","local:"+root.getAbsolutePath());archives.put(o);
@@ -2761,7 +2800,7 @@ public class MainActivity extends Activity {
                     ||(!missing&&!message.contains("messages.html")&&!message.contains("Слишком")
                         &&!message.contains("Лимит безопасной"));
                 runOnUiThread(()->{
-                    importing=false;folderButton.setEnabled(true);
+                    importing=false;endImportProgress();folderButton.setEnabled(true);
                     status.setVisibility(View.VISIBLE);
                     status.setText("Импорт не завершён");
                     if(auth){
@@ -2784,15 +2823,16 @@ public class MainActivity extends Activity {
         });
     }
     private void importArchive(){
-        if(folder==null||importing)return;closeFloatingRound();stopPlayback();importing=true;folderButton.setEnabled(false);status.setText("Создаю локальную базу, не копируя медиа…");
+        if(folder==null||importing)return;closeFloatingRound();stopPlayback();importing=true;folderButton.setEnabled(false);
+        beginImportProgress("Индексирую локальную переписку…");
         list.removeAllViews();DocumentFolder current=folder;
         worker.execute(()->{
             String failure=null;
-            try{TelegramImporter.importFiles(getContentResolver(),current,db,s->runOnUiThread(()->status.setText(s)));info="Импорт завершён";}
+            try{TelegramImporter.importFiles(getContentResolver(),current,db,this::postImportProgress);info="Импорт завершён";}
             catch(Exception e){failure=e.getMessage();if(failure==null||failure.trim().isEmpty())failure="Не удалось импортировать архив. Проверь файлы и повтори попытку.";info="Ошибка импорта: "+failure;}
             final String importFailure=failure;
             runOnUiThread(()->{
-                importing=false;folderButton.setEnabled(true);status.setText(info);
+                importing=false;endImportProgress();folderButton.setEnabled(true);status.setText(info);
                 chatOffset=0;mediaOffset=0;searchOffset=0;favOffset=0;showPage();
                 // showPage replaces the transient status immediately. Keep failures
                 // visible so that users know the old archive was retained.
