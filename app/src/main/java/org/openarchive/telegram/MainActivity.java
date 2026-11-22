@@ -984,24 +984,35 @@ public class MainActivity extends Activity {
     private void showSideMenu(){
         final Dialog dialog=new FontDialog(this,android.R.style.Theme_Translucent_NoTitleBar);
         FrameLayout overlay=new FrameLayout(this);overlay.setBackgroundColor(0x99040912);
-        LinearLayout pane=column();pane.setPadding(px(14),px(18),px(14),px(10));
-        pane.setBackground(gradient(themeIndex==2?0xfaffffff:0xfa1a3045,
-            themeIndex==2?0xffe8edf4:0xff101c2d,24));pane.setElevation(px(12));
+        // The translucent drawer is laid out behind system bars on some Android
+        // versions. Respect both insets so the title/footer are never clipped.
+        int statusId=getResources().getIdentifier("status_bar_height","dimen","android");
+        int navigationId=getResources().getIdentifier("navigation_bar_height","dimen","android");
+        int topInset=statusId==0?px(24):getResources().getDimensionPixelSize(statusId);
+        int bottomInset=navigationId==0?px(20):getResources().getDimensionPixelSize(navigationId);
+        LinearLayout pane=column();
+        pane.setPadding(px(14),topInset+px(13),px(14),bottomInset+px(12));
+        pane.setBackground(gradient(themeIndex==2?0xfaffffff:0xff172b3d,
+            themeIndex==2?0xffe8edf4:0xff112132,18));pane.setElevation(px(12));
         int width=Math.min(px(348),getResources().getDisplayMetrics().widthPixels-px(38));
         FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(width,-1,Gravity.START);
         overlay.addView(pane,lp);
-        TextView app=text("TELEGRAM ARCHIVE",16,FG);
+        TextView app=text("Telegram Archive",18,FG);
         app.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
         app.setPadding(px(5),px(3),0,px(2));pane.addView(app);
-        TextView desc=text("Навигация и настройки",11,SUB);
+        TextView desc=text("Чаты, файлы и настройки",12,SUB);
         desc.setPadding(px(5),0,0,px(11));pane.addView(desc);
         ScrollView menuScroll=new ScrollView(this);menuScroll.setVerticalScrollBarEnabled(false);
         menuScroll.setFillViewport(false);pane.addView(menuScroll,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout items=column();menuScroll.addView(items);
-        if(!home)sideMenuItem(items,dialog,pane,"⌂  Все чаты","К списку переписок",()->{
+        sideMenuItem(items,dialog,pane,"Переписки","К списку всех чатов",()->{
             home=true;screen="chat";showPage();});
-        sideMenuItem(items,dialog,pane,"📝  Личные заметки","Заметки из разных переписок",()->{
+        sideMenuItem(items,dialog,pane,"Личные заметки","Заметки из разных переписок",()->{
             home=false;screen="saved";renderSaved();});
+        sideMenuItem(items,dialog,pane,"Корзина","Вернуть убранные переписки",this::showChatTrash);
+        View divider=new View(this);divider.setBackgroundColor(0xff2a455c);
+        LinearLayout.LayoutParams dividerMargin=p(-1,1);
+        dividerMargin.setMargins(px(8),px(10),px(8),px(7));items.addView(divider,dividerMargin);
         sideMenuSection(items,"Архивы и резервные копии",false,group->{
             sideMenuItem(group,dialog,pane,"▧  Подключить папку экспорта","Расширенный способ для папки Telegram с медиа",this::chooseExistingFolder);
             sideMenuItem(group,dialog,pane,"⇧  Создать резервную копию","Чаты, настройки и при выборе — медиа",this::backupPicker);
@@ -1068,49 +1079,22 @@ public class MainActivity extends Activity {
     private void sideMenuSection(LinearLayout parent,String name,boolean opened,
                                  java.util.function.Consumer<LinearLayout> populate){
         LinearLayout group=column();parent.addView(group,p(-1,-2));
-        TextView title=text((opened?"▾  ":"▸  ")+name,13,ACCENT);
+        TextView title=text((opened?"⌄  ":"›  ")+name,13,ACCENT);
         title.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
-        title.setPadding(px(10),px(9),px(6),px(9));
+        title.setPadding(px(10),px(12),px(6),px(12));
+        title.setContentDescription((opened?"Свернуть ":"Развернуть ")+name);
         title.setBackground(shape(Color.TRANSPARENT,9));
         group.addView(title,p(-1,-2));
         LinearLayout contents=column();contents.setPadding(0,px(3),0,px(4));group.addView(contents);
         populate.accept(contents);contents.setVisibility(opened?View.VISIBLE:View.GONE);
         title.setOnClickListener(v->{boolean expand=contents.getVisibility()!=View.VISIBLE;
-            title.setText((expand?"▾  ":"▸  ")+name);
+            title.setText((expand?"⌄  ":"›  ")+name);
+            title.setContentDescription((expand?"Свернуть ":"Развернуть ")+name);
             contents.setVisibility(expand?View.VISIBLE:View.GONE);
             if(expand){contents.setAlpha(0f);contents.animate().alpha(1f)
                 .setDuration(motionDuration(170)).start();}
         });
         space(group,3);
-    }
-    /** One consistent native icon family instead of mixed emojis and Unicode silhouettes. */
-    private int drawerIconFor(String label){
-        String low=label.toLowerCase(Locale.ROOT);
-        if(low.contains("импорт")||low.contains("добавить"))return android.R.drawable.ic_menu_add;
-        if(low.contains("поиск")||low.contains("найти"))return android.R.drawable.ic_menu_search;
-        if(low.contains("дате")||low.contains("календар")||low.contains("день"))
-            return android.R.drawable.ic_menu_today;
-        if(low.contains("управлен")||low.contains("чатом"))
-            return android.R.drawable.ic_menu_manage;
-        if(low.contains("все инструменты")||low.contains("инструменты"))
-            return android.R.drawable.ic_menu_more;
-        if(low.contains("медиа")||low.contains("кино")||low.contains("аватар")||low.contains("обои"))
-            return android.R.drawable.ic_menu_gallery;
-        if(low.contains("резерв")||low.contains("копию")||low.contains("капсула"))
-            return android.R.drawable.ic_menu_save;
-        if(low.contains("восстанов")||low.contains("перенос"))
-            return android.R.drawable.ic_menu_revert;
-        if(low.contains("хронолог")||low.contains("истори")||low.contains("день"))
-            return android.R.drawable.ic_menu_recent_history;
-        if(low.contains("настро")||low.contains("оформлен")||low.contains("производител"))
-            return android.R.drawable.ic_menu_manage;
-        if(low.contains("помощ")||low.contains("инструкц"))
-            return android.R.drawable.ic_menu_help;
-        if(low.contains("замет")||low.contains("шрифт"))
-            return android.R.drawable.ic_menu_edit;
-        if(low.contains("анализ")||low.contains("сравнен")||low.contains("провер")||low.contains("диагност"))
-            return android.R.drawable.ic_menu_info_details;
-        return android.R.drawable.ic_menu_view;
     }
     private void sideMenuItem(LinearLayout parent,Dialog dialog,View pane,
                               String heading,String detail,Runnable action){
@@ -1120,13 +1104,16 @@ public class MainActivity extends Activity {
         item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x265aaad8),
             shape(Color.TRANSPARENT,10),null));
         LinearLayout.LayoutParams params=p(-1,-2);params.bottomMargin=px(2);parent.addView(item,params);
-        ImageView symbol=new ImageView(this);symbol.setImageResource(drawerIconFor(label));
-        symbol.setColorFilter(ACCENT);symbol.setContentDescription(null);
+        ImageView symbol=new ImageView(this);
+        symbol.setImageDrawable(new MenuOutlineIcon(label,ACCENT));
+        symbol.setContentDescription(null);
         LinearLayout.LayoutParams symbolSize=p(20,20);symbolSize.rightMargin=px(12);
         item.addView(symbol,symbolSize);
         LinearLayout info=column();item.addView(info,new LinearLayout.LayoutParams(0,-2,1));
         TextView name=text(label,14,FG);name.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));info.addView(name);
-        TextView summary=text(detail,11,SUB);summary.setPadding(0,px(2),0,0);info.addView(summary);
+        TextView summary=text(detail,11,SUB);summary.setSingleLine(true);
+        summary.setEllipsize(TextUtils.TruncateAt.END);
+        summary.setPadding(0,px(2),0,0);info.addView(summary);
         item.setContentDescription(label+". "+detail);
         item.setOnClickListener(v->closeDrawer(dialog,pane,action));
     }
