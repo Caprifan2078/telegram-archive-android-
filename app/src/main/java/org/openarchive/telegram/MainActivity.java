@@ -4663,6 +4663,7 @@ public class MainActivity extends Activity {
     private void toggleMediaLayout(){
         boolean next=!mediaGridEnabled();
         getPreferences(MODE_PRIVATE).edit().putBoolean("gallery_grid_"+mediaKind,next).apply();
+        mediaAdapter.regroup();
         configureBars();
         updateMediaLayout(true);
     }
@@ -4704,6 +4705,13 @@ public class MainActivity extends Activity {
         private String lastGroup=null;
         void reset(){entries.clear();lastGroup=null;notifyDataSetChanged();}
         boolean isHeader(int position){return position>=0&&position<entries.size()&&entries.get(position) instanceof String;}
+        void regroup(){
+            ArrayList<MessageDb.Attachment> all=new ArrayList<>();
+            for(Object item:entries)if(item instanceof MessageDb.Attachment)
+                all.add((MessageDb.Attachment)item);
+            entries.clear();lastGroup=null;
+            append(all);
+        }
         void append(List<MessageDb.Attachment> page){
             int from=entries.size();
             for(MessageDb.Attachment item:page){
