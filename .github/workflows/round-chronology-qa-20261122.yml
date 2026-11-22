@@ -24,16 +24,16 @@ jobs:
       - name: Android SDK
         run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
       - name: Compile and run JVM tests
-        run: gradle --no-daemon --max-workers=2 assembleRealExportQa assembleRealExportQaAndroidTest testRealExportQaUnitTest -PqaRealExportInstrumentation=true
+        run: gradle --no-daemon --max-workers=2 assembleRoundChronologyQa assembleRoundChronologyQaAndroidTest testRoundChronologyQaUnitTest -PqaRoundChronologyInstrumentation=true
       - name: Verify and copy isolated APK
         shell: bash
         run: |
           set -euo pipefail
-          apk=app/build/outputs/apk/realExportQa/app-realExportQa.apk
+          apk=app/build/outputs/apk/roundChronologyQa/app-roundChronologyQa.apk
           tools="$ANDROID_HOME/build-tools/35.0.0"
           test -s "$apk"
           "$tools/apksigner" verify --verbose "$apk"
-          "$tools/aapt" dump badging "$apk" | grep -q "package: name='org.openarchive.telegram.qa.realexport20261122'"
+          "$tools/aapt" dump badging "$apk" | grep -q "package: name='org.openarchive.telegram.qa.roundchron20261122'"
           mkdir -p deliver
           cp "$apk" deliver/Telegram_Archive_Viewer_Round_Chronology_QA_20261122.apk
           (cd deliver && sha256sum *.apk > SHA256SUMS.txt)
@@ -53,7 +53,7 @@ jobs:
           emulator-boot-timeout: 420
           script: |
             adb install deliver/Telegram_Archive_Viewer_Round_Chronology_QA_20261122.apk
-            gradle --no-daemon --max-workers=2 connectedRealExportQaAndroidTest -PqaRealExportInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.ChronologyHubRegressionTest,org.openarchive.telegram.RoundPlayerActivityTest,org.openarchive.telegram.MediaInfiniteGalleryRegressionTest,org.openarchive.telegram.RealTelegramExportStructureRegressionTest'
+            gradle --no-daemon --max-workers=2 connectedRoundChronologyQaAndroidTest -PqaRoundChronologyInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.ChronologyHubRegressionTest,org.openarchive.telegram.RoundPlayerActivityTest,org.openarchive.telegram.MediaInfiniteGalleryRegressionTest,org.openarchive.telegram.RealTelegramExportStructureRegressionTest'
       - name: Test results
         if: always()
         uses: actions/upload-artifact@v4
