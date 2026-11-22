@@ -1,0 +1,75 @@
+name: QA 2026-11-23 — history pagination and round lifecycle
+on:
+  push:
+    branches: [qa/history-pagination-round-lifecycle-20261123]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  history-round-android11:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Android SDK
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: JVM and Android builds
+        run: gradle --no-daemon --max-workers=2 assembleHistoryRoundQa assembleHistoryRoundQaAndroidTest testHistoryRoundQaUnitTest -PqaHistoryRoundInstrumentation=true
+      - name: Validate APK metadata and signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/historyRoundQa/app-historyRoundQa.apk
+          test -s "$apk"
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/apksigner" verify --verbose "$apk"
+          "$tools/aapt" dump badging "$apk" | grep -q "package: name='org.openarchive.telegram.qa.historyround20261123'"
+          mkdir -p deliver
+          cp "$apk" deliver/Telegram_Archive_Viewer_0.51_History_Round_QA_20261123.apk
+          (cd deliver && sha256sum *.apk > SHA256SUMS.txt)
+      - name: Enable emulator KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Android 11 — event paging and round regressions
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: |
+            gradle --no-daemon --max-workers=2 connectedHistoryRoundQaAndroidTest -PqaHistoryRoundInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.RelationshipPaginationRegressionTest,org.openarchive.telegram.ChronologyHubRegressionTest,org.openarchive.telegram.RoundPlayerActivityTest,org.openarchive.telegram.MediaInfiniteGalleryRegressionTest'
+      - name: Test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: history-round-20261123-test-reports
+          retention-days: 7
+          path: |
+            app/build/outputs/androidTest-results/
+            app/build/reports/androidTests/
+            app/build/test-results/
+      - name: Verified isolated QA APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TelegramViewer-History-Round-QA-20261123
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            deliver/*.apk
+            deliver/SHA256SUMS.txt
