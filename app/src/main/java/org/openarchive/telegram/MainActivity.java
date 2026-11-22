@@ -2311,7 +2311,7 @@ public class MainActivity extends Activity {
                 mediaZoomSeek=new android.widget.SeekBar(this);
                 mediaZoomSeek.setMax(7);mediaZoomSeek.setProgress(mediaColumns-2);
                 mediaZoomSeek.setContentDescription("Размер сетки: от двух до девяти элементов в ряд");
-                mediaTools.addView(mediaZoomSeek,new LinearLayout.LayoutParams(0,42,1));
+                mediaTools.addView(mediaZoomSeek,new LinearLayout.LayoutParams(0,px(42),1));
                 TextView big=text("9",11,SUB);big.setGravity(Gravity.CENTER);
                 mediaTools.addView(big,p(14,42));
                 mediaZoomLabel=text(mediaColumns+" в ряд",11,ACCENT);
@@ -4703,7 +4703,17 @@ public class MainActivity extends Activity {
             for(Object item:entries)if(item instanceof MessageDb.Attachment)
                 all.add((MessageDb.Attachment)item);
             entries.clear();lastGroup=null;
-            append(all);
+            for(MessageDb.Attachment item:all){
+                boolean byDay=mediaGridEnabled()&&
+                    ("round".equals(mediaKind)||"voice".equals(mediaKind)||"audio".equals(mediaKind));
+                String group=byDay?day(item.date):MediaTimeline.month(item.date);
+                if(group==null||group.isEmpty())group="Без даты";
+                if(!group.equals(lastGroup)){entries.add(group);lastGroup=group;}
+                entries.add(item);
+            }
+            // Dataset was replaced (not inserted); notify accordingly to avoid
+            // RecyclerView's invalid holder positions during mode switches.
+            notifyDataSetChanged();
         }
         void append(List<MessageDb.Attachment> page){
             int from=entries.size();
@@ -4804,8 +4814,9 @@ public class MainActivity extends Activity {
                     h.image.setClipToOutline(true);
                 }
                 if("sticker".equals(a.kind)&&isTgsPath(a.path)){
-                    h.symbol.setVisibility(View.VISIBLE);h.symbol.setText("◌");
-                    loadTgsPreview(a.path,h.tile);
+                    // Keep TGS animation overlays out of recycled view holders.
+                    // Tapping still opens the full local animated sticker.
+                    h.symbol.setVisibility(View.VISIBLE);h.symbol.setText("✦");
                 }else loadThumbnail(a.path,"round".equals(a.kind)?"round":
                     isVideoStickerPath(a.path)?"video":a.kind,h.image);
             }else{
