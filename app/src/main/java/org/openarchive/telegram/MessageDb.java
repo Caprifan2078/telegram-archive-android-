@@ -172,12 +172,27 @@ class MessageDb extends SQLiteOpenHelper {
             return c.moveToFirst()?(c.getString(0)==null?"":c.getString(0)):"";
         }
     }
+    /** Full historical list for compatibility; UI must use bounded pages instead. */
     List<RelationshipEvent> relationshipEvents(){
+        return queryRelationshipEvents(0,Integer.MAX_VALUE);
+    }
+    int relationshipEventCount(){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT COUNT(*) FROM relationship_events",null)){
+            return c.moveToFirst()?c.getInt(0):0;
+        }
+    }
+    /** Bounded, deterministic navigation: more than 250 user events remain reachable. */
+    List<RelationshipEvent> relationshipEventsPage(int offset,int limit){
+        if(offset<0||limit<1||limit>50)throw new IllegalArgumentException("Неверная страница событий");
+        return queryRelationshipEvents(offset,limit);
+    }
+    private List<RelationshipEvent> queryRelationshipEvents(int offset,int limit){
         ArrayList<RelationshipEvent> out=new ArrayList<>();
         String sql="SELECT e.id,e.title,e.note,e.anchor_id,e.anchor_offset,"+
             "(SELECT COUNT(*) FROM relationship_links l WHERE l.event_id=e.id) "+
-            "FROM relationship_events e ORDER BY e.anchor_id,e.anchor_offset,e.id LIMIT 250";
-        try(Cursor c=getReadableDatabase().rawQuery(sql,null)){
+            "FROM relationship_events e ORDER BY e.anchor_id,e.anchor_offset,e.id LIMIT ? OFFSET ?";
+        try(Cursor c=getReadableDatabase().rawQuery(sql,
+                new String[]{Integer.toString(limit),Integer.toString(offset)})){
             while(c.moveToNext()){
                 RelationshipEvent e=new RelationshipEvent();e.id=c.getLong(0);e.title=c.getString(1);
                 e.note=c.getString(2);e.anchorId=c.getLong(3);e.anchorOffset=c.getInt(4);
