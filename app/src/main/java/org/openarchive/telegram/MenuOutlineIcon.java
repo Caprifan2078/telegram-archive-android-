@@ -19,8 +19,12 @@ final class MenuOutlineIcon extends Drawable {
         else if(value.contains("помощ")||value.contains("инструкц"))type=3;
         else if(value.contains("диагност")||value.contains("провер"))type=4;
         else if(value.contains("учебн"))type=5;
-        else if(value.contains("поиск"))type=6;
-        else if(value.contains("оформлен")||value.contains("настрой")||value.contains("шрифт"))type=7;
+        else if(value.contains("все инструменты")||value.contains("инструменты переписки"))type=13;
+        else if(value.contains("поиск")||value.contains("найти сообщение"))type=6;
+        else if(value.contains("дате")||value.contains("дата")||value.contains("календар"))type=11;
+        else if(value.contains("анализ")||value.contains("статистик"))type=12;
+        else if(value.contains("управление")||value.contains("оформлен")||
+                value.contains("настрой")||value.contains("шрифт"))type=7;
         else if(value.contains("медиа")||value.contains("галере")||value.contains("кинолент"))type=8;
         else if(value.contains("хронолог")||value.contains("истори"))type=9;
         else if(value.contains("сравнен")||value.contains("двух"))type=10;
@@ -72,6 +76,22 @@ final class MenuOutlineIcon extends Drawable {
             case 10: // comparison
                 line(output,4,8,20,8);line(output,16,4,20,8);line(output,20,8,16,12);
                 line(output,20,16,4,16);line(output,8,12,4,16);line(output,4,16,8,20);break;
+            case 11: // calendar: day navigation
+                round(output,4,5,20,20,2.2f);
+                line(output,4.5f,10,19.5f,10);
+                line(output,8,3,8,7);line(output,16,3,16,7);
+                output.drawCircle(9,14,1,stroke);output.drawCircle(14.5f,14,1,stroke);
+                line(output,8,17.5f,16,17.5f);break;
+            case 12: // stats: chart columns
+                line(output,4,20,20,20);
+                round(output,5,13,8,19,0.8f);
+                round(output,10.5f,9,13.5f,19,0.8f);
+                round(output,16,5,19,19,0.8f);break;
+            case 13: // all tools: four modules
+                round(output,4,4,10.5f,10.5f,1.3f);
+                round(output,13.5f,4,20,10.5f,1.3f);
+                round(output,4,13.5f,10.5f,20,1.3f);
+                round(output,13.5f,13.5f,20,20,1.3f);break;
             default: // chats: two message outlines
                 round(output,3.5f,4.5f,20.5f,17.5f,3);
                 line(output,8,9,16,9);line(output,8,13,13,13);
