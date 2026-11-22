@@ -2689,8 +2689,12 @@ public class MainActivity extends Activity {
                 ArchiveFileImport.deleteTree(new java.io.File(new java.io.File(getFilesDir(),"telegram_imports"),key));
                 deleteDatabase("telegram_"+key+".db");
                 String message=error.getMessage()==null?"Файл не удалось распаковать":error.getMessage();
-                boolean auth=ArchiveFileImport.isPasswordFailure(error);
                 boolean missing=password==null||password.length==0;
+                // An entered wrong 7z key can surface as a generic CRC/decode
+                // failure. Allow another password without guessing corruption.
+                boolean auth=ArchiveFileImport.isPasswordFailure(error)
+                    ||(!missing&&!message.contains("messages.html")&&!message.contains("Слишком")
+                        &&!message.contains("Лимит безопасной"));
                 runOnUiThread(()->{
                     importing=false;folderButton.setEnabled(true);
                     status.setVisibility(View.VISIBLE);
