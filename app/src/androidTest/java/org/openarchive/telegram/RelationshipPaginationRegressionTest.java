@@ -25,6 +25,25 @@ public final class RelationshipPaginationRegressionTest {
             List<MessageDb.RelationshipEvent> all=db.relationshipEvents();
             assertEquals("250-item cap silently hides saved history events",275,all.size());
             assertEquals("Событие 274",all.get(274).title);
+            assertEquals("Count query must see all 275 real saved events",275,db.relationshipEventCount());
+            List<MessageDb.RelationshipEvent> first=db.relationshipEventsPage(0,20);
+            List<MessageDb.RelationshipEvent> middle=db.relationshipEventsPage(240,20);
+            List<MessageDb.RelationshipEvent> last=db.relationshipEventsPage(260,20);
+            assertEquals(20,first.size());
+            assertEquals("Событие 0",first.get(0).title);
+            assertEquals(20,middle.size());
+            assertEquals("Событие 259",middle.get(19).title);
+            assertEquals(15,last.size());
+            assertEquals("Событие 274",last.get(14).title);
+            assertTrue("Beyond end is empty",db.relationshipEventsPage(280,20).isEmpty());
+            try{
+                db.relationshipEventsPage(-1,20);
+                fail("Negative pages must be rejected");
+            }catch(IllegalArgumentException expected){}
+            try{
+                db.relationshipEventsPage(0,1000000);
+                fail("Excessive page loads must be rejected");
+            }catch(IllegalArgumentException expected){} 
         }finally{
             db.close();
             context.deleteDatabase("telegram_"+key+".db");
