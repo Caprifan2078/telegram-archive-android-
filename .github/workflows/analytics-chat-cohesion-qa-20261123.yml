@@ -54,7 +54,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-boot-timeout: 420
-          script: gradle --no-daemon --max-workers=2 connectedVisualCoherenceQaAndroidTest -PqaVisualCoherenceInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.QaVisualAuditScreenshotsTest,org.openarchive.telegram.AnalyticsSectionNavigationRegressionTest,org.openarchive.telegram.QaUiChatNavigationRegressionTest,org.openarchive.telegram.UiSmokeTest,org.openarchive.telegram.ChronologyHubRegressionTest,org.openarchive.telegram.MediaInfiniteGalleryRegressionTest' && mkdir -p ui-captures/review && adb pull /sdcard/Pictures/TelegramViewerVisualAudit/. ui-captures/review/
+          script: gradle --no-daemon --max-workers=2 connectedVisualCoherenceQaAndroidTest -PqaVisualCoherenceInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.QaVisualAuditScreenshotsTest,org.openarchive.telegram.AnalyticsSectionNavigationRegressionTest,org.openarchive.telegram.ChatVisualConsistencyRegressionTest,org.openarchive.telegram.QaUiChatNavigationRegressionTest,org.openarchive.telegram.UiSmokeTest,org.openarchive.telegram.ChronologyHubRegressionTest,org.openarchive.telegram.MediaInfiniteGalleryRegressionTest' && mkdir -p ui-captures/review && adb pull /sdcard/Pictures/TelegramViewerVisualAudit/. ui-captures/review/
       - name: Print selected synthetic Android PNG captures for inspection
         if: always()
         shell: bash
