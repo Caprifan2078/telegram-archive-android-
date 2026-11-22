@@ -2215,6 +2215,8 @@ public class MainActivity extends Activity {
         navBack=btn("‹");navBack.setTextSize(25);navBack.setGravity(Gravity.CENTER);
         head.addView(navBack,p(42,42));
         navBack.setOnClickListener(v->{if("help".equals(screen)){leaveHelp();return;}
+            if(floatingPanel!=null){closeFloatingRound();return;}
+            if(backWithinHistory())return;
             // Android Back already restores the previous search/media/analytics
             // context when jumping into a message. The header Back button must
             // follow the same path rather than unexpectedly throwing users home.
@@ -2546,10 +2548,30 @@ public class MainActivity extends Activity {
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         startActivityForResult(i,PICK_FOLDER);
     }
+    /** Android Back and header Back follow the same history hierarchy. */
+    private boolean backWithinHistory(){
+        if(home)return false;
+        if("chronology".equals(screen)){
+            if(!"overview".equals(chronologySection)){
+                chronologySection="overview";renderChronologyPage();
+            }else{
+                screen="relationships";showPage();
+            }
+            return true;
+        }
+        if("relationships".equals(screen)&&historyEventsExpanded){
+            historyEventsExpanded=false;renderRelationshipsPage();return true;
+        }
+        return false;
+    }
     @Override public void onBackPressed(){
         if("help".equals(screen)){leaveHelp();return;}
         if(floatingPanel!=null){closeFloatingRound();return;}
-        if(screen.equals("saved")||(!home&&returnScreen.isEmpty())){saveReadingProgress();home=true;screen="chat";searchReturnsToAnalytics=false;bottomNav.setVisibility(View.GONE);showPage();return;}if(!returnScreen.isEmpty()){restoreReturn();return;}super.onBackPressed();}
+        if(backWithinHistory())return;
+        if(screen.equals("saved")||(!home&&returnScreen.isEmpty())){saveReadingProgress();home=true;screen="chat";searchReturnsToAnalytics=false;bottomNav.setVisibility(View.GONE);showPage();return;}
+        if(!returnScreen.isEmpty()){restoreReturn();return;}
+        super.onBackPressed();
+    }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
         if(request==SAVE_CONVERSATION_PDF_REQUEST){
