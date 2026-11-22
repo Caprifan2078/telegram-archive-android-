@@ -15,6 +15,47 @@ import java.util.zip.*;
  */
 final class ArchiveFileImport {
     interface Progress { void update(String message); }
+    /** Signals an actual password barrier, never a generic broken archive. */
+    static final class PasswordRequired extends IOException {
+        PasswordRequired(String message){super(message);}
+        PasswordRequired(String message,Throwable cause){super(message,cause);}
+    }
+    static boolean isPasswordFailure(Throwable error){
+        for(Throwable e=error;e!=null;e=e.getCause()){
+            if(e instanceof PasswordRequired)return true;
+            String type=e.getClass().getSimpleName().toLowerCase(Locale.ROOT);
+            String message=e.getMessage()==null?"":e.getMessage().toLowerCase(Locale.ROOT);
+            if(type.contains("password")||message.contains("password")
+                ||message.contains("encrypted")||message.contains("encryption")
+                ||message.contains("зашифр")||message.contains("парол")
+                ||message.contains("bad padding")||message.contains("wrong key"))
+                return true;
+        }
+        return false;
+    }
+    /** Trust the archive's magic bytes, not its file-provider extension or 7-Zip app label. */
+    static String detectFormat(Context ctx,Uri uri,String displayName)throws IOException{
+        byte[] bytes=new byte[8];int read=0;
+        try(InputStream input=ctx.getContentResolver().openInputStream(uri)){
+            if(input==null)throw new IOException("Нет доступа к выбранному файлу");
+            while(read<bytes.length){
+                int count=input.read(bytes,read,bytes.length-read);
+                if(count<0)break;
+                if(count==0)continue;
+                read+=count;
+            }
+        }
+        if(read>=6&&(bytes[0]&255)==0x37&&(bytes[1]&255)==0x7a
+            &&(bytes[2]&255)==0xbc&&(bytes[3]&255)==0xaf
+            &&(bytes[4]&255)==0x27&&(bytes[5]&255)==0x1c)return "7z";
+        if(read>=4&&bytes[0]=='P'&&bytes[1]=='K'&&
+            ((bytes[2]==3&&bytes[3]==4)||(bytes[2]==5&&bytes[3]==6)
+              ||(bytes[2]==7&&bytes[3]==8)))return "zip";
+        if(read>=7&&bytes[0]=='R'&&bytes[1]=='a'&&bytes[2]=='r'&&bytes[3]=='!'
+            &&(bytes[4]&255)==0x1a&&(bytes[5]&255)==7
+            &&((bytes[6]&255)==0||(bytes[6]&255)==1))return "rar";
+        throw new IOException("Файл не похож на ZIP, 7z или RAR. Проверь формат архива.");
+    }
     private static final long MAX_ENTRY=12L*1024*1024*1024; // a large exported video can exceed 4 GiB
     private static final long MAX_TOTAL=60L*1024*1024*1024;
     private static final int MAX_FILES=200000;
@@ -40,8 +81,9 @@ final class ArchiveFileImport {
         try{
             Budget budget=new Budget();
             if("zip".equalsIgnoreCase(suffix)){
-                if(password!=null&&password.length>0)extractZipWithPassword(ctx,uri,root,password,budget,progress);
-                else extractZip(ctx,uri,root,budget,progress);
+                // Zip4j handles plain ZIP and encrypted ZipCrypto/AES using the same
+                // extraction path. A password is requested only for encrypted entries.
+                extractZipWithPassword(ctx,uri,root,password,budget,progress);
             }else if("7z".equalsIgnoreCase(suffix)){
                 extractSevenZ(ctx,uri,root,password,budget,progress);
             }else if("rar".equalsIgnoreCase(suffix)){
@@ -110,6 +152,8 @@ final class ArchiveFileImport {
                     String name=entry.getFileName();
                     budget.next(name==null?"":name);
                     BackupEntryPolicy.requireSafe(name,entry.isDirectory());
+                    if(entry.isEncrypted()&&(password==null||password.length==0))
+                        throw new PasswordRequired("ZIP защищён паролем. Введи пароль от архива.");
                     if(entry.isDirectory())continue;
                     File target=safeFile(root,name);
                     File parent=target.getParentFile();
@@ -129,32 +173,73 @@ final class ArchiveFileImport {
     }
     private static void extractSevenZ(Context ctx,Uri uri,File root,char[] password,
             Budget budget,Progress progress)throws Exception{
-        try(android.os.ParcelFileDescriptor descriptor=ctx.getContentResolver().openFileDescriptor(uri,"r")){
-            if(descriptor==null)throw new IOException("Нет доступа к 7z");
-            try(FileInputStream input=new FileInputStream(descriptor.getFileDescriptor());
-                org.apache.commons.compress.archivers.sevenz.SevenZFile archive=
-                    org.apache.commons.compress.archivers.sevenz.SevenZFile.builder()
-                        .setSeekableByteChannel(input.getChannel()).setPassword(password)
-                        .setMaxMemoryLimitKiB(131072).get()){
-                org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry entry;
-                byte[] bytes=new byte[128*1024];
-                while((entry=archive.getNextEntry())!=null){
-                    String name=entry.getName();budget.next(name==null?"":name);
-                    BackupEntryPolicy.requireSafe(name,entry.isDirectory());
-                    if(entry.isDirectory())continue;
-                    if(entry.getSize()>MAX_ENTRY)throw new IOException("7z содержит слишком большой файл");
-                    File target=safeFile(root,name);
-                    File parent=target.getParentFile();
-                    if(!parent.isDirectory()&&!parent.mkdirs())throw new IOException("Не создана папка 7z");
-                    if(target.exists())throw new IOException("Повторное имя в 7z");
-                    long written=0;
-                    try(OutputStream out=new BufferedOutputStream(new FileOutputStream(target))){
-                        int count;while((count=archive.read(bytes))!=-1){
-                            written+=count;budget.add(count,written);out.write(bytes,0,count);
-                        }
+        // SAF document providers may return a pipe instead of a seekable file.
+        // SevenZFile requires seeking; use the local channel where possible,
+        // otherwise spool safely to a bounded temporary file.
+        try{
+            try(android.os.ParcelFileDescriptor descriptor=ctx.getContentResolver().openFileDescriptor(uri,"r")){
+                if(descriptor==null)throw new IOException("Нет доступа к 7z");
+                try(FileInputStream input=new FileInputStream(descriptor.getFileDescriptor())){
+                    boolean seekable;
+                    try{
+                        input.getChannel().position(0);
+                        input.getChannel().size();
+                        seekable=true;
+                    }catch(IOException|UnsupportedOperationException notSeekable){seekable=false;}
+                    if(seekable){
+                        readSevenZ(input.getChannel(),root,password,budget,progress);
+                        return;
                     }
-                    emit(budget,progress);
                 }
+            }
+            File temporary=File.createTempFile("telegram-sevenz-", ".7z",ctx.getCacheDir());
+            try{
+                long copied=0;
+                try(InputStream input=ctx.getContentResolver().openInputStream(uri);
+                    OutputStream output=new BufferedOutputStream(new FileOutputStream(temporary))){
+                    if(input==null)throw new IOException("Не удалось повторно открыть 7z");
+                    byte[] block=new byte[128*1024];int count;
+                    while((count=input.read(block))!=-1){
+                        copied+=count;
+                        if(copied>2L*1024*1024*1024)
+                            throw new IOException("7z из облачного файлового провайдера больше 2 ГБ. Сохрани архив локально и выбери снова.");
+                        output.write(block,0,count);
+                    }
+                }
+                try(FileInputStream local=new FileInputStream(temporary)){
+                    readSevenZ(local.getChannel(),root,password,budget,progress);
+                }
+            }finally{temporary.delete();}
+        }catch(Exception failure){
+            if((password==null||password.length==0)&&isPasswordFailure(failure))
+                throw new PasswordRequired("7z защищён паролем. Введи пароль от архива.",failure);
+            throw failure;
+        }
+    }
+    private static void readSevenZ(java.nio.channels.SeekableByteChannel channel,File root,
+            char[] password,Budget budget,Progress progress)throws Exception{
+        try(org.apache.commons.compress.archivers.sevenz.SevenZFile archive=
+                org.apache.commons.compress.archivers.sevenz.SevenZFile.builder()
+                    .setSeekableByteChannel(channel).setPassword(password)
+                    .setMaxMemoryLimitKiB(131072).get()){
+            org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry entry;
+            byte[] bytes=new byte[128*1024];
+            while((entry=archive.getNextEntry())!=null){
+                String name=entry.getName();budget.next(name==null?"":name);
+                BackupEntryPolicy.requireSafe(name,entry.isDirectory());
+                if(entry.isDirectory())continue;
+                if(entry.getSize()>MAX_ENTRY)throw new IOException("7z содержит слишком большой файл");
+                File target=safeFile(root,name);
+                File parent=target.getParentFile();
+                if(!parent.isDirectory()&&!parent.mkdirs())throw new IOException("Не создана папка 7z");
+                if(target.exists())throw new IOException("Повторное имя в 7z");
+                long written=0;
+                try(OutputStream out=new BufferedOutputStream(new FileOutputStream(target))){
+                    int count;while((count=archive.read(bytes))!=-1){
+                        written+=count;budget.add(count,written);out.write(bytes,0,count);
+                    }
+                }
+                emit(budget,progress);
             }
         }
     }
@@ -185,7 +270,7 @@ final class ArchiveFileImport {
                     if(entry.isDirectory())continue;
                     if(entry.getRedirection()!=null)continue; // never materialize archive links
                     if(entry.isEncrypted()&&(password==null||password.length==0))
-                        throw new IOException("RAR защищён паролем. Повтори импорт и введи пароль.");
+                        throw new PasswordRequired("RAR защищён паролем. Введи пароль от архива.");
                     File target=safeFile(root,name);
                     if(entry.getFullUnpackSize()>MAX_ENTRY)throw new IOException("Слишком большой файл в RAR");
                     File parent=target.getParentFile();
