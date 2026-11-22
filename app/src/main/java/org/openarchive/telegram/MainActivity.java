@@ -123,8 +123,8 @@ public class MainActivity extends Activity {
     private boolean pendingBatchDownloads=false;
 
 
-    private static final String[] MEDIA_KEYS={"visual","image","video","round","voice","audio","file","gif","sticker","all","favorite"};
-    private static final String[] MEDIA_LABELS={"Фото и видео","Фото","Видео","Кружки","Голосовые","Музыка","Файлы","GIF","Стикеры","Все файлы","Избранное"};
+    private static final String[] MEDIA_KEYS={"visual","image","video","favorite","round","voice","audio","file","gif","sticker","all"};
+    private static final String[] MEDIA_LABELS={"Фото+видео","Фото","Видео","Избранное","Кружки","Голосовые","Музыка","Файлы","GIF","Стикеры","Все файлы"};
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private final ExecutorService mediaWorker=Executors.newFixedThreadPool(2);
     private final Handler handler=new Handler(Looper.getMainLooper());
@@ -2291,7 +2291,7 @@ public class MainActivity extends Activity {
             LinearLayout chips=row();hsv.addView(chips);
             for(int i=0;i<MEDIA_KEYS.length;i++){
                 final String key=MEDIA_KEYS[i];TextView c=text(MEDIA_LABELS[i],12,FG);c.setGravity(Gravity.CENTER);
-                c.setPadding(px(12),px(8),px(12),px(8));c.setBackground(shape((key.equals(mediaKind)&&"media".equals(screen)||"favorite".equals(key)&&"favorites".equals(screen))?HIGHLIGHT:PANEL,14));
+                c.setPadding(px(8),px(8),px(8),px(8));c.setBackground(shape((key.equals(mediaKind)&&"media".equals(screen)||"favorite".equals(key)&&"favorites".equals(screen))?HIGHLIGHT:PANEL,14));
                 LinearLayout.LayoutParams cp=p(-2,37);cp.setMargins(px(2),px(2),px(4),px(2));chips.addView(c,cp);
                 c.setOnClickListener(v->{if("favorite".equals(key)){screen="favorites";favOffset=0;}else{screen="media";mediaKind=key;mediaOffset=0;}showPage();});
             }
