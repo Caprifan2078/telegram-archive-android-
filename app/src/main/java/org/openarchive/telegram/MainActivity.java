@@ -2253,14 +2253,41 @@ public class MainActivity extends Activity {
         });
     }
     private void renderSaved(){
+        // Drawer can open Notes directly from Media, where the RecyclerView overlays
+        // and hides ScrollView. Always restore the correct viewport/chrome explicitly.
+        if(mediaRecycler!=null)mediaRecycler.setVisibility(View.GONE);
+        if(scroll!=null)scroll.setVisibility(View.VISIBLE);
+        if(playerStrip!=null)playerStrip.setVisibility(View.GONE);
+        if(headerActions!=null)headerActions.setVisibility(View.GONE);
+        if(pdfButton!=null)pdfButton.setVisibility(View.GONE);
+        if(headerLogo!=null)headerLogo.setVisibility(View.GONE);
+        if(folderButton!=null)folderButton.setVisibility(View.GONE);
+        status.setText("");status.setVisibility(View.GONE);
         list.setBackgroundColor(BG);
+        list.setPadding(px(3),px(6),px(3),px(14));
         ++loadToken;home=false;screen="saved";list.removeAllViews();filterBar.removeAllViews();searchArea.removeAllViews();pinnedBar.removeAllViews();bottomNav.setVisibility(View.GONE);bottomPager.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
-        menuButton.setVisibility(View.GONE);navBack.setVisibility(View.VISIBLE);title.setText("★ Избранное");subtitle.setText("Локальные заметки и сохранённые сообщения");
+        menuButton.setVisibility(View.GONE);navBack.setVisibility(View.VISIBLE);
+        title.setText("Личные заметки");subtitle.setText("Цитаты и избранное из всех переписок");
         savedComposer.removeAllViews();savedComposer.setVisibility(View.VISIBLE);
-        LinearLayout compose=row();savedComposer.addView(compose,p(-1,-2));
-        EditText input=new EditText(this);input.setHint("Написать заметку…");input.setTextColor(FG);input.setHintTextColor(SUB);compose.addView(input,new LinearLayout.LayoutParams(0,-2,1));
-        Button send=btn("➤");compose.addView(send,p(50,52));send.setOnClickListener(v->{String value=input.getText().toString().trim();if(value.isEmpty())return;worker.execute(()->{savedStore.add(value,null,null,null);runOnUiThread(this::renderSaved);});});
-        Button attach=btn("📎 Прикрепить файл");savedComposer.addView(attach,p(-1,43));attach.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("*/*");i.addCategory(Intent.CATEGORY_OPENABLE);i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);startActivityForResult(i,28);});
+        savedComposer.setPadding(px(6),px(4),px(6),px(4));
+        LinearLayout compose=row();compose.setGravity(Gravity.CENTER_VERTICAL);
+        savedComposer.addView(compose,p(-1,-2));
+        EditText input=new EditText(this);input.setHint("Написать заметку…");
+        input.setTextColor(FG);input.setHintTextColor(SUB);
+        input.setTextSize(14);input.setMinLines(1);input.setMaxLines(3);
+        input.setPadding(px(10),px(6),px(6),px(6));
+        input.setBackground(shape(PANEL,12));
+        input.setContentDescription("Новая личная заметка");
+        compose.addView(input,new LinearLayout.LayoutParams(0,-2,1));
+        Button attach=btn("📎");attach.setContentDescription("Прикрепить файл к заметкам");
+        LinearLayout.LayoutParams attachSize=p(46,50);attachSize.leftMargin=px(4);
+        compose.addView(attach,attachSize);
+        attach.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("*/*");i.addCategory(Intent.CATEGORY_OPENABLE);i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);startActivityForResult(i,28);});
+        Button send=btn("➤");send.setContentDescription("Сохранить заметку");
+        LinearLayout.LayoutParams sendSize=p(46,50);sendSize.leftMargin=px(4);
+        compose.addView(send,sendSize);
+        send.setOnClickListener(v->{String value=input.getText().toString().trim();if(value.isEmpty())return;worker.execute(()->{savedStore.add(value,null,null,null);runOnUiThread(this::renderSaved);});});
+        scroll.post(()->{if("saved".equals(screen))scroll.scrollTo(0,0);});
         final int savedToken=loadToken;
         worker.execute(()->{List<SavedStore.Note> notes=savedStore.recent(150);runOnUiThread(()->{if(savedToken!=loadToken||!screen.equals("saved"))return;
             for(SavedStore.Note n:notes){
