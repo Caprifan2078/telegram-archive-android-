@@ -5186,11 +5186,22 @@ public class MainActivity extends Activity {
             if(token!=loadToken||!key.equals(activeKey)||isFinishing())return;
             if(periods.isEmpty())analyticsText(container,"Календарных периодов нет. Можно добавить даты вне переписки.",SUB,13);
             for(CalendarPeriod period:periods){
-                LinearLayout card=column();card.setPadding(px(12),px(12),px(12),px(12));card.setBackground(shape(PANEL,16));container.addView(card,p(-1,-2));
-                analyticsText(card,period.name,FG,17);analyticsText(card,period.start+" — "+period.end,ACCENT,14);
+                LinearLayout card=column();card.setPadding(px(12),px(12),px(12),px(12));
+                card.setBackground(shape(PANEL,16));
+                LinearLayout.LayoutParams cardLp=p(-1,-2);
+                cardLp.setMargins(px(3),px(4),px(3),px(4));container.addView(card,cardLp);
+                analyticsText(card,period.name,FG,17);
+                analyticsText(card,period.start+" — "+period.end,ACCENT,14);
                 if(!period.note.isEmpty())analyticsText(card,period.note,FG,14);
-                Button edit=btn("Изменить даты / описание");card.addView(edit);edit.setOnClickListener(v->editCalendarPeriod(period));
-                Button remove=btn("Удалить период");card.addView(remove);remove.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Удалить период?")
+                // One action row, rather than two tall stacked buttons per period.
+                LinearLayout actions=row();actions.setPadding(0,px(7),0,0);
+                card.addView(actions,p(-1,-2));
+                Button edit=btn("Изменить");edit.setContentDescription("Изменить даты и описание периода "+period.name);
+                actions.addView(edit,new LinearLayout.LayoutParams(0,px(44),1));
+                edit.setOnClickListener(v->editCalendarPeriod(period));
+                Button remove=btn("Удалить");remove.setContentDescription("Удалить период "+period.name);
+                actions.addView(remove,new LinearLayout.LayoutParams(0,px(44),1));
+                remove.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Удалить период?")
                     .setMessage("Удалится только личная отметка. Переписка останется.").setNegativeButton("Отмена",null).setPositiveButton("Удалить",(d,w)->worker.execute(()->{source.deleteCalendarPeriod(period.id);runOnUiThread(()->{if(key.equals(activeKey))renderChronologyPage();});})).show());
             }
         });}catch(Exception error){runOnUiThread(()->{if(token==loadToken)analyticsText(container,"Не удалось прочитать периоды",SUB,14);});}});
@@ -5225,7 +5236,14 @@ public class MainActivity extends Activity {
             return;
         }
         // A selected section is a focused detail page, not the whole hub repeated.
-        Button sections=btn("‹ К хронологии");list.addView(sections,p(-1,43));
+        // The header already has Back. A quiet breadcrumb is enough here;
+        // a second full-width primary-looking Back button dominated the page.
+        TextView sections=text("‹ К хронологии",13,ACCENT);
+        sections.setGravity(Gravity.CENTER_VERTICAL);
+        sections.setPadding(px(13),px(9),px(13),px(9));
+        sections.setBackground(new RippleDrawable(ColorStateList.valueOf(0x227ad2ff),
+            shape(Color.TRANSPARENT,11),null));
+        list.addView(sections,p(-1,39));
         sections.setOnClickListener(v->{chronologySection="overview";screen="relationships";showPage();});
         String sectionTitle="stages".equals(section)?"Этапы переписки":
             "calendar".equals(section)?"Периоды по датам":
@@ -5344,8 +5362,12 @@ public class MainActivity extends Activity {
             "media".equals(cinemaReturnScreen)?"К медиатеке":
             "analytics".equals(cinemaReturnScreen)?"К анализу":
             "search".equals(cinemaReturnScreen)?"К поиску":"К переписке";
-        Button back=btn("‹ "+returnLabel);
-        list.addView(back,p(-1,46));back.setOnClickListener(v->backWithinHistory());
+        TextView back=text("‹ "+returnLabel,13,ACCENT);
+        back.setPadding(px(13),px(9),px(13),px(9));
+        back.setGravity(Gravity.CENTER_VERTICAL);
+        back.setBackground(new RippleDrawable(ColorStateList.valueOf(0x227ad2ff),
+            shape(Color.TRANSPARENT,11),null));
+        list.addView(back,p(-1,39));back.setOnClickListener(v->backWithinHistory());
         final MessageDb source=db;final String archive=activeKey;
         worker.execute(()->{try{List<MessageDb.MediaMonth> months=source.mediaMonths();
             runOnUiThread(()->{
