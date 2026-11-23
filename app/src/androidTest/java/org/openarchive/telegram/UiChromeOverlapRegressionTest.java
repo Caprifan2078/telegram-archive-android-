@@ -85,6 +85,31 @@ public final class UiChromeOverlapRegressionTest {
             synthetic.close();a.deleteDatabase("telegram_"+key+".db");
         }
     }
+    @Test public void openingNotesDirectlyFromMediaMustHideGalleryOverlay()throws Exception{
+        MainActivity a=rule.getActivity();idle(a);
+        Object oldHome=get(a,"home"),oldScreen=get(a,"screen");
+        try{
+            inst.runOnMainSync(()->{
+                try{
+                    put(a,"home",false);put(a,"screen","media");
+                    // Simulate an already populated gallery before the drawer's
+                    // direct renderSaved route (which does not pass showPage).
+                    ((View)get(a,"mediaRecycler")).setVisibility(View.VISIBLE);
+                    ((View)get(a,"scroll")).setVisibility(View.GONE);
+                    call(a,"renderSaved");
+                    assertEquals("Notes must hide previous media overlay",View.GONE,
+                        ((View)get(a,"mediaRecycler")).getVisibility());
+                    assertEquals("Notes list must become visible",View.VISIBLE,
+                        ((View)get(a,"scroll")).getVisibility());
+                }catch(Exception e){throw new AssertionError(e);}
+            });
+        }finally{
+            inst.runOnMainSync(()->{
+                try{put(a,"home",oldHome);put(a,"screen",oldScreen);call(a,"showPage");}
+                catch(Exception e){throw new AssertionError(e);}
+            });
+        }
+    }
     @Test public void notesComposerIsOneRowAndChatHeaderControlsCannotLeakIntoNotes()throws Exception{
         MainActivity a=rule.getActivity();idle(a);
         Object oldHome=get(a,"home"),oldScreen=get(a,"screen");
