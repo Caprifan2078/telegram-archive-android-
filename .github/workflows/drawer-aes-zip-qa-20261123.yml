@@ -44,6 +44,15 @@ jobs:
           mkdir -p deliver
           cp "$apk" deliver/TelegramViewer_Drawer_AES_ZIP_20261123.apk
           (cd deliver && sha256sum *.apk > SHA256SUMS.txt)
+      - name: Preview APK for manual testing (before full UI regression)
+        uses: actions/upload-artifact@v4
+        with:
+          name: TelegramViewer-PREVIEW-Android-${{ matrix.api }}-20261123
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            deliver/*.apk
+            deliver/SHA256SUMS.txt
       - name: Enable emulator KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
