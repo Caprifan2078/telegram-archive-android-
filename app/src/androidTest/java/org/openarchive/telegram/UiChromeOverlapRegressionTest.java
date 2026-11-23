@@ -141,12 +141,41 @@ public final class UiChromeOverlapRegressionTest {
                     // Simulate an already populated gallery before the drawer's
                     // direct renderSaved route (which does not pass showPage).
                     ((View)get(a,"mediaRecycler")).setVisibility(View.VISIBLE);
+                    ((View)get(a,"mediaFastScroller")).setVisibility(View.VISIBLE);
+                    ((View)get(a,"mediaFastLabel")).setVisibility(View.VISIBLE);
                     ((View)get(a,"scroll")).setVisibility(View.GONE);
                     call(a,"renderSaved");
                     assertEquals("Notes must hide previous media overlay",View.GONE,
                         ((View)get(a,"mediaRecycler")).getVisibility());
+                    assertEquals("Notes must hide gallery fast-scroll rail",View.GONE,
+                        ((View)get(a,"mediaFastScroller")).getVisibility());
+                    assertEquals("Notes must hide gallery drag tooltip",View.GONE,
+                        ((View)get(a,"mediaFastLabel")).getVisibility());
                     assertEquals("Notes list must become visible",View.VISIBLE,
                         ((View)get(a,"scroll")).getVisibility());
+                }catch(Exception e){throw new AssertionError(e);}
+            });
+        }finally{
+            inst.runOnMainSync(()->{
+                try{put(a,"home",oldHome);put(a,"screen",oldScreen);call(a,"showPage");}
+                catch(Exception e){throw new AssertionError(e);}
+            });
+        }
+    }
+    @Test public void homeDirectRendererMustHideMediaFastScrollOverlay()throws Exception{
+        MainActivity a=rule.getActivity();idle(a);
+        Object oldHome=get(a,"home"),oldScreen=get(a,"screen");
+        try{
+            inst.runOnMainSync(()->{
+                try{
+                    put(a,"home",true);put(a,"screen","chat");
+                    ((View)get(a,"mediaFastScroller")).setVisibility(View.VISIBLE);
+                    ((View)get(a,"mediaFastLabel")).setVisibility(View.VISIBLE);
+                    call(a,"renderHome");
+                    assertEquals("Home must hide gallery fast-scroll rail",View.GONE,
+                        ((View)get(a,"mediaFastScroller")).getVisibility());
+                    assertEquals("Home must hide gallery drag tooltip",View.GONE,
+                        ((View)get(a,"mediaFastLabel")).getVisibility());
                 }catch(Exception e){throw new AssertionError(e);}
             });
         }finally{
