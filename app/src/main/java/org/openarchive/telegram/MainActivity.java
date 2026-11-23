@@ -5385,22 +5385,6 @@ public class MainActivity extends Activity {
             renderRelationshipsPage();
             return;
         }
-        if(false){
-            TextView heading=text("Периоды истории",21,FG);heading.setTypeface(null,Typeface.BOLD);
-            heading.setPadding(px(12),px(11),px(12),px(6));list.addView(heading);
-            analyticsText(list,"Выбери раздел — остальные материалы не загружаются.",SUB,12);
-            Button stages=btn("01 · Этапы переписки  ›");list.addView(stages,p(-1,51));
-            stages.setOnClickListener(v->{chronologySection="stages";renderChronologyPage();});
-            Button calendarButton=btn("02 · Периоды по датам  ›");list.addView(calendarButton,p(-1,51));
-            calendarButton.setOnClickListener(v->{chronologySection="calendar";renderChronologyPage();});
-            Button charts=btn("03 · Сравнение этапов  ›");list.addView(charts,p(-1,51));
-            charts.setOnClickListener(v->{chronologySection="chart";renderChronologyPage();});
-            Button events=btn("04 · Лента событий  ›");list.addView(events,p(-1,51));
-            events.setOnClickListener(v->{historyEventsExpanded=true;screen="relationships";showPage();});
-            analyticsText(list,"Этапы отмечаются сообщениями; периоды по датам создаются вручную. События и графики открываются отдельно.",SUB,13);
-            status.setText("");status.setVisibility(View.GONE);
-            return;
-        }
         // A selected section is a focused detail page, not the whole hub repeated.
         // The header already has Back. A quiet breadcrumb is enough here;
         // a second full-width primary-looking Back button dominated the page.
