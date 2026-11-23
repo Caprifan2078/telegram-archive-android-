@@ -55,6 +55,15 @@ public final class DrawerAesZipRegressionTest {
         });
     }
 
+    @Test public void largeArchiveFallbackUsesFreeSpaceInsteadOfFixedTwoGigabyteLimit(){
+        long free=12L*1024*1024*1024;
+        long limit=ArchiveFileImport.maxTemporaryCopyForFreeBytes(free);
+        assertTrue("Large Telegram exports must not have an arbitrary 2 GiB cutoff",
+            limit>4L*1024*1024*1024);
+        assertTrue("Keep storage reserve for Android and the extracted content",limit<free);
+        assertEquals(0,ArchiveFileImport.maxTemporaryCopyForFreeBytes(128L*1024*1024));
+    }
+
     @Test public void fallbackOpensAes256ZipThroughCentralDirectory()throws Exception{
         char[] password="pass-strong-AES-256".toCharArray();
         File html=File.createTempFile("telegram-zip-fixture-", ".html",context.getCacheDir());
