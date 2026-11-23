@@ -1618,6 +1618,204 @@ public class MainActivity extends Activity {
     private boolean isChatHidden(String key){
         return getPreferences(MODE_PRIVATE).getBoolean("hidden_chat_"+key,false);
     }
+    private java.util.Set<String> registeredChatKeys(){
+        java.util.Set<String> keys=new java.util.HashSet<>();
+        for(int i=0;i<archives.length();i++){
+            JSONObject item=archives.optJSONObject(i);
+            if(item!=null)keys.add(item.optString("key"));
+        }
+        return keys;
+    }
+    private String archiveLabelForGroup(String key){
+        for(int i=0;i<archives.length();i++){
+            JSONObject item=archives.optJSONObject(i);
+            if(item!=null&&key.equals(item.optString("key")))
+                return item.optString("name","Переписка");
+        }
+        return "Переписка недоступна · проверь корзину";
+    }
+    private JSONArray multiConversationGroups(){
+        try{return MultiConversationRegistry.read(getPreferences(MODE_PRIVATE));}
+        catch(IllegalStateException damaged){
+            new FontDialog.Builder(this).setTitle("Нельзя прочитать группы")
+                .setMessage("Список повреждён. Исходные переписки не изменены. "+
+                    "Не создавай новые группы до восстановления настроек из копии.")
+                .setPositiveButton("Закрыть",null).show();
+            return null;
+        }
+    }
+    private void createMultiConversationDialog(){
+        if(importing||restoringBackup){toast("Дождись завершения операции");return;}
+        EditText name=new EditText(this);name.setSingleLine(true);
+        name.setHint("Например, Вася");
+        name.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(80)});
+        new FontDialog.Builder(this).setTitle("Новая мультипереписка")
+            .setMessage("Создай карточку человека, затем подключи его переписки. "+
+                "Исходные сообщения и заметки не объединяются и не удаляются.")
+            .setView(name).setNegativeButton("Отмена",null)
+            .setPositiveButton("Создать",(d,w)->{
+                try{
+                    String id=MultiConversationRegistry.create(getPreferences(MODE_PRIVATE),
+                        name.getText().toString());
+                    renderHome();
+                    showAddChatToMultiConversation(id);
+                }catch(Exception err){toast(err.getMessage());}
+            }).show();
+    }
+    private void showMultiConversation(String id){
+        JSONArray groups=multiConversationGroups();if(groups==null)return;
+        JSONObject group=MultiConversationRegistry.find(groups,id);
+        if(group==null){toast("Группа больше не найдена");renderHome();return;}
+        JSONArray members=group.optJSONArray("members");
+        ArrayList<String> labels=new ArrayList<>();
+        ArrayList<String> keys=new ArrayList<>();
+        boolean reveal=getPreferences(MODE_PRIVATE).getBoolean("show_hidden_chats",false);
+        if(members!=null)for(int i=0;i<members.length();i++){
+            JSONObject entry=members.optJSONObject(i);if(entry==null)continue;
+            String key=entry.optString("key");
+            if(!canOpenQuoteArchive(key)||isChatHidden(key)&&!reveal)continue;
+            keys.add(key);
+            labels.add(entry.optString("label","Источник")+" · "+archiveLabelForGroup(key));
+        }
+        labels.add("＋  Добавить переписку");
+        labels.add("⋮  Настроить группу");
+        String[] options=labels.toArray(new String[0]);
+        new FontDialog.Builder(this).setTitle(group.optString("name")+" · мультипереписка")
+            .setItems(options,(d,which)->{
+                if(which<keys.size())activateArchive(keys.get(which));
+                else if(which==keys.size())showAddChatToMultiConversation(id);
+                else manageMultiConversation(id);
+            }).setNegativeButton("Закрыть",null).show();
+    }
+    private void showAddChatToMultiConversation(String groupId){
+        if(importing||restoringBackup){toast("Дождись завершения операции");return;}
+        JSONArray groups=multiConversationGroups();if(groups==null)return;
+        if(MultiConversationRegistry.find(groups,groupId)==null){toast("Группа не найдена");return;}
+        ArrayList<JSONObject> candidates=new ArrayList<>();
+        boolean reveal=getPreferences(MODE_PRIVATE).getBoolean("show_hidden_chats",false);
+        for(int i=0;i<archives.length();i++){
+            JSONObject chat=archives.optJSONObject(i);if(chat==null)continue;
+            String key=chat.optString("key");
+            if(!MultiConversationRegistry.memberOfAny(groups,key)
+                    &&(!isChatHidden(key)||reveal))candidates.add(chat);
+        }
+        if(candidates.isEmpty()){
+            new FontDialog.Builder(this).setTitle("Нет свободных переписок")
+                .setMessage("Импортируй ещё одну переписку обычной кнопкой добавления. "+
+                    "В каждой мультипереписке используются уже существующие чаты.")
+                .setPositiveButton("Закрыть",null).show();return;
+        }
+        String[] options=new String[candidates.size()];
+        for(int i=0;i<candidates.size();i++)
+            options[i]=candidates.get(i).optString("name","Переписка");
+        new FontDialog.Builder(this).setTitle("Добавить источник в группу")
+            .setItems(options,(d,which)->{
+                askMultiConversationSourceLabel(groupId,candidates.get(which).optString("key"));
+            }).setNegativeButton("Отмена",null).show();
+    }
+    private void askMultiConversationSourceLabel(String groupId,String key){
+        EditText name=new EditText(this);name.setSingleLine(true);
+        name.setText("Telegram");name.setSelection(name.length());
+        name.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(80)});
+        new FontDialog.Builder(this).setTitle("Подпись источника")
+            .setMessage("Например: Telegram, второй аккаунт или WhatsApp. "+
+                "Подпись вводишь ты; она не подтверждает личность автора или формат файла.")
+            .setView(name).setNegativeButton("Назад",(d,w)->showAddChatToMultiConversation(groupId))
+            .setPositiveButton("Добавить",(d,w)->{
+                try{
+                    MultiConversationRegistry.add(getPreferences(MODE_PRIVATE),groupId,key,
+                        name.getText().toString(),registeredChatKeys());
+                    renderHome();showMultiConversation(groupId);
+                }catch(Exception error){toast(error.getMessage());}
+            }).show();
+    }
+    private void chooseMultiConversationForChat(String key){
+        JSONArray groups=multiConversationGroups();if(groups==null)return;
+        for(int i=0;i<groups.length();i++){
+            JSONObject group=groups.optJSONObject(i);if(group==null)continue;
+            JSONArray members=group.optJSONArray("members");
+            if(members==null)continue;
+            for(int j=0;j<members.length();j++){
+                JSONObject member=members.optJSONObject(j);
+                if(member!=null&&key.equals(member.optString("key"))){
+                    showMultiConversation(group.optString("id"));return;
+                }
+            }
+        }
+        if(groups.length()==0){createMultiConversationDialog();return;}
+        final JSONArray choices=groups;
+        String[] names=new String[choices.length()+1];
+        for(int i=0;i<choices.length();i++)
+            names[i]=choices.optJSONObject(i).optString("name","Группа");
+        names[choices.length()]="＋  Новая мультипереписка";
+        new FontDialog.Builder(this).setTitle("К кому относится переписка?")
+            .setItems(names,(d,which)->{
+                if(which==choices.length())createMultiConversationDialog();
+                else askMultiConversationSourceLabel(
+                    choices.optJSONObject(which).optString("id"),key);
+            }).setNegativeButton("Отмена",null).show();
+    }
+    private void manageMultiConversation(String id){
+        JSONArray groups=multiConversationGroups();if(groups==null)return;
+        JSONObject g=MultiConversationRegistry.find(groups,id);
+        if(g==null)return;
+        new FontDialog.Builder(this).setTitle(g.optString("name")+" · управление")
+            .setItems(new String[]{"Переименовать","Исключить одну переписку",
+                    "Удалить только группу"},(d,which)->{
+                if(which==0)renameMultiConversation(id);
+                else if(which==1)removeChatFromMultiConversation(id);
+                else{
+                    new FontDialog.Builder(this).setTitle("Удалить мультипереписку?")
+                        .setMessage("Удалится только общая карточка. "+
+                            "Все переписки, заметки, закрепления и хронология останутся.")
+                        .setNegativeButton("Отмена",null)
+                        .setPositiveButton("Удалить группу",(dialog,w)->{
+                            try{
+                                MultiConversationRegistry.delete(getPreferences(MODE_PRIVATE),id);
+                                renderHome();
+                            }catch(Exception error){toast(error.getMessage());}
+                        }).show();
+                }
+            }).setNegativeButton("Назад",(d,w)->showMultiConversation(id)).show();
+    }
+    private void renameMultiConversation(String id){
+        JSONArray groups=multiConversationGroups();if(groups==null)return;
+        JSONObject g=MultiConversationRegistry.find(groups,id);if(g==null)return;
+        EditText name=new EditText(this);name.setSingleLine(true);
+        name.setText(g.optString("name"));name.setSelection(name.length());
+        name.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(80)});
+        new FontDialog.Builder(this).setTitle("Название мультипереписки")
+            .setView(name).setNegativeButton("Отмена",null)
+            .setPositiveButton("Сохранить",(d,w)->{
+                try{MultiConversationRegistry.rename(getPreferences(MODE_PRIVATE),id,
+                    name.getText().toString());renderHome();}
+                catch(Exception error){toast(error.getMessage());}
+            }).show();
+    }
+    private void removeChatFromMultiConversation(String id){
+        JSONArray groups=multiConversationGroups();if(groups==null)return;
+        JSONObject group=MultiConversationRegistry.find(groups,id);if(group==null)return;
+        JSONArray members=group.optJSONArray("members");
+        if(members==null||members.length()==0){toast("Группа пока пустая");return;}
+        String[] labels=new String[members.length()];
+        for(int i=0;i<members.length();i++){
+            JSONObject member=members.optJSONObject(i);
+            labels[i]=(member==null?"Источник":member.optString("label","Источник"))+
+                " · "+(member==null?"":archiveLabelForGroup(member.optString("key")));
+        }
+        new FontDialog.Builder(this).setTitle("Исключить переписку из группы")
+            .setItems(labels,(d,index)->{
+                JSONObject member=members.optJSONObject(index);if(member==null)return;
+                new FontDialog.Builder(this).setTitle("Убрать из мультипереписки?")
+                    .setMessage("Удалится только связь с группой, не сама переписка и не твои заметки.")
+                    .setNegativeButton("Отмена",null)
+                    .setPositiveButton("Исключить",(dd,w)->{
+                        try{MultiConversationRegistry.remove(getPreferences(MODE_PRIVATE),id,
+                            member.optString("key"));renderHome();showMultiConversation(id);}
+                        catch(Exception error){toast(error.getMessage());}
+                    }).show();
+            }).setNegativeButton("Отмена",null).show();
+    }
     /** Compact actions, not a full-screen stack of giant buttons.
      * The card itself opens the chat, so this menu never duplicates "Open chat". */
     private void showChatActions(String key,String name){
