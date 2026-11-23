@@ -187,6 +187,7 @@ public class MainActivity extends Activity {
     private TextView activeAudioButton;
     private SeekBar activeVoiceSeek;private boolean voiceSeekDragging;
     private static final class RoundControls {
+        long sourceAttachmentId; // distinguish several rounds referencing one MP4 path
         SeekBar seek;
         TextView timer;
         ImageView preview;
@@ -1940,8 +1941,39 @@ public class MainActivity extends Activity {
             }
         }
     }
+    /** Find the currently rendered round tile (if any), never a different item sharing its MP4. */
+    private FrameLayout findRoundHolderForAttachment(View node,long attachmentId){
+        if(node==null)return null;
+        if(node instanceof FrameLayout){
+            Object tag=node.getTag();
+            if(tag instanceof RoundControls&&((RoundControls)tag).sourceAttachmentId==attachmentId)
+                return (FrameLayout)node;
+        }
+        if(node instanceof ViewGroup){
+            ViewGroup group=(ViewGroup)node;
+            for(int i=0;i<group.getChildCount();i++){
+                FrameLayout found=findRoundHolderForAttachment(group.getChildAt(i),attachmentId);
+                if(found!=null)return found;
+            }
+        }
+        return null;
+    }
+    /** Chat pagination can detach and rebuild the original source while a video floats. */
+    private void rebindAutoFloatingSourceIfNeeded(){
+        if(!autoFloating||playingAttachment==null||!"round".equals(playingAttachment.kind)
+            ||autoFloatSourceHolder!=null&&autoFloatSourceHolder.isAttachedToWindow())return;
+        View message=renderedMessageViews.get(playingAttachment.messageId);
+        FrameLayout rebuilt=findRoundHolderForAttachment(message,playingAttachment.id);
+        if(rebuilt==null||!rebuilt.isAttachedToWindow())return;
+        RoundControls controls=(RoundControls)rebuilt.getTag();
+        if(controls.preview==null||controls.overlay==null)return;
+        autoFloatSourceHolder=rebuilt;
+        autoFloatSourcePoster=controls.preview;
+        autoFloatSourceOverlay=controls.overlay;
+    }
     private void checkAutoFloat(){
         if(home||!"chat".equals(screen)||scroll==null)return;
+        rebindAutoFloatingSourceIfNeeded();
         int[] viewport=new int[2];
         scroll.getLocationOnScreen(viewport);
         int viewportTop=viewport[1],viewportBottom=viewportTop+scroll.getHeight();
@@ -3877,6 +3909,9 @@ public class MainActivity extends Activity {
             previousSender=sender;
         }
         lastRenderedDay=last;
+        // Layout can recreate the source without a scroll callback; check the return
+        // after the new chat tiles have attached rather than holding a stale bubble.
+        if(autoFloating&&"chat".equals(screen))scroll.post(this::scheduleFloatingCheck);
         if(append)return; // Never jump to the top when more history is appended.
         if(results&&pendingSearchScroll>=0)return; // The return path restores after layout.
         if("chat".equals(screen)&&pendingRestoreId>0){
@@ -5365,6 +5400,7 @@ public class MainActivity extends Activity {
         TextView duration=text("00:00",12,SUB);duration.setGravity(Gravity.CENTER);wrap.addView(duration,p(size,24));
         loadDuration(a.path,duration);
         RoundControls controls=new RoundControls();
+        controls.sourceAttachmentId=a.id;
         controls.timer=duration;controls.preview=preview;controls.overlay=overlay;
         if(chatCircle){
             SeekBar seek=new SeekBar(this);seek.setMax(1000);seek.setProgress(0);
