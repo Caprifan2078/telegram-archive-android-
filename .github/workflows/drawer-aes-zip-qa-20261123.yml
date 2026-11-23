@@ -10,6 +10,11 @@ concurrency:
   cancel-in-progress: true
 jobs:
   drawer-zip:
+    name: drawer-zip-android-${{ matrix.api }}
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [30, 35]
     if: github.event.repository.private == false
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -44,32 +49,37 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Test AES-256 ZIP and drawer on Android 11
+      - name: Test AES-256 ZIP, full UI and navigation on Android ${{ matrix.api }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30
+          api-level: ${{ matrix.api }}
           arch: x86_64
           target: google_apis
           profile: pixel_2
           disable-animations: true
           emulator-boot-timeout: 420
           script: |
-            gradle --no-daemon --max-workers=2 connectedDrawerZipQaAndroidTest -PqaDrawerZipInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.DrawerAesZipRegressionTest,org.openarchive.telegram.IndependentAesZipRegressionTest,org.openarchive.telegram.EncryptedTelegramImportRegressionTest,org.openarchive.telegram.ArchivePasswordOnDemandRegressionTest,org.openarchive.telegram.ArchivePasswordUiRegressionTest,org.openarchive.telegram.UiMenuTourRegressionTest'
+            result=0
+            gradle --no-daemon --max-workers=2 connectedDrawerZipQaAndroidTest -PqaDrawerZipInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.DrawerAesZipRegressionTest,org.openarchive.telegram.IndependentAesZipRegressionTest,org.openarchive.telegram.EncryptedTelegramImportRegressionTest,org.openarchive.telegram.ArchivePasswordOnDemandRegressionTest,org.openarchive.telegram.ArchivePasswordUiRegressionTest,org.openarchive.telegram.UiMenuTourRegressionTest,org.openarchive.telegram.UiChromeOverlapRegressionTest,org.openarchive.telegram.MediaFastScrollRegressionTest,org.openarchive.telegram.MediaInfiniteGalleryRegressionTest,org.openarchive.telegram.ChronologyHubRegressionTest,org.openarchive.telegram.FloatingRoundReattachRegressionTest,org.openarchive.telegram.ChatVisualConsistencyRegressionTest,org.openarchive.telegram.MultiConversationHomeRegressionTest' || result=$?
+            mkdir -p app/build/ui-audit
+            adb pull /sdcard/Download/ app/build/ui-audit/ || true
+            exit "$result"
       - name: Android test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: TelegramViewer-Drawer-AES-ZIP-Reports-20261123
+          name: TelegramViewer-UI-Reports-Android-${{ matrix.api }}-20261123
           retention-days: 7
           path: |
             app/build/outputs/androidTest-results/
             app/build/reports/androidTests/
             app/build/test-results/
+            app/build/ui-audit/
       - name: Standalone QA APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: TelegramViewer-Drawer-AES-ZIP-APK-20261123
+          name: TelegramViewer-Drawer-AES-ZIP-APK-Android-${{ matrix.api }}-20261123
           retention-days: 7
           if-no-files-found: error
           path: |
