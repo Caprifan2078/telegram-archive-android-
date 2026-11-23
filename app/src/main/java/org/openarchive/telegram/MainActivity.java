@@ -155,10 +155,12 @@ public class MainActivity extends Activity {
     private LinearLayout base,list,filterBar,bottomNav,searchArea,toolArea,savedComposer;
     private LinearLayout importProgressPanel;private TextView importProgressText;
     private MediaZoomRecyclerView mediaRecycler;
+    private MediaFastScroller mediaFastScroller;
+    private TextView mediaFastLabel;
     private MediaGalleryAdapter mediaAdapter;
     private androidx.recyclerview.widget.GridLayoutManager mediaLayout;
-    private int mediaColumns=3,mediaLoaded=0,mediaTotal=0;
-    private boolean mediaAppending=false;
+    private int mediaColumns=3,mediaLoaded=0,mediaTotal=0,mediaWindowStart=0;
+    private boolean mediaAppending=false,mediaPrepending=false;
     private TextView mediaZoomLabel;
     private android.widget.SeekBar mediaZoomSeek;
     private ScrollView scroll;private TextView title,subtitle,status,pageLabel,headerLogo;private Button pdfButton;private Button navBack,menuButton;private String lastRenderedDay="";
@@ -1411,8 +1413,14 @@ public class MainActivity extends Activity {
         list.animate().alpha(1f).translationY(0).setDuration(motionDuration(180))
             .setInterpolator(new DecelerateInterpolator()).start();
     }
-    private void renderHome(){
+    /** Direct route renderers bypass showPage(), so clear both gallery overlays together. */
+    private void hideGalleryOverlay(){
         if(mediaRecycler!=null)mediaRecycler.setVisibility(View.GONE);
+        if(mediaFastScroller!=null)mediaFastScroller.setVisibility(View.GONE);
+        if(mediaFastLabel!=null)mediaFastLabel.setVisibility(View.GONE);
+    }
+    private void renderHome(){
+        hideGalleryOverlay();
         if(scroll!=null)scroll.setVisibility(View.VISIBLE);
         list.setBackgroundColor(BG);
         list.setPadding(px(3),px(6),px(3),px(14));
@@ -1743,7 +1751,7 @@ public class MainActivity extends Activity {
     }
     private void renderMultiTimelinePage(){
         final int token=++loadToken;
-        if(mediaRecycler!=null)mediaRecycler.setVisibility(View.GONE);
+        hideGalleryOverlay();
         if(scroll!=null)scroll.setVisibility(View.VISIBLE);
         if(floatingPanel!=null)closeFloatingRound();
         list.setPadding(px(3),px(6),px(3),px(14));
@@ -2277,7 +2285,7 @@ public class MainActivity extends Activity {
     private void renderSaved(){
         // Drawer can open Notes directly from Media, where the RecyclerView overlays
         // and hides ScrollView. Always restore the correct viewport/chrome explicitly.
-        if(mediaRecycler!=null)mediaRecycler.setVisibility(View.GONE);
+        hideGalleryOverlay();
         if(scroll!=null)scroll.setVisibility(View.VISIBLE);
         if(playerStrip!=null)playerStrip.setVisibility(View.GONE);
         if(headerActions!=null)headerActions.setVisibility(View.GONE);
@@ -2854,15 +2862,38 @@ public class MainActivity extends Activity {
         mediaRecycler=new MediaZoomRecyclerView(this);
         mediaRecycler.setVisibility(View.GONE);
         mediaRecycler.setClipToPadding(false);
-        mediaRecycler.setPadding(px(2),px(6),px(2),px(16));
+        // Reserve an actual touch-safe gutter for the right fast scrubber.
+        mediaRecycler.setPadding(px(2),px(6),px(37),px(16));
         mediaRecycler.setItemAnimator(null);
         mediaAdapter=new MediaGalleryAdapter();
         mediaRecycler.setAdapter(mediaAdapter);
         scrollHost.addView(mediaRecycler,new FrameLayout.LayoutParams(-1,-1));
         mediaRecycler.addOnScrollListener(new androidx.recyclerview.widget.RecyclerView.OnScrollListener(){
             @Override public void onScrolled(androidx.recyclerview.widget.RecyclerView rv,int dx,int dy){
+                syncMediaFastScroll();
                 if(dy>=0)maybeAppendMedia();
+                else maybePrependMedia();
             }
+        });
+        mediaFastScroller=new MediaFastScroller(this);
+        mediaFastScroller.setVisibility(View.GONE);
+        mediaFastScroller.setOnSeek(this::jumpToMediaFraction);
+        scrollHost.addView(mediaFastScroller,new FrameLayout.LayoutParams(px(39),-1,Gravity.END));
+        // A tooltip beside the track shows absolute position, not merely
+        // the 30 thumbnails currently loaded from SQLite.
+        mediaFastLabel=text("",12,FG);
+        mediaFastLabel.setPadding(px(10),px(7),px(10),px(7));
+        mediaFastLabel.setGravity(Gravity.CENTER);
+        mediaFastLabel.setBackground(outlined(PANEL,12,true));
+        mediaFastLabel.setVisibility(View.GONE);
+        FrameLayout.LayoutParams labelLp=new FrameLayout.LayoutParams(-2,-2,
+            Gravity.END|Gravity.CENTER_VERTICAL);
+        labelLp.rightMargin=px(43);
+        scrollHost.addView(mediaFastLabel,labelLp);
+        mediaFastScroller.setOnDrag((position,dragging)->{
+            if(mediaFastLabel==null)return;
+            mediaFastLabel.setText((position+1)+" / "+mediaTotal);
+            mediaFastLabel.setVisibility(dragging?View.VISIBLE:View.GONE);
         });
         verticalTimeline=new VerticalTimeline();
         scrollHost.addView(verticalTimeline,new FrameLayout.LayoutParams(px(20),-1,Gravity.END));
@@ -3515,12 +3546,17 @@ public class MainActivity extends Activity {
         // must reset the notes' fixed bottom editor BEFORE early routing returns.
         // Otherwise switching from Saved can leave two bottom control rows stacked.
         if(savedComposer!=null&&!screen.equals("saved"))savedComposer.setVisibility(View.GONE);
+        if(!"chat".equals(screen)&&list!=null)
+            list.setPadding(px(3),px(6),px(3),px(14)); // do not inherit long-chat scrubber gutter
         // Floating video is chat-only; never leave a detached grey surface over other pages.
         if((home||!"chat".equals(screen))&&floatingPanel!=null)closeFloatingRound();
         if(mediaRecycler!=null){
             boolean showingGallery="media".equals(screen)&&!home;
             mediaRecycler.setVisibility(showingGallery?View.VISIBLE:View.GONE);
             scroll.setVisibility(showingGallery?View.GONE:View.VISIBLE);
+            if(mediaFastScroller!=null)
+                mediaFastScroller.setVisibility(showingGallery&&mediaTotal>1?View.VISIBLE:View.GONE);
+            if(mediaFastLabel!=null)mediaFastLabel.setVisibility(View.GONE);
         }
         if("help".equals(screen)){renderHelpPage();return;}
         if("multi_timeline".equals(screen)){renderMultiTimelinePage();return;}
@@ -3592,9 +3628,12 @@ public class MainActivity extends Activity {
                     }
                     else list.setBackgroundColor(BG);
                     if(gallery){
-                        mediaLoaded=attachments.size();mediaTotal=count;mediaAppending=false;
+                        mediaWindowStart=0;mediaLoaded=attachments.size();mediaTotal=count;
+                        mediaAppending=false;mediaPrepending=false;
                         mediaAdapter.reset();mediaAdapter.append(attachments);
                         updateMediaLayout(false);
+                        mediaFastScroller.setProgress(0,count);
+                        mediaFastScroller.setVisibility(count>1?View.VISIBLE:View.GONE);
                         if(count==0){
                             mediaRecycler.setVisibility(View.GONE);
                             scroll.setVisibility(View.VISIBLE);
@@ -4664,31 +4703,94 @@ public class MainActivity extends Activity {
         heading.setPadding(0,0,0,px(8));card.addView(heading);
         return card;
     }
+    /** Fast jump into personally saved chronology events without opening each event page. */
+    private void searchHistoryEvents(String query){
+        if(db==null||home||!"relationships".equals(screen))return;
+        String needle=query==null?"":query.trim();
+        if(needle.isEmpty()){toast("Введи название, описание или дату события");return;}
+        final MessageDb source=db;final String archive=activeKey,term=needle;
+        final int token=loadToken;
+        status.setVisibility(View.VISIBLE);status.setText("Ищу личные события…");
+        worker.execute(()->{
+            HistoryEventSearch.Result result=null;String failure=null;
+            try{result=HistoryEventSearch.find(source,term);}
+            catch(Exception ex){failure=ex.getMessage();}
+            final HistoryEventSearch.Result hits=result;final String error=failure;
+            runOnUiThread(()->{
+                if(isFinishing()||isDestroyed()||token!=loadToken||
+                    db!=source||!archive.equals(activeKey)||!"relationships".equals(screen))return;
+                status.setVisibility(View.GONE);
+                if(error!=null){toast("Поиск не удался: "+error);return;}
+                if(hits.matches.isEmpty()){
+                    new FontDialog.Builder(this).setTitle("События не найдены")
+                        .setMessage("Нет совпадений для «"+clip(term,80)+"»"+
+                            (hits.incomplete?". Проверены первые "+hits.scanned+" событий.":""))
+                        .setPositiveButton("Закрыть",null).show();
+                    return;
+                }
+                String[] labels=new String[hits.matches.size()];
+                for(int i=0;i<labels.length;i++){
+                    MessageDb.RelationshipEvent e=hits.matches.get(i);
+                    labels[i]=clip(e.title,70)+(e.note==null||e.note.isEmpty()?"":
+                        " · "+clip(e.note,55));
+                }
+                new FontDialog.Builder(this)
+                    .setTitle("Найдено событий: "+hits.matches.size()+
+                        (hits.incomplete?" · частичный поиск":""))
+                    .setMessage(hits.incomplete?
+                        "Показаны первые совпадения. Для дальнейших событий уточни запрос.":null)
+                    .setItems(labels,(d,which)->jump(hits.matches.get(which).anchorId,"relationships"))
+                    .setNegativeButton("Закрыть",null).show();
+            });
+        });
+    }
     private void renderRelationshipsPage(){
         int token=++loadToken;
         if(home){screen="chat";showPage();return;}
         prepareRelationshipScreen("Хронология","События, периоды и воспоминания — по разделам.");
-        analyticsText(list,"События, этапы и медиа — в отдельных разделах.",SUB,12);
-        Button events=btn(historyEventsExpanded?"01 · События переписки  ▴":"01 · События переписки  ▾");
-        list.addView(events,p(-1,52));
+        // Find old user-authored events directly, regardless of the current 20-item page.
+        // Searching never traverses the private message text or modifies annotations.
+        LinearLayout eventSearch=row();eventSearch.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams searchBounds=p(-1,50);
+        searchBounds.setMargins(px(6),px(5),px(6),px(8));
+        list.addView(eventSearch,searchBounds);
+        EditText findEvent=new EditText(this);findEvent.setSingleLine(true);
+        findEvent.setTextSize(14);findEvent.setTextColor(FG);findEvent.setHintTextColor(SUB);
+        findEvent.setHint("Название, описание или дата события");
+        findEvent.setContentDescription("Найти событие в хронологии");
+        findEvent.setBackground(outlined(PANEL,12,false));
+        findEvent.setPadding(px(12),px(5),px(8),px(5));
+        findEvent.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
+        eventSearch.addView(findEvent,new LinearLayout.LayoutParams(0,px(46),1));
+        Button search=btn("Найти");search.setContentDescription("Найти событие по всему архиву");
+        LinearLayout.LayoutParams searchButton=p(76,46);
+        searchButton.leftMargin=px(6);eventSearch.addView(search,searchButton);
+        search.setOnClickListener(v->searchHistoryEvents(findEvent.getText().toString()));
+        findEvent.setOnEditorActionListener((v,action,event)->{
+            searchHistoryEvents(findEvent.getText().toString());return true;
+        });
+        TextView events=secondaryDisclosure(historyEventsExpanded?
+            "01 · События переписки  ▴":"01 · События переписки  ▾");
+        list.addView(events,p(-1,44));
         events.setContentDescription("Раскрыть или свернуть ленту событий");
         events.setOnClickListener(v->{
             historyEventsExpanded=!historyEventsExpanded;
             renderRelationshipsPage();
         });
-        Button stages=btn("02 · Этапы переписки  ›");list.addView(stages,p(-1,52));
+        TextView stages=secondaryDisclosure("02 · Этапы переписки  ›");list.addView(stages,p(-1,44));
         stages.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="stages";screen="chronology";showPage();});
-        Button calendar=btn("03 · Периоды по датам  ›");list.addView(calendar,p(-1,52));
+        TextView calendar=secondaryDisclosure("03 · Периоды по датам  ›");list.addView(calendar,p(-1,44));
         calendar.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="calendar";screen="chronology";showPage();});
-        Button charts=btn("04 · Сравнение этапов  ›");list.addView(charts,p(-1,52));
+        TextView charts=secondaryDisclosure("04 · Сравнение этапов  ›");list.addView(charts,p(-1,44));
         charts.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="chart";screen="chronology";showPage();});
-        Button cinemaShortcut=btn("05 · Кинолента медиа по годам  ›");list.addView(cinemaShortcut,p(-1,52));
+        TextView cinemaShortcut=secondaryDisclosure("05 · Кинолента медиа по годам  ›");list.addView(cinemaShortcut,p(-1,44));
         cinemaShortcut.setOnClickListener(v->{historyEventsExpanded=false;cinemaReturnScreen=screen;screen="cinema";showPage();});
         Button backToChat=btn("+ Отметить событие в переписке");list.addView(backToChat,p(-1,46));
         backToChat.setOnClickListener(v->{screen="chat";showPage();
             toast("Удерживай важное сообщение и выбери «Добавить событие истории»");});
         analyticsText(list,"Все отметки личные: оригинальные сообщения и файлы не изменяются.",SUB,12);
-        Button more=btn("Другие инструменты истории  ▾");list.addView(more,p(-1,46));
+        TextView more=secondaryDisclosure("Другие инструменты истории  ▾");
+        list.addView(more,p(-1,44));
         LinearLayout advanced=column();advanced.setVisibility(View.GONE);list.addView(advanced,p(-1,-2));
         more.setOnClickListener(v->{
             boolean expand=advanced.getVisibility()!=View.VISIBLE;
@@ -5274,6 +5376,9 @@ public class MainActivity extends Activity {
     private void renderChronologyPage(){
         final int token=++loadToken;
         if(home){screen="chat";showPage();return;}
+        // This page is reached directly after saving an event from the chat.
+        // Reset the header: otherwise the chat-only PDF/overflow buttons leak here.
+        refreshTabs();
         bottomNav.setVisibility(View.GONE);
         title.setText("Хронология");subtitle.setText("Этапы, даты и графики · офлайн");
         filterBar.removeAllViews();searchArea.removeAllViews();
@@ -5284,19 +5389,11 @@ public class MainActivity extends Activity {
 
         final String section=chronologySection;
         if("overview".equals(section)){
-            TextView heading=text("Периоды истории",21,FG);heading.setTypeface(null,Typeface.BOLD);
-            heading.setPadding(px(12),px(11),px(12),px(6));list.addView(heading);
-            analyticsText(list,"Выбери раздел — остальные материалы не загружаются.",SUB,12);
-            Button stages=btn("01 · Этапы переписки  ›");list.addView(stages,p(-1,51));
-            stages.setOnClickListener(v->{chronologySection="stages";renderChronologyPage();});
-            Button calendarButton=btn("02 · Периоды по датам  ›");list.addView(calendarButton,p(-1,51));
-            calendarButton.setOnClickListener(v->{chronologySection="calendar";renderChronologyPage();});
-            Button charts=btn("03 · Сравнение этапов  ›");list.addView(charts,p(-1,51));
-            charts.setOnClickListener(v->{chronologySection="chart";renderChronologyPage();});
-            Button events=btn("04 · Лента событий  ›");list.addView(events,p(-1,51));
-            events.setOnClickListener(v->{historyEventsExpanded=true;screen="relationships";showPage();});
-            analyticsText(list,"Этапы отмечаются сообщениями; периоды по датам создаются вручную. События и графики открываются отдельно.",SUB,13);
-            status.setText("");status.setVisibility(View.GONE);
+            // One consistent chronology hub. The old second menu duplicated the
+            // events/stages/calendar buttons and made history feel like a maze.
+            screen="relationships";
+            historyEventsExpanded=false;
+            renderRelationshipsPage();
             return;
         }
         // A selected section is a focused detail page, not the whole hub repeated.
@@ -5692,6 +5789,110 @@ public class MainActivity extends Activity {
         configureBars();
         updateMediaLayout(true);
     }
+    /** The right track reflects the absolute SQLite attachment index even in paged views. */
+    private void syncMediaFastScroll(){
+        if(mediaFastScroller==null||mediaLayout==null||mediaAdapter==null||
+            mediaTotal<=0||!"media".equals(screen)||home)return;
+        int first=mediaLayout.findFirstVisibleItemPosition();
+        int absolute=mediaWindowStart+mediaAdapter.ordinalAt(first);
+        mediaFastScroller.setProgress(absolute,mediaTotal);
+    }
+    /** A fast seek opens the requested source page directly. It never copies media bytes. */
+    private void jumpToMediaFraction(float fraction){
+        if(mediaFastScroller==null||mediaLayout==null||mediaAdapter==null||
+            !"media".equals(screen)||home||importing||db==null||mediaTotal<=0)return;
+        final int target=MediaFastScroller.indexForFraction(fraction,mediaTotal);
+        mediaFastScroller.setProgress(target,mediaTotal);
+        if(target>=mediaWindowStart&&target<mediaLoaded){
+            int adapterPos=mediaAdapter.adapterPositionForOrdinal(target-mediaWindowStart);
+            if(adapterPos>=0)mediaLayout.scrollToPositionWithOffset(adapterPos,0);
+            return;
+        }
+        // Invalidate pending prefetch/append callbacks before swapping the visible window.
+        final int token=++loadToken;mediaAppending=true;mediaPrepending=false;
+        final String archive=activeKey,kind=mediaKind;
+        final MessageDb source=db;final int expectedTotal=mediaTotal;
+        status.setVisibility(View.VISIBLE);
+        status.setText("Открываю файл "+(target+1)+" из "+expectedTotal+"…");
+        worker.execute(()->{
+            List<MessageDb.Attachment> page;
+            String failure=null;
+            try{page=source.mediaPage(kind,target,MediaGalleryState.PAGE_SIZE);}
+            catch(Exception error){page=java.util.Collections.emptyList();failure=error.getMessage();}
+            final List<MessageDb.Attachment> results=page;
+            final String problem=failure;
+            runOnUiThread(()->{
+                if(isFinishing()||isDestroyed()||token!=loadToken||db!=source||
+                    !archive.equals(activeKey)||!"media".equals(screen)||
+                    !kind.equals(mediaKind))return;
+                mediaAppending=false;
+                if(problem!=null){
+                    status.setText("Не удалось перейти к выбранному файлу: "+problem);
+                    syncMediaFastScroll();return;
+                }
+                if(results.isEmpty()){
+                    status.setText("В этом месте больше нет файлов. Обнови медиатеку.");
+                    syncMediaFastScroll();return;
+                }
+                mediaWindowStart=target;
+                mediaLoaded=target+results.size();
+                mediaAdapter.reset();mediaAdapter.append(results);
+                updateMediaLayout(false);
+                mediaLayout.scrollToPositionWithOffset(0,0);
+                mediaFastScroller.setProgress(target,mediaTotal);
+                status.setText("Файл "+(target+1)+" из "+mediaTotal+
+                    " · перелистывай или двигай ползунок справа");
+                scheduleMediaPrefetch(token,kind,mediaLoaded,mediaTotal);
+                mediaRecycler.post(this::maybeAppendMedia);
+            });
+        });
+    }
+    /** Prepend earlier pages when scrolling up after a fast seek. Preserve reading position. */
+    private void maybePrependMedia(){
+        if(mediaRecycler==null||mediaLayout==null||mediaAdapter==null||
+            mediaAppending||mediaPrepending||mediaWindowStart<=0||
+            !"media".equals(screen)||home||importing||db==null)return;
+        int first=mediaLayout.findFirstVisibleItemPosition();
+        if(first>8)return;
+        mediaPrepending=true;
+        final int start=Math.max(0,mediaWindowStart-MediaGalleryState.PAGE_SIZE);
+        final int amount=mediaWindowStart-start;
+        final String archive=activeKey,kind=mediaKind;
+        final MessageDb source=db;final int token=loadToken;
+        worker.execute(()->{
+            List<MessageDb.Attachment> earlier;
+            try{earlier=source.mediaPage(kind,start,amount);}
+            catch(Exception error){
+                runOnUiThread(()->{
+                    mediaPrepending=false;
+                    if(token==loadToken&&"media".equals(screen))
+                        status.setText("Не удалось загрузить более ранние файлы");
+                });return;
+            }
+            final List<MessageDb.Attachment> prior=earlier;
+            runOnUiThread(()->{
+                if(isFinishing()||isDestroyed()||token!=loadToken||db!=source||
+                    !archive.equals(activeKey)||!"media".equals(screen)||!kind.equals(mediaKind)){
+                    mediaPrepending=false;return;
+                }
+                mediaPrepending=false;
+                if(prior.isEmpty())return;
+                int firstVisible=Math.max(0,mediaLayout.findFirstVisibleItemPosition());
+                int ordinal=mediaAdapter.ordinalAt(firstVisible);
+                View firstView=mediaLayout.findViewByPosition(firstVisible);
+                int relativeTop=firstView==null?0:firstView.getTop()-mediaRecycler.getPaddingTop();
+                java.util.ArrayList<MessageDb.Attachment> combined=new java.util.ArrayList<>(prior);
+                combined.addAll(mediaAdapter.loadedAttachments());
+                mediaWindowStart=start;
+                mediaAdapter.reset();mediaAdapter.append(combined);
+                int anchor=mediaAdapter.adapterPositionForOrdinal(prior.size()+ordinal);
+                if(anchor>=0)mediaLayout.scrollToPositionWithOffset(anchor,relativeTop);
+                syncMediaFastScroll();
+                status.setText("Открыт участок "+(mediaWindowStart+1)+"–"+mediaLoaded+
+                    " из "+mediaTotal+" · ползунок справа");
+            });
+        });
+    }
     /** Fetch only the next 30 from SQLite; never reset scroll when the next page arrives. */
     private void maybeAppendMedia(){
         if(mediaRecycler==null||mediaLayout==null||mediaAppending
@@ -5719,7 +5920,9 @@ public class MainActivity extends Activity {
                 mediaLoaded+=next.size();
                 if(next.isEmpty())mediaLoaded=mediaTotal;
                 mediaAppending=false;
-                status.setText("Показано "+mediaLoaded+" из "+mediaTotal+" · листай вниз");
+                syncMediaFastScroll();
+                status.setText("Открыт участок "+(mediaWindowStart+1)+"–"+mediaLoaded+
+                    " из "+mediaTotal+" · ползунок справа");
                 if(mediaLoaded<mediaTotal)mediaRecycler.post(this::maybeAppendMedia);
             });
         });
@@ -5727,20 +5930,37 @@ public class MainActivity extends Activity {
     /** Every header spans the full grid; dates group round/voice/audio galleries. */
     private final class MediaGalleryAdapter extends androidx.recyclerview.widget.RecyclerView.Adapter<androidx.recyclerview.widget.RecyclerView.ViewHolder>{
         private final ArrayList<Object> entries=new ArrayList<>();
+        // Maps zero-based attachment ordinals to adapter positions; headers are skipped.
+        private final ArrayList<Integer> attachmentPositions=new ArrayList<>();
         private String lastGroup=null;
-        void reset(){entries.clear();lastGroup=null;notifyDataSetChanged();}
+        void reset(){entries.clear();attachmentPositions.clear();lastGroup=null;notifyDataSetChanged();}
+        java.util.ArrayList<MessageDb.Attachment> loadedAttachments(){
+            java.util.ArrayList<MessageDb.Attachment> out=new java.util.ArrayList<>();
+            for(Object item:entries)if(item instanceof MessageDb.Attachment)
+                out.add((MessageDb.Attachment)item);
+            return out;
+        }
+        int ordinalAt(int adapterPosition){
+            if(attachmentPositions.isEmpty())return 0;
+            int n=java.util.Collections.binarySearch(attachmentPositions,Math.max(0,adapterPosition));
+            if(n<0)n=-n-2;return Math.max(0,n);
+        }
+        int adapterPositionForOrdinal(int ordinal){
+            return ordinal<0||ordinal>=attachmentPositions.size()?-1:attachmentPositions.get(ordinal);
+        }
         boolean isHeader(int position){return position>=0&&position<entries.size()&&entries.get(position) instanceof String;}
         void regroup(){
             ArrayList<MessageDb.Attachment> all=new ArrayList<>();
             for(Object item:entries)if(item instanceof MessageDb.Attachment)
                 all.add((MessageDb.Attachment)item);
-            entries.clear();lastGroup=null;
+            entries.clear();attachmentPositions.clear();lastGroup=null;
             for(MessageDb.Attachment item:all){
                 boolean byDay=mediaGridEnabled()&&
                     ("round".equals(mediaKind)||"voice".equals(mediaKind)||"audio".equals(mediaKind));
                 String group=byDay?day(item.date):MediaTimeline.month(item.date);
                 if(group==null||group.isEmpty())group="Без даты";
                 if(!group.equals(lastGroup)){entries.add(group);lastGroup=group;}
+                attachmentPositions.add(entries.size());
                 entries.add(item);
             }
             // Dataset was replaced (not inserted); notify accordingly to avoid
@@ -5758,6 +5978,7 @@ public class MainActivity extends Activity {
                     entries.add(group);
                     lastGroup=group;
                 }
+                attachmentPositions.add(entries.size());
                 entries.add(item);
             }
             if(entries.size()>from)notifyItemRangeInserted(from,entries.size()-from);
@@ -6245,7 +6466,7 @@ public class MainActivity extends Activity {
             List<MessageDb.Attachment> media=db.collectionMedia(collection.id,200);
             runOnUiThread(()->{
                 if(!archive.equals(activeKey)||isFinishing())return;
-                mediaRecycler.setVisibility(View.GONE);
+                hideGalleryOverlay();
                 scroll.setVisibility(View.VISIBLE);
                 list.removeAllViews();list.setBackgroundColor(BG);
                 TextView header=text("← Назад в медиатеку · "+collection.name,17,FG);
