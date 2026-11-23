@@ -3527,9 +3527,15 @@ public class MainActivity extends Activity {
                 boolean missing=password==null||password.length==0;
                 // An entered wrong 7z key can surface as a generic CRC/decode
                 // failure. Allow another password without guessing corruption.
-                boolean auth=ArchiveFileImport.isPasswordFailure(error)
-                    ||(!missing&&!message.contains("messages.html")&&!message.contains("Слишком")
-                        &&!message.contains("Лимит безопасной"));
+                String lowerMessage=message.toLowerCase(Locale.ROOT);
+                boolean unsupported=lowerMessage.contains("unsupported")||
+                    lowerMessage.contains("not supported")||
+                    lowerMessage.contains("не поддерж");
+                // Unsupported compression and malformed files are not proof of
+                // an incorrect password. Still let users enter one manually.
+                boolean auth=!unsupported&&(ArchiveFileImport.isPasswordFailure(error)
+                    ||(!missing&&"7z".equalsIgnoreCase(extension)&&
+                        (lowerMessage.contains("crc")||lowerMessage.contains("checksum"))));
                 runOnUiThread(()->{
                     importing=false;endImportProgress();folderButton.setEnabled(true);
                     status.setVisibility(View.VISIBLE);
@@ -3547,7 +3553,9 @@ public class MainActivity extends Activity {
                     new FontDialog.Builder(this).setTitle("Не удалось импортировать архив")
                         .setMessage(message+"\nИсходный файл не изменён. Проверь, что внутри есть экспорт Telegram в HTML.")
                         .setNegativeButton("Закрыть",null)
-                        .setPositiveButton("Повторить",(d,w)->importCompressed(source,extension,label,null))
+                        .setNeutralButton("Повторить",(d,w)->importCompressed(source,extension,label,null))
+                        .setPositiveButton(missing?"Ввести пароль":"Другой пароль",
+                            (d,w)->confirmArchiveImport(source,extension,label))
                         .show();
                 });
             }finally{if(password!=null)java.util.Arrays.fill(password,'\0');}
