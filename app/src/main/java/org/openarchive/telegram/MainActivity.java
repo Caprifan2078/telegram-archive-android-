@@ -3097,7 +3097,7 @@ public class MainActivity extends Activity {
         boolean selected=section.equals(analyticsSection);
         // Compact visible labels fit on a 360dp phone; accessibility keeps the full names.
         String shortLabel="Участники".equals(label)?"Люди":"Медиа и слова".equals(label)?"Медиа":label;
-        TextView chip=text(shortLabel,11,selected?FG:SUB);
+        TextView chip=text(shortLabel,12,selected?FG:SUB);
         chip.setTypeface(Typeface.create("sans-serif-medium",selected?Typeface.BOLD:Typeface.NORMAL));
         chip.setGravity(Gravity.CENTER);
         chip.setMaxLines(1);
@@ -3108,7 +3108,7 @@ public class MainActivity extends Activity {
             shape(0xffffffff,11)));
         chip.setContentDescription("Раздел анализа: "+label);
         chip.setSelected(selected);
-        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,px(38),1f);
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,px(48),1f);
         params.setMargins(px(2),px(2),px(2),px(2));
         row.addView(chip,params);
         chip.setOnClickListener(v->selectAnalyticsSection(section));
@@ -3128,7 +3128,7 @@ public class MainActivity extends Activity {
         LinearLayout navigation=row();
         navigation.setGravity(Gravity.CENTER_VERTICAL);
         navigation.setPadding(px(4),px(4),px(4),px(5));
-        list.addView(navigation,p(-1,47));
+        list.addView(navigation,p(-1,57));
         analyticsNavChip(navigation,"Обзор","overview");
         analyticsNavChip(navigation,"Графики","trends");
         analyticsNavChip(navigation,"Ритм","rhythm");
