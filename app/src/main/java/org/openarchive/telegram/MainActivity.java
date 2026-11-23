@@ -2097,7 +2097,7 @@ public class MainActivity extends Activity {
             ()->showChatActions(activeKey,activeName),
             this::showSideMenu
         };
-        final AlertDialog dialog=new FontDialog.Builder(this).setTitle(activeName)
+        final AlertDialog dialog=new FontDialog.Builder(this).setTitle("Действия с чатом")
             .setView(content).setNegativeButton("Закрыть",null).create();
         for(int i=0;i<labels.length;i++){
             final int index=i;
@@ -3062,7 +3062,7 @@ public class MainActivity extends Activity {
         LinearLayout card=column();card.setGravity(Gravity.CENTER);
         card.setPadding(px(6),px(13),px(6),px(11));
         card.setBackground(outlined(PANEL,15,false));
-        LinearLayout.LayoutParams size=new LinearLayout.LayoutParams(0,px(83),1f);
+        LinearLayout.LayoutParams size=new LinearLayout.LayoutParams(0,px(75),1f);
         size.setMargins(px(3),0,px(3),0);parent.addView(card,size);
         TextView number=text(String.format(Locale.ROOT,"%,d",value).replace(',',' '),21,FG);
         number.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
@@ -3095,19 +3095,21 @@ public class MainActivity extends Activity {
     }
     private void analyticsNavChip(LinearLayout row,String label,String section){
         boolean selected=section.equals(analyticsSection);
-        TextView chip=text(label,13,selected?FG:SUB);
+        // Compact visible labels fit on a 360dp phone; accessibility keeps the full names.
+        String shortLabel="Участники".equals(label)?"Люди":"Медиа и слова".equals(label)?"Медиа":label;
+        TextView chip=text(shortLabel,12,selected?FG:SUB);
         chip.setTypeface(Typeface.create("sans-serif-medium",selected?Typeface.BOLD:Typeface.NORMAL));
         chip.setGravity(Gravity.CENTER);
         chip.setMaxLines(1);
         chip.setEllipsize(TextUtils.TruncateAt.END);
         chip.setBackground(new RippleDrawable(
             ColorStateList.valueOf(themeIndex==2?0x2279a8ce:0x447ad2ff),
-            selected?outlined(CHIP,12,true):outlined(PANEL,12,false),
-            shape(0xffffffff,12)));
+            selected?outlined(CHIP,11,true):outlined(PANEL,11,false),
+            shape(0xffffffff,11)));
         chip.setContentDescription("Раздел анализа: "+label);
         chip.setSelected(selected);
-        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,px(39),1f);
-        params.setMargins(px(3),px(2),px(3),px(2));
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,px(48),1f);
+        params.setMargins(px(2),px(2),px(2),px(2));
         row.addView(chip,params);
         chip.setOnClickListener(v->selectAnalyticsSection(section));
     }
@@ -3121,35 +3123,17 @@ public class MainActivity extends Activity {
         list.addView(subtitle,p(-1,-2));
     }
     private void renderAnalytics(ChatAnalytics.Snapshot r){
-        // One calm header, a small section switcher, then ONLY the requested panel.
-        LinearLayout hero=column();
-        hero.setPadding(px(14),px(10),px(14),px(10));
-        int heroTop=themeIndex==2?0xffe0edf8:mixColors(PANEL,ACCENT,.14f);
-        int heroBottom=themeIndex==2?0xffedf5fb:mixColors(PANEL,BG,.18f);
-        hero.setBackground(gradient(heroTop,heroBottom,19));
-        LinearLayout.LayoutParams hp=p(-1,-2);
-        hp.setMargins(px(5),px(3),px(5),px(9));
-        list.addView(hero,hp);
-        TextView eyebrow=text("ЛОКАЛЬНАЯ СТАТИСТИКА",10,ACCENT);
-        eyebrow.setTypeface(null,Typeface.BOLD);
-        eyebrow.setLetterSpacing(.1f);
-        hero.addView(eyebrow,p(-1,-2));
-        TextView heading=text("Анализ переписки",20,FG);
-        heading.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
-        heading.setPadding(0,px(5),0,px(4));
-        hero.addView(heading,p(-1,-2));
-        TextView explanation=text("Только на устройстве · ничего не отправляем",11,SUB);
-        hero.addView(explanation,p(-1,-2));
-        LinearLayout navigation=column();
-        navigation.setPadding(px(2),0,px(2),px(5));
-        list.addView(navigation,p(-1,-2));
-        LinearLayout first=row();navigation.addView(first,p(-1,44));
-        analyticsNavChip(first,"Обзор","overview");
-        analyticsNavChip(first,"Графики","trends");
-        analyticsNavChip(first,"Ритм","rhythm");
-        LinearLayout second=row();navigation.addView(second,p(-1,44));
-        analyticsNavChip(second,"Участники","people");
-        analyticsNavChip(second,"Медиа и слова","content");
+        // The app bar already identifies the chat and says the analysis is offline.
+        // No second hero/title: one concise, always-visible tab row, then content.
+        LinearLayout navigation=row();
+        navigation.setGravity(Gravity.CENTER_VERTICAL);
+        navigation.setPadding(px(4),px(2),px(4),px(2));
+        list.addView(navigation,p(-1,56));
+        analyticsNavChip(navigation,"Обзор","overview");
+        analyticsNavChip(navigation,"Графики","trends");
+        analyticsNavChip(navigation,"Ритм","rhythm");
+        analyticsNavChip(navigation,"Участники","people");
+        analyticsNavChip(navigation,"Медиа и слова","content");
         if(r.totalMessages==0){
             LinearLayout empty=analyticsCard("Нет сообщений для анализа");
             analyticsText(empty,"Импортируй переписку — здесь появятся её показатели, графики и медиатека.",SUB,13);
@@ -3972,8 +3956,15 @@ public class MainActivity extends Activity {
         filterBar.removeAllViews();searchArea.removeAllViews();
         bottomPager.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
         savedComposer.setVisibility(View.GONE);list.removeAllViews();list.setBackgroundColor(BG);
-        TextView title=text(heading,22,FG);title.setTypeface(null,Typeface.BOLD);
-        title.setPadding(px(12),px(13),px(12),px(8));list.addView(title);
+        // Do not repeat "Хронология" under the already-labelled app bar.
+        if("relationships".equals(screen)){
+            TextView compactHeading=text("Разделы истории",16,FG);
+            compactHeading.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+            compactHeading.setPadding(px(12),px(12),px(12),px(5));list.addView(compactHeading);
+            return;
+        }
+        TextView title=text(heading,20,FG);title.setTypeface(null,Typeface.BOLD);
+        title.setPadding(px(12),px(11),px(12),px(7));list.addView(title);
         analyticsText(list,description,SUB,12);
     }
     private void createRelationshipEventDialog(MessageDb.Item m){
@@ -4013,7 +4004,7 @@ public class MainActivity extends Activity {
         int token=++loadToken;
         if(home){screen="chat";showPage();return;}
         prepareRelationshipScreen("Хронология","События, периоды и воспоминания — по разделам.");
-        analyticsText(list,"Выбери раздел. Подробные списки не занимают весь экран сразу.",SUB,12);
+        analyticsText(list,"События, этапы и медиа — в отдельных разделах.",SUB,12);
         Button events=btn(historyEventsExpanded?"01 · События переписки  ▴":"01 · События переписки  ▾");
         list.addView(events,p(-1,52));
         events.setContentDescription("Раскрыть или свернуть ленту событий");

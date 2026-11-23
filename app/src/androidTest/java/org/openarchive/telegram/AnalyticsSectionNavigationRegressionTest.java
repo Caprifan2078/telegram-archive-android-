@@ -101,8 +101,19 @@ public final class AnalyticsSectionNavigationRegressionTest {
             });
             idle(a);
             instrument.runOnMainSync(()->{
-                assertNotNull(has(a,"Анализ переписки"));
+                assertNull("No redundant giant hero below the app bar",has(a,"ЛОКАЛЬНАЯ СТАТИСТИКА"));
                 assertNotNull(has(a,"Сводка"));
+                // Five tabs must fit in one accessible row on a 360dp phone.
+                String[] labels={"Обзор","Графики","Ритм","Участники","Медиа и слова"};
+                View first=find(a.getWindow().getDecorView(),"Раздел анализа: Обзор",true);
+                assertNotNull(first);
+                for(String label:labels){
+                    View tab=find(a.getWindow().getDecorView(),"Раздел анализа: "+label,true);
+                    assertNotNull("Missing section "+label,tab);
+                    assertSame("All five tabs belong in one compact row",first.getParent(),tab.getParent());
+                    assertTrue("A compact tab should not consume 60dp of height",
+                        tab.getHeight()<=Math.round(50*a.getResources().getDisplayMetrics().density));
+                }
                 assertNull("Heatmap must be lazy",has(a,"Тепловая карта · день недели × час"));
                 assertNull("Participants must be lazy",has(a,"Кто сколько написал"));
             });
