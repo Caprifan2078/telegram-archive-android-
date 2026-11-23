@@ -43,6 +43,16 @@ public final class MediaFastScrollRegressionTest {
         }
         fail(name+" never reached "+expected+"; actual "+get(a,name));
     }
+    private void waitForNewGallery(MainActivity a,int total)throws Exception{
+        long deadline=System.currentTimeMillis()+25000;
+        while(System.currentTimeMillis()<deadline){
+            inst.waitForIdleSync();
+            if((int)get(a,"mediaTotal")==total&&
+                (int)get(a,"mediaWindowStart")==0&&(int)get(a,"mediaLoaded")>=30)return;
+            Thread.sleep(140);
+        }
+        fail("Gallery did not reset and load "+total+" items");
+    }
     @Test public void fractionMathClampsEndpointsAndRejectsInvalidValues(){
         assertEquals(0,MediaFastScroller.indexForFraction(-.2f,200));
         assertEquals(0,MediaFastScroller.indexForFraction(Float.NaN,200));
@@ -58,7 +68,7 @@ public final class MediaFastScrollRegressionTest {
         MessageDb synthetic=new MessageDb(a,key);
         Object oldDb=get(a,"db"),oldHome=get(a,"home"),oldScreen=get(a,"screen"),
             oldKind=get(a,"mediaKind"),oldKey=get(a,"activeKey");
-        String[] kinds={"image","video","round","voice","audio","file"};
+        String[] kinds={"image","video","round","voice","audio","file","gif","sticker"};
         try{
             SQLiteDatabase writable=synthetic.getWritableDatabase();
             for(int k=0;k<kinds.length;k++){
@@ -70,7 +80,9 @@ public final class MediaFastScrollRegressionTest {
                 }
             }
             synthetic.publishStaged(writable);
-            for(String kind:kinds){
+            String[] filters={"image","video","round","voice","audio","file","gif","sticker","visual"};
+            for(String kind:filters){
+                final int expectedCount="visual".equals(kind)?156:78;
                 inst.runOnMainSync(()->{
                     try{
                         put(a,"db",synthetic);put(a,"activeKey",key);
@@ -78,20 +90,22 @@ public final class MediaFastScrollRegressionTest {
                         method(a,"showPage",new Class<?>[0]);
                     }catch(Exception ex){throw new AssertionError(ex);}
                 });
-                waitFor(a,"mediaLoaded",30);
+                waitForNewGallery(a,expectedCount);
                 inst.runOnMainSync(()->{
                     try{
                         View slider=(View)get(a,"mediaFastScroller");
                         assertEquals("Fast scrubber missing for "+kind,View.VISIBLE,slider.getVisibility());
-                        assertEquals(78,get(a,"mediaTotal"));
+                        assertEquals(expectedCount,get(a,"mediaTotal"));
                         method(a,"jumpToMediaFraction",new Class<?>[]{float.class},.76f);
                     }catch(Exception ex){throw new AssertionError(ex);}
                 });
-                waitFor(a,"mediaWindowStart",55);
+                int expectedStart=MediaFastScroller.indexForFraction(.76f,expectedCount);
+                waitFor(a,"mediaWindowStart",expectedStart-2);
                 inst.runOnMainSync(()->{
                     try{
                         int start=(int)get(a,"mediaWindowStart");
-                        assertTrue("Should load near the requested 76% position: "+kind,start>=56&&start<=61);
+                        assertTrue("Should load near the requested 76% position: "+kind,
+                            Math.abs(start-expectedStart)<=1);
                         assertTrue("Keep recycled gallery bounded",((RecyclerView)get(a,"mediaRecycler")).getAdapter().getItemCount()<70);
                     }catch(Exception ex){throw new AssertionError(ex);}
                 });
