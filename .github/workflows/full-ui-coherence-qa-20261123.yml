@@ -53,6 +53,13 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 420
           script: gradle --no-daemon --max-workers=2 connectedUiAuditQaAndroidTest -PqaUiAuditInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.UiChromeOverlapRegressionTest,org.openarchive.telegram.QaVisualAuditScreenshotsTest,org.openarchive.telegram.ChatVisualConsistencyRegressionTest,org.openarchive.telegram.QaUiChatNavigationRegressionTest,org.openarchive.telegram.GroupTimelineScreenRegressionTest,org.openarchive.telegram.MediaInfiniteGalleryRegressionTest,org.openarchive.telegram.ChronologyHubRegressionTest,org.openarchive.telegram.AnalyticsSectionNavigationRegressionTest' && mkdir -p ui-captures/review && adb pull /sdcard/Pictures/TelegramViewerVisualAudit/. ui-captures/review/
+      - name: Re-check compact footer and long-chat spacing at 135% text scale
+        shell: bash
+        run: |
+          set -euo pipefail
+          adb shell settings put system font_scale 1.35
+          trap 'adb shell settings put system font_scale 1.0' EXIT
+          gradle --no-daemon --max-workers=2 connectedUiAuditQaAndroidTest -PqaUiAuditInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.UiChromeOverlapRegressionTest'
       - name: Upload synthetic Android screenshots
         if: always()
         uses: actions/upload-artifact@v4
