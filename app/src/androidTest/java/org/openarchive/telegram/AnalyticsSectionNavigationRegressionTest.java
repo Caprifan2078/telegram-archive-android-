@@ -142,7 +142,16 @@ public final class AnalyticsSectionNavigationRegressionTest {
             navigate(a,"Медиа и слова","content");
             instrument.runOnMainSync(()->{
                 assertNotNull(has(a,"Медиатека по типам"));
+                assertNotNull("Empty attachments should not show eight zero rows",
+                    has(a,"В этой переписке пока нет медиа и файлов."));
+                assertNull("Zero-only media categories waste screen space",has(a,"Обычные видео"));
                 assertNotNull(has(a,"Самые частые слова"));
+                assertNotNull("Vocabulary should default to meaningful words",
+                    has(a,"Значимые слова · показать все  ▾"));
+                View keyword=find(a.getWindow().getDecorView(),
+                    "Найти слово «встретимся» в переписке. Употреблено 21 раз",true);
+                assertNotNull("Words must become interactive ranked bars",keyword);
+                assertTrue("Ranked word rows should be clickable",keyword.isClickable());
                 assertNull(has(a,"Графики активности"));
                 try{
                     assertEquals(Boolean.TRUE,invoke(a,"backWithinHistory"));
