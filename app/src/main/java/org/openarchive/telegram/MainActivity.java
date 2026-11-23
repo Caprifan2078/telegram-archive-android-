@@ -3909,6 +3909,9 @@ public class MainActivity extends Activity {
             previousSender=sender;
         }
         lastRenderedDay=last;
+        // Layout can recreate the source without a scroll callback; check the return
+        // after the new chat tiles have attached rather than holding a stale bubble.
+        if(autoFloating&&"chat".equals(screen))scroll.post(this::scheduleFloatingCheck);
         if(append)return; // Never jump to the top when more history is appended.
         if(results&&pendingSearchScroll>=0)return; // The return path restores after layout.
         if("chat".equals(screen)&&pendingRestoreId>0){
