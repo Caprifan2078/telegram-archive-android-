@@ -67,22 +67,21 @@ public final class ChronologyHubRegressionTest {
                 call(activity,"renderRelationshipsPage");
                 assertNotNull(find(activity.getWindow().getDecorView(),"01 · События переписки  ▾"));
                 assertNull("Event list must be lazy",find(activity.getWindow().getDecorView(),"Лента событий  ·  0"));
-                assertNotNull(find(activity.getWindow().getDecorView(),"02 · Мои периоды истории  ›"));
-                assertNotNull(find(activity.getWindow().getDecorView(),"03 · Кинолента медиа по годам  ›"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"02 · Этапы переписки  ›"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"03 · Периоды по датам  ›"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"04 · Сравнение этапов  ›"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"05 · Кинолента медиа по годам  ›"));
                 find(activity.getWindow().getDecorView(),"01 · События переписки  ▾").performClick();
             }catch(Exception e){throw new AssertionError(e);}});
             idle(activity);
             inst.runOnMainSync(()->{
                 assertNotNull(find(activity.getWindow().getDecorView(),"01 · События переписки  ▴"));
                 assertNotNull("Events appear only on request",find(activity.getWindow().getDecorView(),"Лента событий  ·  0"));
-                find(activity.getWindow().getDecorView(),"02 · Мои периоды истории  ›").performClick();
-                assertNotNull(find(activity.getWindow().getDecorView(),"01 · Этапы переписки  ›"));
-                assertNotNull(find(activity.getWindow().getDecorView(),"02 · Периоды по датам  ›"));
-                assertNotNull(find(activity.getWindow().getDecorView(),"03 · Сравнение этапов  ›"));
-                assertNull("Overview must not display all stage cards",find(activity.getWindow().getDecorView(),"Подробнее об этапе  ▾"));
-                find(activity.getWindow().getDecorView(),"02 · Периоды по датам  ›").performClick();
+                find(activity.getWindow().getDecorView(),"03 · Периоды по датам  ›").performClick();
+                assertNull("Direct access must skip the redundant periods hub",
+                    find(activity.getWindow().getDecorView(),"01 · Этапы переписки  ›"));
                 assertNotNull(find(activity.getWindow().getDecorView(),"+ Добавить период по датам"));
-                assertNotNull(find(activity.getWindow().getDecorView(),"‹ К разделам хронологии"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"‹ К хронологии"));
                 assertNotNull("The selected section needs its own heading",
                     find(activity.getWindow().getDecorView(),"Периоды по датам"));
                 assertNull("Do not repeat section navigation above every detail page",
@@ -94,10 +93,14 @@ public final class ChronologyHubRegressionTest {
             inst.runOnMainSync(()->{
                 assertNull("Detail page should remain focused after async load",
                     find(activity.getWindow().getDecorView(),"01 · Этапы переписки  ›"));
-                find(activity.getWindow().getDecorView(),"‹ К разделам хронологии").performClick();
-                assertNotNull("Back to hub restores the section navigation",
-                    find(activity.getWindow().getDecorView(),"01 · Этапы переписки  ›"));
-                assertNotNull(find(activity.getWindow().getDecorView(),"04 · Лента событий  ›"));
+                find(activity.getWindow().getDecorView(),"‹ К хронологии").performClick();
+                assertNotNull("Back must return to the direct chronology menu",
+                    find(activity.getWindow().getDecorView(),"02 · Этапы переписки  ›"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"04 · Сравнение этапов  ›"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"05 · Кинолента медиа по годам  ›"));
+                find(activity.getWindow().getDecorView(),"02 · Этапы переписки  ›").performClick();
+                assertNotNull(find(activity.getWindow().getDecorView(),"+ Отметить начало периода в переписке"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"‹ К хронологии"));
             });
         }finally{
             idle(activity);
