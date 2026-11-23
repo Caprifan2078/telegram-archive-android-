@@ -85,6 +85,30 @@ public final class UiChromeOverlapRegressionTest {
             synthetic.close();a.deleteDatabase("telegram_"+key+".db");
         }
     }
+    @Test public void navigatingFromNotesNeverLeavesComposerOverHistoryOrCinema()throws Exception{
+        MainActivity a=rule.getActivity();idle(a);
+        Object oldHome=get(a,"home"),oldScreen=get(a,"screen");
+        try{
+            inst.runOnMainSync(()->{
+                try{
+                    put(a,"home",false);put(a,"screen","saved");call(a,"showPage");
+                    assertEquals(View.VISIBLE,((View)get(a,"savedComposer")).getVisibility());
+                    put(a,"screen","cinema");call(a,"showPage");
+                    assertEquals("Cinema must not inherit notes' fixed bottom editor",View.GONE,
+                        ((View)get(a,"savedComposer")).getVisibility());
+                    put(a,"screen","saved");call(a,"showPage");
+                    put(a,"screen","relationships");call(a,"showPage");
+                    assertEquals("History must not inherit notes' bottom editor",View.GONE,
+                        ((View)get(a,"savedComposer")).getVisibility());
+                }catch(Exception error){throw new AssertionError(error);}
+            });
+        }finally{
+            inst.runOnMainSync(()->{
+                try{put(a,"home",oldHome);put(a,"screen",oldScreen);call(a,"showPage");}
+                catch(Exception e){throw new AssertionError(e);}
+            });
+        }
+    }
     @Test public void favoritesHasOneBackLinkInsteadOfCrowdedGalleryFilters()throws Exception{
         MainActivity a=rule.getActivity();idle(a);
         Object oldHome=get(a,"home"),oldScreen=get(a,"screen");
