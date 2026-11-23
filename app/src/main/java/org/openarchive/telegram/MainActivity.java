@@ -1413,8 +1413,14 @@ public class MainActivity extends Activity {
         list.animate().alpha(1f).translationY(0).setDuration(motionDuration(180))
             .setInterpolator(new DecelerateInterpolator()).start();
     }
-    private void renderHome(){
+    /** Direct route renderers bypass showPage(), so clear both gallery overlays together. */
+    private void hideGalleryOverlay(){
         if(mediaRecycler!=null)mediaRecycler.setVisibility(View.GONE);
+        if(mediaFastScroller!=null)mediaFastScroller.setVisibility(View.GONE);
+        if(mediaFastLabel!=null)mediaFastLabel.setVisibility(View.GONE);
+    }
+    private void renderHome(){
+        hideGalleryOverlay();
         if(scroll!=null)scroll.setVisibility(View.VISIBLE);
         list.setBackgroundColor(BG);
         list.setPadding(px(3),px(6),px(3),px(14));
@@ -1745,7 +1751,7 @@ public class MainActivity extends Activity {
     }
     private void renderMultiTimelinePage(){
         final int token=++loadToken;
-        if(mediaRecycler!=null)mediaRecycler.setVisibility(View.GONE);
+        hideGalleryOverlay();
         if(scroll!=null)scroll.setVisibility(View.VISIBLE);
         if(floatingPanel!=null)closeFloatingRound();
         list.setPadding(px(3),px(6),px(3),px(14));
@@ -2279,7 +2285,7 @@ public class MainActivity extends Activity {
     private void renderSaved(){
         // Drawer can open Notes directly from Media, where the RecyclerView overlays
         // and hides ScrollView. Always restore the correct viewport/chrome explicitly.
-        if(mediaRecycler!=null)mediaRecycler.setVisibility(View.GONE);
+        hideGalleryOverlay();
         if(scroll!=null)scroll.setVisibility(View.VISIBLE);
         if(playerStrip!=null)playerStrip.setVisibility(View.GONE);
         if(headerActions!=null)headerActions.setVisibility(View.GONE);
@@ -6460,7 +6466,7 @@ public class MainActivity extends Activity {
             List<MessageDb.Attachment> media=db.collectionMedia(collection.id,200);
             runOnUiThread(()->{
                 if(!archive.equals(activeKey)||isFinishing())return;
-                mediaRecycler.setVisibility(View.GONE);
+                hideGalleryOverlay();
                 scroll.setVisibility(View.VISIBLE);
                 list.removeAllViews();list.setBackgroundColor(BG);
                 TextView header=text("← Назад в медиатеку · "+collection.name,17,FG);
