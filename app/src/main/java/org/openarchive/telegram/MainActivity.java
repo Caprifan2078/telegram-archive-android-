@@ -4675,11 +4675,72 @@ public class MainActivity extends Activity {
         heading.setPadding(0,0,0,px(8));card.addView(heading);
         return card;
     }
+    /** Fast jump into personally saved chronology events without opening each event page. */
+    private void searchHistoryEvents(String query){
+        if(db==null||home||!"relationships".equals(screen))return;
+        String needle=query==null?"":query.trim();
+        if(needle.isEmpty()){toast("Введи название, описание или дату события");return;}
+        final MessageDb source=db;final String archive=activeKey,term=needle;
+        final int token=loadToken;
+        status.setVisibility(View.VISIBLE);status.setText("Ищу личные события…");
+        worker.execute(()->{
+            HistoryEventSearch.Result result=null;String failure=null;
+            try{result=HistoryEventSearch.find(source,term);}
+            catch(Exception ex){failure=ex.getMessage();}
+            final HistoryEventSearch.Result hits=result;final String error=failure;
+            runOnUiThread(()->{
+                if(isFinishing()||isDestroyed()||token!=loadToken||
+                    db!=source||!archive.equals(activeKey)||!"relationships".equals(screen))return;
+                status.setVisibility(View.GONE);
+                if(error!=null){toast("Поиск не удался: "+error);return;}
+                if(hits.matches.isEmpty()){
+                    new FontDialog.Builder(this).setTitle("События не найдены")
+                        .setMessage("Нет совпадений для «"+clip(term,80)+"»"+
+                            (hits.incomplete?". Проверены первые "+hits.scanned+" событий.":""))
+                        .setPositiveButton("Закрыть",null).show();
+                    return;
+                }
+                String[] labels=new String[hits.matches.size()];
+                for(int i=0;i<labels.length;i++){
+                    MessageDb.RelationshipEvent e=hits.matches.get(i);
+                    labels[i]=clip(e.title,70)+(e.note==null||e.note.isEmpty()?"":
+                        " · "+clip(e.note,55));
+                }
+                new FontDialog.Builder(this)
+                    .setTitle("Найдено событий: "+hits.matches.size()+
+                        (hits.incomplete?" · частичный поиск":""))
+                    .setMessage(hits.incomplete?
+                        "Показаны первые совпадения. Для дальнейших событий уточни запрос.":null)
+                    .setItems(labels,(d,which)->jump(hits.matches.get(which).anchorId,"relationships"))
+                    .setNegativeButton("Закрыть",null).show();
+            });
+        });
+    }
     private void renderRelationshipsPage(){
         int token=++loadToken;
         if(home){screen="chat";showPage();return;}
         prepareRelationshipScreen("Хронология","События, периоды и воспоминания — по разделам.");
-        analyticsText(list,"События, этапы и медиа — в отдельных разделах.",SUB,12);
+        // Find old user-authored events directly, regardless of the current 20-item page.
+        // Searching never traverses the private message text or modifies annotations.
+        LinearLayout eventSearch=row();eventSearch.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams searchBounds=p(-1,50);
+        searchBounds.setMargins(px(6),px(5),px(6),px(8));
+        list.addView(eventSearch,searchBounds);
+        EditText findEvent=new EditText(this);findEvent.setSingleLine(true);
+        findEvent.setTextSize(14);findEvent.setTextColor(FG);findEvent.setHintTextColor(SUB);
+        findEvent.setHint("Название, описание или дата события");
+        findEvent.setContentDescription("Найти событие в хронологии");
+        findEvent.setBackground(outlined(PANEL,12,false));
+        findEvent.setPadding(px(12),px(5),px(8),px(5));
+        findEvent.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
+        eventSearch.addView(findEvent,new LinearLayout.LayoutParams(0,px(46),1));
+        Button search=btn("Найти");search.setContentDescription("Найти событие по всему архиву");
+        LinearLayout.LayoutParams searchButton=p(76,46);
+        searchButton.leftMargin=px(6);eventSearch.addView(search,searchButton);
+        search.setOnClickListener(v->searchHistoryEvents(findEvent.getText().toString()));
+        findEvent.setOnEditorActionListener((v,action,event)->{
+            searchHistoryEvents(findEvent.getText().toString());return true;
+        });
         Button events=btn(historyEventsExpanded?"01 · События переписки  ▴":"01 · События переписки  ▾");
         list.addView(events,p(-1,52));
         events.setContentDescription("Раскрыть или свернуть ленту событий");
