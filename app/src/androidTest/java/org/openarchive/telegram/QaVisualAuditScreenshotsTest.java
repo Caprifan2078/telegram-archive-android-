@@ -176,7 +176,7 @@ public final class QaVisualAuditScreenshotsTest {
             });
             shot(a,"09-chronology-home");
             inst.runOnMainSync(()->{
-                try{put(a,"screen","chronology");method(a,"showPage",new Class<?>[0]);}
+                try{put(a,"chronologySection","calendar");put(a,"screen","chronology");method(a,"showPage",new Class<?>[0]);}
                 catch(Exception e){throw new AssertionError(e);}
             });
             shot(a,"10-chronology-periods");
