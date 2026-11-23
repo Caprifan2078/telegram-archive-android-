@@ -2,6 +2,7 @@ package org.openarchive.telegram;
 
 import android.app.Instrumentation;
 import android.database.sqlite.SQLiteDatabase;
+import android.content.ContentValues;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
@@ -85,4 +86,40 @@ public final class HistoryEventSearchRegressionTest {
             source.close();a.deleteDatabase("telegram_"+key+".db");
         }
     }
+    @Test public void findsCyrillicEventBeyondThreeThousandWithoutTruncatingTheArchive()throws Exception{
+        MainActivity a=rule.getActivity();
+        String key="historyDeep"+UUID.randomUUID().toString().replace("-","");
+        MessageDb source=new MessageDb(a,key);
+        try{
+            SQLiteDatabase sql=source.getWritableDatabase();
+            long anchor=source.stage(sql,"QA","2026-11-10 10:00:00",
+                "Исходное сообщение не меняется",null,"");
+            source.publishStaged(sql);
+            // Large, completely local fixture: one message, >3000 personal events.
+            // A single SQLite transaction keeps this test fast even on Android 11.
+            sql.beginTransaction();
+            try{
+                for(int i=0;i<3205;i++){
+                    ContentValues row=new ContentValues();
+                    row.put("title",i==3204?"Старое событие Ёжик":"Обычный эпизод "+i);
+                    row.put("note",i==3204?"Редкая запись в конце истории":"Пустое описание");
+                    row.put("anchor_id",anchor);
+                    row.put("anchor_offset",0);
+                    row.put("created_at",i);
+                    sql.insertOrThrow("relationship_events",null,row);
+                }
+                sql.setTransactionSuccessful();
+            }finally{sql.endTransaction();}
+            assertEquals(3205,source.relationshipEventCount());
+            HistoryEventSearch.Result found=HistoryEventSearch.find(source,"ёЖиК");
+            assertEquals("A search must reach records after page 3000",1,found.matches.size());
+            assertEquals("Старое событие Ёжик",found.matches.get(0).title);
+            assertEquals(anchor,found.matches.get(0).anchorId);
+            assertFalse("All events were examined",found.incomplete);
+            assertEquals(3205,found.scanned);
+        }finally{
+            source.close();a.deleteDatabase("telegram_"+key+".db");
+        }
+    }
+
 }
