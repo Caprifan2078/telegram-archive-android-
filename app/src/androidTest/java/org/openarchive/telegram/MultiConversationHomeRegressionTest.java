@@ -71,7 +71,10 @@ public final class MultiConversationHomeRegressionTest {
                     assertNotNull(find(root,"2 переписки · нажми, чтобы выбрать источник"));
                     assertNull("Avoid a second duplicate standalone TG card",find(root,"TG Вася"));
                     assertNull("Avoid duplicate standalone second chat",find(root,"Другая учётка"));
-                    assertNotNull(find(root,"Показать отдельные чаты из групп"));
+                    assertNotNull("Compact reveal action",find(root,"Показать чаты"));
+                    assertNotNull("Create action shares the same row",find(root,"＋ Группа"));
+                    assertNull("No duplicate legacy comparison tools when a group is visible",
+                        find(root,"Инструменты для двух переписок  ▾"));
                 }catch(Exception e){throw new AssertionError(e);}
             });
         }finally{
