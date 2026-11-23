@@ -52,7 +52,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-boot-timeout: 420
-          script: gradle --no-daemon --max-workers=2 connectedMultiChatQaAndroidTest -PqaMultiChatInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.MultiConversationRegistryRegressionTest,org.openarchive.telegram.ChronologyHubRegressionTest,org.openarchive.telegram.FloatingRoundReattachRegressionTest,org.openarchive.telegram.QaUiChatNavigationRegressionTest'
+          script: gradle --no-daemon --max-workers=2 connectedMultiChatQaAndroidTest -PqaMultiChatInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.MultiConversationRegistryRegressionTest,org.openarchive.telegram.MultiConversationHomeRegressionTest,org.openarchive.telegram.ChronologyHubRegressionTest,org.openarchive.telegram.FloatingRoundReattachRegressionTest,org.openarchive.telegram.QaUiChatNavigationRegressionTest'
       - name: Upload Android test reports
         if: always()
         uses: actions/upload-artifact@v4
