@@ -1013,14 +1013,10 @@ public class MainActivity extends Activity {
     private void showSideMenu(){
         final Dialog dialog=new FontDialog(this,android.R.style.Theme_Translucent_NoTitleBar);
         FrameLayout overlay=new FrameLayout(this);overlay.setBackgroundColor(0x99040912);
-        // The translucent drawer is laid out behind system bars on some Android
-        // versions. Respect both insets so the title/footer are never clipped.
-        int statusId=getResources().getIdentifier("status_bar_height","dimen","android");
-        int navigationId=getResources().getIdentifier("navigation_bar_height","dimen","android");
-        int topInset=statusId==0?px(24):getResources().getDimensionPixelSize(statusId);
-        int bottomInset=navigationId==0?px(20):getResources().getDimensionPixelSize(navigationId);
+        // Draw the drawer background through the system bars, but keep its contents
+        // inside actual device insets (including cutouts and gesture navigation).
         LinearLayout pane=column();
-        pane.setPadding(px(14),topInset+px(13),px(14),bottomInset+px(12));
+        pane.setPadding(px(14),px(13),px(14),px(12));
         pane.setBackground(gradient(themeIndex==2?0xfaffffff:0xff172b3d,
             themeIndex==2?0xffe8edf4:0xff112132,18));pane.setElevation(px(12));
         int width=Math.min(px(348),getResources().getDisplayMetrics().widthPixels-px(38));
@@ -1095,9 +1091,48 @@ public class MainActivity extends Activity {
         TextView label=text("Telegram Archive · "+installedVersionName()+" QA\nЛокально · Без аккаунта · Без серверов",11,SUB);
         label.setPadding(px(5),px(12),0,px(5));pane.addView(label);
         overlay.setOnClickListener(v->closeDrawer(dialog,pane,null));pane.setOnClickListener(v->{});
-        dialog.setContentView(overlay);dialog.show();Window w=dialog.getWindow();if(w!=null)w.setLayout(-1,-1);
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(overlay,(view,insets)->{
+            androidx.core.graphics.Insets safe=insets.getInsets(
+                androidx.core.view.WindowInsetsCompat.Type.systemBars()|
+                androidx.core.view.WindowInsetsCompat.Type.displayCutout());
+            pane.setPadding(px(14)+safe.left,safe.top+px(13),
+                px(14)+safe.right,safe.bottom+px(12));
+            return insets;
+        });
+        dialog.setContentView(overlay);
+        dialog.show();
+        Window w=dialog.getWindow();
+        if(w!=null)styleDrawerWindow(w,themeIndex==2);
+        androidx.core.view.ViewCompat.requestApplyInsets(overlay);
         pane.setTranslationX(-width);pane.animate().translationX(0).setDuration(motionDuration(260))
             .setInterpolator(new DecelerateInterpolator()).start();
+    }
+    /** A true edge-to-edge drawer, with system-bar icon contrast matching the theme. */
+    static void styleDrawerWindow(Window window,boolean lightSystemBars){
+        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+        window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS|
+            WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window,false);
+        window.setStatusBarColor(Color.TRANSPARENT);
+        window.setNavigationBarColor(Color.TRANSPARENT);
+        if(Build.VERSION.SDK_INT>=29){
+            window.setStatusBarContrastEnforced(false);
+            window.setNavigationBarContrastEnforced(false);
+        }
+        int flags=View.SYSTEM_UI_FLAG_LAYOUT_STABLE|
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+        if(lightSystemBars)flags|=View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|
+            View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        window.getDecorView().setSystemUiVisibility(flags);
+        if(Build.VERSION.SDK_INT>=30){
+            WindowInsetsController controller=window.getInsetsController();
+            if(controller!=null){
+                int mask=WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|
+                    WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                controller.setSystemBarsAppearance(lightSystemBars?mask:0,mask);
+            }
+        }
+        window.setLayout(-1,-1);
     }
     private void closeDrawer(Dialog dialog,View pane,Runnable next){
         if(!dialog.isShowing())return;
