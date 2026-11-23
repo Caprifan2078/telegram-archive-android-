@@ -2854,6 +2854,8 @@ public class MainActivity extends Activity {
             if(!home){saveReadingProgress();home=true;screen="chat";returnScreen="";searchReturnsToAnalytics=false;showPage();}});
         headerLogo=text("◇",29,ACCENT);headerLogo.setGravity(Gravity.CENTER);headerLogo.setContentDescription("Локальный архив");head.addView(headerLogo,p(34,42));
         LinearLayout headings=column();headings.setGravity(Gravity.CENTER_VERTICAL);
+        // Keep the heading away from the circular Back button on compact phones.
+        headings.setPadding(px(7),0,0,0);
         head.addView(headings,new LinearLayout.LayoutParams(0,px(44),1));
         title=text("Telegram Archive",17,FG);title.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
         title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.END);headings.addView(title,p(-1,26));
@@ -2990,7 +2992,9 @@ public class MainActivity extends Activity {
             }else{t.animate().cancel();t.setAlpha(1f);}
         }
         menuButton.setVisibility(View.GONE);navBack.setVisibility(View.VISIBLE);
-        if(headerActions!=null)headerActions.setVisibility(View.VISIBLE);
+        // Each tool screen has its own actions. Repeating the chat overflow in
+        // Media (which already has a gallery menu) creates two identical dots.
+        if(headerActions!=null)headerActions.setVisibility("chat".equals(screen)?View.VISIBLE:View.GONE);
         if(pdfButton!=null)pdfButton.setVisibility("chat".equals(screen)?View.VISIBLE:View.GONE);
         if(headerLogo!=null)headerLogo.setVisibility(View.GONE);
         if(folderButton!=null)folderButton.setVisibility(View.GONE);
@@ -3747,7 +3751,8 @@ public class MainActivity extends Activity {
                             "Ничего не найдено — попробуй изменить запрос или фильтры.");
                     }
                     else if(!"chat".equals(tab))status.setText("media".equals(tab)?
-                            "Показано "+mediaLoaded+" из "+count+" · листай вниз":
+                            (mediaLoaded<count?"Показано "+mediaLoaded+" из "+count+" · листай вниз":
+                                "Медиафайлов: "+count):
                             "search".equals(tab)?(search.isEmpty()?"Введите слово или фразу":("Сообщений: "+count+"  ·  Точных вхождений «"+clip(search,28)+"»: "+stats.literalOccurrences+(deepMode?"":"  ·  Быстрый поиск учитывает начала слов"))):
                             "favorites".equals(tab)?"Твои избранные сообщения": "История · удерживай сообщение для действий");
                 });
