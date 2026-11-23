@@ -1017,8 +1017,10 @@ public class MainActivity extends Activity {
         // inside actual device insets (including cutouts and gesture navigation).
         LinearLayout pane=column();
         pane.setPadding(px(14),px(13),px(14),px(12));
+        // This panel touches the display edge: rounded top corners exposed the
+        // dark dialog scrim behind Android's status bar as a black notch.
         pane.setBackground(gradient(themeIndex==2?0xfaffffff:0xff172b3d,
-            themeIndex==2?0xffe8edf4:0xff112132,18));pane.setElevation(px(12));
+            themeIndex==2?0xffe8edf4:0xff112132,0));pane.setElevation(px(12));
         int width=Math.min(px(348),getResources().getDisplayMetrics().widthPixels-px(38));
         FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(width,-1,Gravity.START);
         overlay.addView(pane,lp);
@@ -1109,6 +1111,9 @@ public class MainActivity extends Activity {
     }
     /** A true edge-to-edge drawer, with system-bar icon contrast matching the theme. */
     static void styleDrawerWindow(Window window,boolean lightSystemBars){
+        // A transparent window is required so the drawer (rather than the
+        // dialog theme's default dark background) paints behind system bars.
+        window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
         window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
         window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS|
             WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
@@ -1155,8 +1160,19 @@ public class MainActivity extends Activity {
             title.setText((expand?"⌄  ":"›  ")+name);
             title.setContentDescription((expand?"Свернуть ":"Развернуть ")+name);
             contents.setVisibility(expand?View.VISIBLE:View.GONE);
-            if(expand){contents.setAlpha(0f);contents.animate().alpha(1f)
-                .setDuration(motionDuration(170)).start();}
+            if(expand){
+                contents.setAlpha(0f);contents.animate().alpha(1f)
+                    .setDuration(motionDuration(170)).start();
+                // A section expanded near the bottom must reveal its actions;
+                // otherwise users can tap a heading and see no visible change.
+                group.post(()->{
+                    if(contents.getVisibility()!=View.VISIBLE)return;
+                    if(parent.getParent() instanceof ScrollView){
+                        ScrollView menu=(ScrollView)parent.getParent();
+                        menu.smoothScrollTo(0,Math.max(0,group.getTop()-px(12)));
+                    }
+                });
+            }
         });
         space(group,3);
     }
