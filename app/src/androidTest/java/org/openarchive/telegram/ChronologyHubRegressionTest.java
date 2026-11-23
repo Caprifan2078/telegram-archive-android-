@@ -83,10 +83,21 @@ public final class ChronologyHubRegressionTest {
                 find(activity.getWindow().getDecorView(),"02 · Периоды по датам  ›").performClick();
                 assertNotNull(find(activity.getWindow().getDecorView(),"+ Добавить период по датам"));
                 assertNotNull(find(activity.getWindow().getDecorView(),"‹ К разделам хронологии"));
+                assertNotNull("The selected section needs its own heading",
+                    find(activity.getWindow().getDecorView(),"Периоды по датам"));
+                assertNull("Do not repeat section navigation above every detail page",
+                    find(activity.getWindow().getDecorView(),"01 · Этапы переписки  ›"));
+                assertNull("Chosen calendar section must not also render comparison link",
+                    find(activity.getWindow().getDecorView(),"03 · Сравнение этапов  ›"));
             });
             idle(activity);
             inst.runOnMainSync(()->{
-                assertNotNull(find(activity.getWindow().getDecorView(),"01 · Этапы переписки  ›"));
+                assertNull("Detail page should remain focused after async load",
+                    find(activity.getWindow().getDecorView(),"01 · Этапы переписки  ›"));
+                find(activity.getWindow().getDecorView(),"‹ К разделам хронологии").performClick();
+                assertNotNull("Back to hub restores the section navigation",
+                    find(activity.getWindow().getDecorView(),"01 · Этапы переписки  ›"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"04 · Лента событий  ›"));
             });
         }finally{
             idle(activity);
