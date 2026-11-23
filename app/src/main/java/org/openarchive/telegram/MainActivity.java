@@ -2599,8 +2599,10 @@ public class MainActivity extends Activity {
             return true;
         }
         if("cinema".equals(screen)){
-            screen="relationships".equals(cinemaReturnScreen)?"relationships":"chat";
-            cinemaReturnScreen="chat";showPage();return true;
+            String target=cinemaReturnScreen;
+            if(!("relationships".equals(target)||"media".equals(target)||"analytics".equals(target)
+                ||"search".equals(target)||"chat".equals(target)))target="chat";
+            cinemaReturnScreen="chat";screen=target;showPage();return true;
         }
         if("relationships".equals(screen)&&historyEventsExpanded){
             historyEventsExpanded=false;renderRelationshipsPage();return true;
@@ -4830,7 +4832,11 @@ public class MainActivity extends Activity {
         TextView heading=text("▤ Кинолента воспоминаний",22,FG);heading.setTypeface(null,Typeface.BOLD);
         heading.setPadding(px(10),px(10),px(10),px(8));list.addView(heading);
         analyticsText(list,"Выбери год и месяц. Медиа открываются локально; загружается не более 18 миниатюр за один раз. Это не автоматическая презентация личных сообщений.",SUB,12);
-        Button back=btn("relationships".equals(cinemaReturnScreen)?"‹ К хронологии":"‹ К переписке");
+        String returnLabel="relationships".equals(cinemaReturnScreen)?"К хронологии":
+            "media".equals(cinemaReturnScreen)?"К медиатеке":
+            "analytics".equals(cinemaReturnScreen)?"К анализу":
+            "search".equals(cinemaReturnScreen)?"К поиску":"К переписке";
+        Button back=btn("‹ "+returnLabel);
         list.addView(back,p(-1,46));back.setOnClickListener(v->backWithinHistory());
         final MessageDb source=db;final String archive=activeKey;
         worker.execute(()->{try{List<MessageDb.MediaMonth> months=source.mediaMonths();
