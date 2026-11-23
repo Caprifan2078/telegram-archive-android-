@@ -1453,10 +1453,81 @@ public class MainActivity extends Activity {
                 renderHome();
             });
         }
+        // User-declared contact groups are a navigation layer only. Message databases,
+        // quote anchors, notes and source media remain in their original chats.
+        JSONArray multiGroups;
+        try{multiGroups=MultiConversationRegistry.read(getPreferences(MODE_PRIVATE));}
+        catch(IllegalStateException corrupted){
+            multiGroups=new JSONArray();
+            TextView error=text("Мультипереписки недоступны: настройки повреждены. Данные не изменены.",12,0xffffbe8f);
+            error.setPadding(px(9),px(9),px(9),px(9));list.addView(error,p(-1,-2));
+        }
+        final JSONArray visibleGroups=multiGroups;
+        final boolean showGroupedChats=getPreferences(MODE_PRIVATE)
+            .getBoolean("show_grouped_individual_chats",false);
+        if(multiGroups.length()>0){
+            TextView groupsHeading=text("Мультипереписки",16,FG);
+            groupsHeading.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+            groupsHeading.setPadding(px(11),px(12),0,px(9));list.addView(groupsHeading,p(-1,-2));
+            for(int i=0;i<multiGroups.length();i++){
+                JSONObject group=multiGroups.optJSONObject(i);
+                if(group==null)continue;
+                String id=group.optString("id"),person=group.optString("name","Человек");
+                JSONArray members=group.optJSONArray("members");
+                int connected=0;
+                if(members!=null)for(int j=0;j<members.length();j++){
+                    JSONObject member=members.optJSONObject(j);
+                    if(member!=null&&canOpenQuoteArchive(member.optString("key"))&&
+                        (!isChatHidden(member.optString("key"))||showHidden))connected++;
+                }
+                // Do not reveal an entirely hidden person's name on the home screen.
+                if(connected==0&&members!=null&&members.length()>0)continue;
+                LinearLayout groupCard=row();groupCard.setPadding(px(12),px(10),px(13),px(10));
+                groupCard.setGravity(Gravity.CENTER_VERTICAL);
+                groupCard.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2e6fc6f4),
+                    outlined(PANEL,14,false),null));
+                LinearLayout.LayoutParams cardMargins=p(-1,68);
+                cardMargins.setMargins(px(2),px(1),px(2),px(5));
+                list.addView(groupCard,cardMargins);
+                TextView avatar=text("◈",25,FG);avatar.setGravity(Gravity.CENTER);
+                avatar.setBackground(gradient(0xff6242a1,0xff305d86,100));
+                groupCard.addView(avatar,p(45,45));
+                LinearLayout info=column();info.setPadding(px(12),0,0,0);
+                groupCard.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+                TextView titleLabel=text(person,15,FG);
+                titleLabel.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+                titleLabel.setSingleLine(true);titleLabel.setEllipsize(TextUtils.TruncateAt.END);
+                info.addView(titleLabel);
+                TextView secondary=text(connected+" переписки · нажми, чтобы выбрать источник",12,SUB);
+                secondary.setSingleLine(true);secondary.setEllipsize(TextUtils.TruncateAt.END);
+                info.addView(secondary);
+                TextView arrow=text("›",25,SUB);groupCard.addView(arrow,p(-2,-2));
+                groupCard.setContentDescription("Мультипереписка "+person+" · "+connected+" источников");
+                groupCard.setOnClickListener(v->showMultiConversation(id));
+                groupCard.setOnLongClickListener(v->{manageMultiConversation(id);return true;});
+            }
+            Button toggleIndividual=btn(showGroupedChats?
+                "Скрыть отдельные чаты мультипереписок":"Показать отдельные чаты из групп");
+            list.addView(toggleIndividual,p(-1,42));
+            toggleIndividual.setOnClickListener(v->{
+                getPreferences(MODE_PRIVATE).edit()
+                    .putBoolean("show_grouped_individual_chats",!showGroupedChats).apply();
+                renderHome();
+            });
+        }
+        if(archives.length()>0){
+            Button createGroup=btn("＋  Создать мультипереписку");
+            LinearLayout.LayoutParams createSize=p(-1,46);
+            createSize.setMargins(px(2),px(8),px(2),px(10));
+            list.addView(createGroup,createSize);
+            createGroup.setOnClickListener(v->createMultiConversationDialog());
+        }
         ArrayList<JSONObject> orderedChats=new ArrayList<>();
         for(int i=0;i<archives.length();i++){
             JSONObject c=archives.optJSONObject(i);
-            if(c!=null&&(!isChatHidden(c.optString("key"))||showHidden))orderedChats.add(c);
+            if(c!=null&&(!isChatHidden(c.optString("key"))||showHidden)
+                &&(showGroupedChats||!MultiConversationRegistry.memberOfAny(visibleGroups,c.optString("key"))))
+                orderedChats.add(c);
         }
         orderedChats.sort((a,b)->Boolean.compare(isChatPinned(b.optString("key")),isChatPinned(a.optString("key"))));
         for(int i=0;i<orderedChats.size();i++){
@@ -1556,7 +1627,8 @@ public class MainActivity extends Activity {
             "Изменить аватар",
             isChatPinned(key)?"Открепить":"Закрепить",
             isChatHidden(key)?"Показать чат":"Скрыть чат",
-            "Убрать в корзину"
+            "Убрать в корзину",
+            "Мультипереписка · добавить или открыть"
         };
         new FontDialog.Builder(this).setTitle(name)
             .setItems(options,(dialog,choice)->{
@@ -1570,6 +1642,7 @@ public class MainActivity extends Activity {
                     home=true;screen="chat";renderHome();
                     toast(hidden?"Чат скрыт. Вернуть можно через «Показать скрытые»":"Чат снова виден");
                 }else if(choice==4)confirmRemoveChatFromList(key,name);
+                else if(choice==5)chooseMultiConversationForChat(key);
             })
             .setNegativeButton("Закрыть",null).show();
     }
