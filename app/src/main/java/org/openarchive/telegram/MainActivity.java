@@ -3540,6 +3540,8 @@ public class MainActivity extends Activity {
         // must reset the notes' fixed bottom editor BEFORE early routing returns.
         // Otherwise switching from Saved can leave two bottom control rows stacked.
         if(savedComposer!=null&&!screen.equals("saved"))savedComposer.setVisibility(View.GONE);
+        if(!"chat".equals(screen)&&list!=null)
+            list.setPadding(px(3),px(6),px(3),px(14)); // do not inherit long-chat scrubber gutter
         // Floating video is chat-only; never leave a detached grey surface over other pages.
         if((home||!"chat".equals(screen))&&floatingPanel!=null)closeFloatingRound();
         if(mediaRecycler!=null){
@@ -5368,6 +5370,9 @@ public class MainActivity extends Activity {
     private void renderChronologyPage(){
         final int token=++loadToken;
         if(home){screen="chat";showPage();return;}
+        // This page is reached directly after saving an event from the chat.
+        // Reset the header: otherwise the chat-only PDF/overflow buttons leak here.
+        refreshTabs();
         bottomNav.setVisibility(View.GONE);
         title.setText("Хронология");subtitle.setText("Этапы, даты и графики · офлайн");
         filterBar.removeAllViews();searchArea.removeAllViews();
