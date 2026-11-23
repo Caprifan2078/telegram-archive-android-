@@ -15,6 +15,7 @@ final class MediaFastScroller extends View {
     private int itemCount=0,position=0;
     private boolean dragging=false;
     private Consumer<Float> onSeek;
+    private java.util.function.BiConsumer<Integer,Boolean> onDrag;
 
     MediaFastScroller(Context context){
         super(context);
@@ -34,6 +35,7 @@ final class MediaFastScroller extends View {
         return Math.max(0f,Math.min(1f,(float)index/(total-1)));
     }
     void setOnSeek(Consumer<Float> listener){onSeek=listener;}
+    void setOnDrag(java.util.function.BiConsumer<Integer,Boolean> listener){onDrag=listener;}
     void setProgress(int index,int total){
         itemCount=Math.max(0,total);
         if(!dragging)position=Math.max(0,Math.min(Math.max(0,itemCount-1),index));
@@ -57,18 +59,8 @@ final class MediaFastScroller extends View {
         canvas.drawLine(x,a,x,center,paint);
         paint.setColor(0xffe7f8ff);
         canvas.drawCircle(x,center,dp(dragging?10:8),paint);
-        if(dragging){
-            // Readable count indicator is only visible during drag.
-            String label=(position+1)+" / "+itemCount;
-            paint.setTextSize(dp(12));paint.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-            float width=paint.measureText(label)+dp(20);
-            float left=x-width-dp(15),right=x-dp(15);
-            float y=Math.min(Math.max(center,dp(25)),getHeight()-dp(25));
-            paint.setColor(0xee173044);
-            canvas.drawRoundRect(left,y-dp(19),right,y+dp(13),dp(10),dp(10),paint);
-            paint.setColor(Color.WHITE);
-            canvas.drawText(label,left+dp(10),y+dp(3),paint);
-        }
+        // The separate tooltip is rendered by the parent to avoid clipping
+        // text outside this 39dp-wide touch strip.
     }
     @Override public boolean onTouchEvent(MotionEvent event){
         if(itemCount<=1||onSeek==null)return false;
@@ -77,21 +69,25 @@ final class MediaFastScroller extends View {
                 dragging=true;
                 position=indexForFraction(fractionForY(event.getY()),itemCount);
                 getParent().requestDisallowInterceptTouchEvent(true);
+                if(onDrag!=null)onDrag.accept(position,true);
                 invalidate();return true;
             case MotionEvent.ACTION_MOVE:
                 if(!dragging)return false;
                 position=indexForFraction(fractionForY(event.getY()),itemCount);
+                if(onDrag!=null)onDrag.accept(position,true);
                 invalidate();return true;
             case MotionEvent.ACTION_UP:
                 if(!dragging)return false;
                 float fraction=fractionForY(event.getY());
                 position=indexForFraction(fraction,itemCount);
                 dragging=false;
+                if(onDrag!=null)onDrag.accept(position,false);
                 invalidate();performClick();
                 onSeek.accept(fraction);
                 return true;
             case MotionEvent.ACTION_CANCEL:
-                dragging=false;invalidate();return true;
+                dragging=false;if(onDrag!=null)onDrag.accept(position,false);
+                invalidate();return true;
             default:return false;
         }
     }
