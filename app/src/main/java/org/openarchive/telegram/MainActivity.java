@@ -155,9 +155,10 @@ public class MainActivity extends Activity {
     private LinearLayout base,list,filterBar,bottomNav,searchArea,toolArea,savedComposer;
     private LinearLayout importProgressPanel;private TextView importProgressText;
     private MediaZoomRecyclerView mediaRecycler;
+    private MediaFastScroller mediaFastScroller;
     private MediaGalleryAdapter mediaAdapter;
     private androidx.recyclerview.widget.GridLayoutManager mediaLayout;
-    private int mediaColumns=3,mediaLoaded=0,mediaTotal=0;
+    private int mediaColumns=3,mediaLoaded=0,mediaTotal=0,mediaWindowStart=0;
     private boolean mediaAppending=false;
     private TextView mediaZoomLabel;
     private android.widget.SeekBar mediaZoomSeek;
@@ -2854,16 +2855,22 @@ public class MainActivity extends Activity {
         mediaRecycler=new MediaZoomRecyclerView(this);
         mediaRecycler.setVisibility(View.GONE);
         mediaRecycler.setClipToPadding(false);
-        mediaRecycler.setPadding(px(2),px(6),px(2),px(16));
+        // Reserve an actual touch-safe gutter for the right fast scrubber.
+        mediaRecycler.setPadding(px(2),px(6),px(37),px(16));
         mediaRecycler.setItemAnimator(null);
         mediaAdapter=new MediaGalleryAdapter();
         mediaRecycler.setAdapter(mediaAdapter);
         scrollHost.addView(mediaRecycler,new FrameLayout.LayoutParams(-1,-1));
         mediaRecycler.addOnScrollListener(new androidx.recyclerview.widget.RecyclerView.OnScrollListener(){
             @Override public void onScrolled(androidx.recyclerview.widget.RecyclerView rv,int dx,int dy){
+                syncMediaFastScroll();
                 if(dy>=0)maybeAppendMedia();
             }
         });
+        mediaFastScroller=new MediaFastScroller(this);
+        mediaFastScroller.setVisibility(View.GONE);
+        mediaFastScroller.setOnSeek(this::jumpToMediaFraction);
+        scrollHost.addView(mediaFastScroller,new FrameLayout.LayoutParams(px(39),-1,Gravity.END));
         verticalTimeline=new VerticalTimeline();
         scrollHost.addView(verticalTimeline,new FrameLayout.LayoutParams(px(20),-1,Gravity.END));
         list=column();list.setPadding(px(3),px(6),px(3),px(14));scroll.addView(list);
@@ -3521,6 +3528,8 @@ public class MainActivity extends Activity {
             boolean showingGallery="media".equals(screen)&&!home;
             mediaRecycler.setVisibility(showingGallery?View.VISIBLE:View.GONE);
             scroll.setVisibility(showingGallery?View.GONE:View.VISIBLE);
+            if(mediaFastScroller!=null)
+                mediaFastScroller.setVisibility(showingGallery&&mediaTotal>1?View.VISIBLE:View.GONE);
         }
         if("help".equals(screen)){renderHelpPage();return;}
         if("multi_timeline".equals(screen)){renderMultiTimelinePage();return;}
@@ -3592,9 +3601,11 @@ public class MainActivity extends Activity {
                     }
                     else list.setBackgroundColor(BG);
                     if(gallery){
-                        mediaLoaded=attachments.size();mediaTotal=count;mediaAppending=false;
+                        mediaWindowStart=0;mediaLoaded=attachments.size();mediaTotal=count;mediaAppending=false;
                         mediaAdapter.reset();mediaAdapter.append(attachments);
                         updateMediaLayout(false);
+                        mediaFastScroller.setProgress(0,count);
+                        mediaFastScroller.setVisibility(count>1?View.VISIBLE:View.GONE);
                         if(count==0){
                             mediaRecycler.setVisibility(View.GONE);
                             scroll.setVisibility(View.VISIBLE);
@@ -5692,6 +5703,64 @@ public class MainActivity extends Activity {
         configureBars();
         updateMediaLayout(true);
     }
+    /** The right track reflects the absolute SQLite attachment index even in paged views. */
+    private void syncMediaFastScroll(){
+        if(mediaFastScroller==null||mediaLayout==null||mediaAdapter==null||
+            mediaTotal<=0||!"media".equals(screen)||home)return;
+        int first=mediaLayout.findFirstVisibleItemPosition();
+        int absolute=mediaWindowStart+mediaAdapter.ordinalAt(first);
+        mediaFastScroller.setProgress(absolute,mediaTotal);
+    }
+    /** A fast seek opens the requested source page directly. It never copies media bytes. */
+    private void jumpToMediaFraction(float fraction){
+        if(mediaFastScroller==null||mediaLayout==null||mediaAdapter==null||
+            !"media".equals(screen)||home||importing||db==null||mediaTotal<=0)return;
+        final int target=MediaFastScroller.indexForFraction(fraction,mediaTotal);
+        mediaFastScroller.setProgress(target,mediaTotal);
+        if(target>=mediaWindowStart&&target<mediaLoaded){
+            int adapterPos=mediaAdapter.adapterPositionForOrdinal(target-mediaWindowStart);
+            if(adapterPos>=0)mediaLayout.scrollToPositionWithOffset(adapterPos,0);
+            return;
+        }
+        // Invalidate pending prefetch/append callbacks before swapping the visible window.
+        final int token=++loadToken;mediaAppending=true;
+        final String archive=activeKey,kind=mediaKind;
+        final MessageDb source=db;final int expectedTotal=mediaTotal;
+        status.setVisibility(View.VISIBLE);
+        status.setText("Открываю файл "+(target+1)+" из "+expectedTotal+"…");
+        worker.execute(()->{
+            List<MessageDb.Attachment> page;
+            String failure=null;
+            try{page=source.mediaPage(kind,target,MediaGalleryState.PAGE_SIZE);}
+            catch(Exception error){page=java.util.Collections.emptyList();failure=error.getMessage();}
+            final List<MessageDb.Attachment> results=page;
+            final String problem=failure;
+            runOnUiThread(()->{
+                if(isFinishing()||isDestroyed()||token!=loadToken||db!=source||
+                    !archive.equals(activeKey)||!"media".equals(screen)||
+                    !kind.equals(mediaKind))return;
+                mediaAppending=false;
+                if(problem!=null){
+                    status.setText("Не удалось перейти к выбранному файлу: "+problem);
+                    syncMediaFastScroll();return;
+                }
+                if(results.isEmpty()){
+                    status.setText("В этом месте больше нет файлов. Обнови медиатеку.");
+                    syncMediaFastScroll();return;
+                }
+                mediaWindowStart=target;
+                mediaLoaded=target+results.size();
+                mediaAdapter.reset();mediaAdapter.append(results);
+                updateMediaLayout(false);
+                mediaLayout.scrollToPositionWithOffset(0,0);
+                mediaFastScroller.setProgress(target,mediaTotal);
+                status.setText("Файл "+(target+1)+" из "+mediaTotal+
+                    " · перелистывай или двигай ползунок справа");
+                scheduleMediaPrefetch(token,kind,mediaLoaded,mediaTotal);
+                mediaRecycler.post(this::maybeAppendMedia);
+            });
+        });
+    }
     /** Fetch only the next 30 from SQLite; never reset scroll when the next page arrives. */
     private void maybeAppendMedia(){
         if(mediaRecycler==null||mediaLayout==null||mediaAppending
@@ -5719,6 +5788,7 @@ public class MainActivity extends Activity {
                 mediaLoaded+=next.size();
                 if(next.isEmpty())mediaLoaded=mediaTotal;
                 mediaAppending=false;
+                syncMediaFastScroll();
                 status.setText("Показано "+mediaLoaded+" из "+mediaTotal+" · листай вниз");
                 if(mediaLoaded<mediaTotal)mediaRecycler.post(this::maybeAppendMedia);
             });
@@ -5727,20 +5797,31 @@ public class MainActivity extends Activity {
     /** Every header spans the full grid; dates group round/voice/audio galleries. */
     private final class MediaGalleryAdapter extends androidx.recyclerview.widget.RecyclerView.Adapter<androidx.recyclerview.widget.RecyclerView.ViewHolder>{
         private final ArrayList<Object> entries=new ArrayList<>();
+        // Maps zero-based attachment ordinals to adapter positions; headers are skipped.
+        private final ArrayList<Integer> attachmentPositions=new ArrayList<>();
         private String lastGroup=null;
-        void reset(){entries.clear();lastGroup=null;notifyDataSetChanged();}
+        void reset(){entries.clear();attachmentPositions.clear();lastGroup=null;notifyDataSetChanged();}
+        int ordinalAt(int adapterPosition){
+            if(attachmentPositions.isEmpty())return 0;
+            int n=java.util.Collections.binarySearch(attachmentPositions,Math.max(0,adapterPosition));
+            if(n<0)n=-n-2;return Math.max(0,n);
+        }
+        int adapterPositionForOrdinal(int ordinal){
+            return ordinal<0||ordinal>=attachmentPositions.size()?-1:attachmentPositions.get(ordinal);
+        }
         boolean isHeader(int position){return position>=0&&position<entries.size()&&entries.get(position) instanceof String;}
         void regroup(){
             ArrayList<MessageDb.Attachment> all=new ArrayList<>();
             for(Object item:entries)if(item instanceof MessageDb.Attachment)
                 all.add((MessageDb.Attachment)item);
-            entries.clear();lastGroup=null;
+            entries.clear();attachmentPositions.clear();lastGroup=null;
             for(MessageDb.Attachment item:all){
                 boolean byDay=mediaGridEnabled()&&
                     ("round".equals(mediaKind)||"voice".equals(mediaKind)||"audio".equals(mediaKind));
                 String group=byDay?day(item.date):MediaTimeline.month(item.date);
                 if(group==null||group.isEmpty())group="Без даты";
                 if(!group.equals(lastGroup)){entries.add(group);lastGroup=group;}
+                attachmentPositions.add(entries.size());
                 entries.add(item);
             }
             // Dataset was replaced (not inserted); notify accordingly to avoid
@@ -5758,6 +5839,7 @@ public class MainActivity extends Activity {
                     entries.add(group);
                     lastGroup=group;
                 }
+                attachmentPositions.add(entries.size());
                 entries.add(item);
             }
             if(entries.size()>from)notifyItemRangeInserted(from,entries.size()-from);
