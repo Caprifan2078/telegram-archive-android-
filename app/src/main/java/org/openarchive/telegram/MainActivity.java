@@ -1415,6 +1415,7 @@ public class MainActivity extends Activity {
         if(mediaRecycler!=null)mediaRecycler.setVisibility(View.GONE);
         if(scroll!=null)scroll.setVisibility(View.VISIBLE);
         list.setBackgroundColor(BG);
+        list.setPadding(px(3),px(6),px(3),px(14));
         savedComposer.setVisibility(View.GONE);
         final int homeToken=++loadToken;list.removeAllViews();list.setTag("home-list");pinnedBar.removeAllViews();filterBar.removeAllViews();searchArea.removeAllViews();
         verticalTimeline.setVisibility(View.GONE);bottomPager.setVisibility(View.GONE);bottomNav.setVisibility(View.GONE);
@@ -1723,6 +1724,7 @@ public class MainActivity extends Activity {
         if(mediaRecycler!=null)mediaRecycler.setVisibility(View.GONE);
         if(scroll!=null)scroll.setVisibility(View.VISIBLE);
         if(floatingPanel!=null)closeFloatingRound();
+        list.setPadding(px(3),px(6),px(3),px(14));
         if(savedComposer!=null)savedComposer.setVisibility(View.GONE);
         if(playerStrip!=null)playerStrip.setVisibility(View.GONE);
         menuButton.setVisibility(View.GONE);navBack.setVisibility(View.VISIBLE);
@@ -2734,7 +2736,7 @@ public class MainActivity extends Activity {
         title=text("Telegram Archive",17,FG);title.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
         title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.END);headings.addView(title,p(-1,26));
         subtitle=text("Личный архив · офлайн",11,SUB);
-        subtitle.setSingleLine(true);subtitle.setEllipsize(TextUtils.TruncateAt.END);headings.addView(subtitle,p(-1,19));
+        subtitle.setSingleLine(true);subtitle.setEllipsize(TextUtils.TruncateAt.END);headings.addView(subtitle,p(-1,18));
         pdfButton=btn("PDF");pdfButton.setContentDescription("Сохранить переписку в PDF");head.addView(pdfButton,p(44,42));
         pdfButton.setOnClickListener(v->{if(!home&&"chat".equals(screen))chooseConversationPdf();});
         headerActions=btn("⋯");headerActions.setContentDescription("Другие инструменты переписки");head.addView(headerActions,p(42,42));
@@ -2802,11 +2804,19 @@ public class MainActivity extends Activity {
         verticalTimeline=new VerticalTimeline();
         scrollHost.addView(verticalTimeline,new FrameLayout.LayoutParams(px(20),-1,Gravity.END));
         list=column();list.setPadding(px(3),px(6),px(3),px(14));scroll.addView(list);
-        LinearLayout bottom=row();bottomPager=bottom;base.addView(bottom,p(-1,52));
-        backPage=btn("‹ Назад");nextPage=btn("Далее ›");pageLabel=text("",12,SUB);pageLabel.setGravity(Gravity.CENTER);
+        LinearLayout bottom=row();bottom.setGravity(Gravity.CENTER_VERTICAL);
+        bottomPager=bottom;base.addView(bottom,p(-1,52));
+        // Long labels in 13sp + font scaling used to crowd the page counter on small phones.
+        // Keep compact arrows with full accessibility labels instead of squeezed text.
+        backPage=btn("‹");backPage.setContentDescription("Предыдущая страница");
+        nextPage=btn("›");nextPage.setContentDescription("Следующая страница");
+        pageLabel=text("",12,SUB);pageLabel.setGravity(Gravity.CENTER);
+        pageLabel.setSingleLine(true);pageLabel.setEllipsize(TextUtils.TruncateAt.END);
         savedComposer=column();savedComposer.setVisibility(View.GONE);
         savedComposer.setBackground(glass(PANEL,16));base.addView(savedComposer,p(-1,-2));
-        bottom.addView(backPage,p(95,44));bottom.addView(pageLabel,new LinearLayout.LayoutParams(0,-2,1));bottom.addView(nextPage,p(95,44));
+        bottom.addView(backPage,p(56,44));
+        bottom.addView(pageLabel,new LinearLayout.LayoutParams(0,-2,1));
+        bottom.addView(nextPage,p(56,44));
         backPage.setOnClickListener(v->{setOffset(Math.max(0,getOffset()-getLimit()));showPage();});
         nextPage.setOnClickListener(v->{setOffset(getOffset()+getLimit());showPage();});
         configureBars();
@@ -3539,7 +3549,11 @@ public class MainActivity extends Activity {
                     bottomPager.setVisibility(favs&&count>getLimit()?View.VISIBLE:View.GONE);
                     int shown=gallery?attachments.size():messages.size();
                     // Keep the chat scrubber only for long histories, not a 14-message sample.
-                    verticalTimeline.setVisibility("chat".equals(tab)&&count>120?View.VISIBLE:View.GONE);
+                    boolean hasScrubber="chat".equals(tab)&&count>120;
+                    verticalTimeline.setVisibility(hasScrubber?View.VISIBLE:View.GONE);
+                    // The scrubber is an overlay at the right edge. Reserve a real
+                    // message gutter or timestamps and bubble actions fall underneath it.
+                    list.setPadding(px(3),px(6),hasScrubber?px(27):px(3),px(14));
                     if("chat".equals(tab))verticalTimeline.setPosition(pos,count);
                     pageLabel.setText(count==0?"Нет данных":(pos+1)+"–"+(pos+shown)+" / "+count);
                     backPage.setEnabled(pos>0);nextPage.setEnabled(pos+shown<count);
@@ -5291,7 +5305,7 @@ public class MainActivity extends Activity {
     private void renderCinemaPage(){
         int token=++loadToken;
         if(home){screen="chat";showPage();return;}
-        bottomNav.setVisibility(View.VISIBLE);refreshTabs();
+        refreshTabs();
         title.setText("Кинолента");subtitle.setText("Медиа по годам · офлайн");
         filterBar.removeAllViews();searchArea.removeAllViews();
         bottomPager.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
@@ -6495,7 +6509,9 @@ public class MainActivity extends Activity {
         Button pause=btn("Ⅱ");actions.addView(pause,new LinearLayout.LayoutParams(0,px(43),1));
         Button forward=btn("+10 с");actions.addView(forward,p(75,43));
         TextView timer=text("0:00 / 0:00",12,FG);timer.setGravity(Gravity.CENTER);bottom.addView(timer,p(-1,23));
-        frame.addView(bottom,new FrameLayout.LayoutParams(-1,px(114),Gravity.BOTTOM));
+        // Children + padding exceed 114dp, so the fixed container clipped the
+        // timecode and made playback controls look stacked/overlapped.
+        frame.addView(bottom,new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM));
         final android.media.MediaPlayer[] prepared={null};
         final float[] selectedSpeed={1f};
         final boolean[] seeking={false};
