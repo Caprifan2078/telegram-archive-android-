@@ -95,6 +95,7 @@ public class MainActivity extends Activity {
     private int relationshipPageIndex=0;
     private boolean historyEventsExpanded=false;
     private String chronologySection="overview";
+    private String cinemaReturnScreen="chat";
     // Read-only side-by-side workspaces. The first archive is always the active chat.
     private String dualSecondKey="",dualSecondName="";
     private int dualYear=LocalDate.now().getYear(),dualMonth=0;
@@ -749,7 +750,7 @@ public class MainActivity extends Activity {
         new FontDialog.Builder(this).setTitle("Медиатека PRO")
             .setItems(entries,(d,i)->{
                 if(i==0){screen="media";showPage();}
-                else if(i==1){screen="cinema";showPage();}
+                else if(i==1){cinemaReturnScreen=screen;screen="cinema";showPage();}
                 else if(i==2)showCollectionPicker();else showMediaHealth();
             }).setNegativeButton("Закрыть",null).show();
     }
@@ -1048,7 +1049,7 @@ public class MainActivity extends Activity {
         });
         sideMenuSection(items,"Инструменты переписки",false,group->{
             sideMenuItem(group,dialog,pane,"▤  Кинолента медиа","По годам и месяцам, без сетевых запросов",()->{
-                if(home){toast("Сначала открой переписку");return;}screen="cinema";showPage();});
+                if(home){toast("Сначала открой переписку");return;}cinemaReturnScreen=screen;screen="cinema";showPage();});
             sideMenuItem(group,dialog,pane,"◷  Хронология","События, периоды и воспоминания",()->{
                 if(home){toast("Сначала открой переписку");return;}screen="relationships";showPage();});
             sideMenuItem(group,dialog,pane,"⇄  Сравнение диалогов","Два чата · месяцы, медиа, участники",()->{
@@ -2594,12 +2595,12 @@ public class MainActivity extends Activity {
             selectAnalyticsSection("overview");return true;
         }
         if("chronology".equals(screen)){
-            if(!"overview".equals(chronologySection)){
-                chronologySection="overview";renderChronologyPage();
-            }else{
-                screen="relationships";showPage();
-            }
+            chronologySection="overview";screen="relationships";showPage();
             return true;
+        }
+        if("cinema".equals(screen)){
+            screen="relationships".equals(cinemaReturnScreen)?"relationships":"chat";
+            cinemaReturnScreen="chat";showPage();return true;
         }
         if("relationships".equals(screen)&&historyEventsExpanded){
             historyEventsExpanded=false;renderRelationshipsPage();return true;
@@ -4028,7 +4029,7 @@ public class MainActivity extends Activity {
             final MessageDb source=db;final String archive=activeKey;
             worker.execute(()->{try{source.addPeriod(label,comment,start,end);
                 runOnUiThread(()->{if(!archive.equals(activeKey)||isFinishing())return;
-                    pendingPeriodStart=null;pendingPeriodArchive="";dialog.dismiss();screen="chronology";showPage();});
+                    pendingPeriodStart=null;pendingPeriodArchive="";dialog.dismiss();chronologySection="stages";screen="chronology";showPage();});
             }catch(Exception e){runOnUiThread(()->toast("Не сохранилось: "+e.getMessage()));}});
         }));dialog.show();
     }
@@ -4101,10 +4102,14 @@ public class MainActivity extends Activity {
             historyEventsExpanded=!historyEventsExpanded;
             renderRelationshipsPage();
         });
-        Button stages=btn("02 · Мои периоды истории  ›");list.addView(stages,p(-1,52));
-        stages.setOnClickListener(v->{chronologySection="overview";screen="chronology";showPage();});
-        Button cinemaShortcut=btn("03 · Кинолента медиа по годам  ›");list.addView(cinemaShortcut,p(-1,52));
-        cinemaShortcut.setOnClickListener(v->{screen="cinema";showPage();});
+        Button stages=btn("02 · Этапы переписки  ›");list.addView(stages,p(-1,52));
+        stages.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="stages";screen="chronology";showPage();});
+        Button calendar=btn("03 · Периоды по датам  ›");list.addView(calendar,p(-1,52));
+        calendar.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="calendar";screen="chronology";showPage();});
+        Button charts=btn("04 · Сравнение этапов  ›");list.addView(charts,p(-1,52));
+        charts.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="chart";screen="chronology";showPage();});
+        Button cinemaShortcut=btn("05 · Кинолента медиа по годам  ›");list.addView(cinemaShortcut,p(-1,52));
+        cinemaShortcut.setOnClickListener(v->{historyEventsExpanded=false;cinemaReturnScreen=screen;screen="cinema";showPage();});
         Button backToChat=btn("+ Отметить событие в переписке");list.addView(backToChat,p(-1,46));
         backToChat.setOnClickListener(v->{screen="chat";showPage();
             toast("Удерживай важное сообщение и выбери «Добавить событие истории»");});
@@ -4710,8 +4715,8 @@ public class MainActivity extends Activity {
             return;
         }
         // A selected section is a focused detail page, not the whole hub repeated.
-        Button sections=btn("‹ К разделам хронологии");list.addView(sections,p(-1,43));
-        sections.setOnClickListener(v->{chronologySection="overview";renderChronologyPage();});
+        Button sections=btn("‹ К хронологии");list.addView(sections,p(-1,43));
+        sections.setOnClickListener(v->{chronologySection="overview";screen="relationships";showPage();});
         String sectionTitle="stages".equals(section)?"Этапы переписки":
             "calendar".equals(section)?"Периоды по датам":
             "chart".equals(section)?"Сравнение этапов":"Раздел истории";
@@ -4825,7 +4830,8 @@ public class MainActivity extends Activity {
         TextView heading=text("▤ Кинолента воспоминаний",22,FG);heading.setTypeface(null,Typeface.BOLD);
         heading.setPadding(px(10),px(10),px(10),px(8));list.addView(heading);
         analyticsText(list,"Выбери год и месяц. Медиа открываются локально; загружается не более 18 миниатюр за один раз. Это не автоматическая презентация личных сообщений.",SUB,12);
-        Button back=btn("‹ К переписке");list.addView(back,p(-1,46));back.setOnClickListener(v->{screen="chat";showPage();});
+        Button back=btn("relationships".equals(cinemaReturnScreen)?"‹ К хронологии":"‹ К переписке");
+        list.addView(back,p(-1,46));back.setOnClickListener(v->backWithinHistory());
         final MessageDb source=db;final String archive=activeKey;
         worker.execute(()->{try{List<MessageDb.MediaMonth> months=source.mediaMonths();
             runOnUiThread(()->{
