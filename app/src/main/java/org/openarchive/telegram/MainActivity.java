@@ -3127,8 +3127,8 @@ public class MainActivity extends Activity {
         // No second hero/title: one concise, always-visible tab row, then content.
         LinearLayout navigation=row();
         navigation.setGravity(Gravity.CENTER_VERTICAL);
-        navigation.setPadding(px(4),px(4),px(4),px(5));
-        list.addView(navigation,p(-1,57));
+        navigation.setPadding(px(4),px(2),px(4),px(2));
+        list.addView(navigation,p(-1,56));
         analyticsNavChip(navigation,"Обзор","overview");
         analyticsNavChip(navigation,"Графики","trends");
         analyticsNavChip(navigation,"Ритм","rhythm");
