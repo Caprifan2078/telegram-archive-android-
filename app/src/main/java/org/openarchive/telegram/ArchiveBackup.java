@@ -343,6 +343,17 @@ final class ArchiveBackup {
                     }
                 }
             }
+                // Restore group membership with the newly assigned archive keys.
+                // Existing groups are preserved; source labels are user-entered and do not
+                // authenticate identity. An invalid payload aborts the restore, not notes.
+                if(prefsSaved!=null&&prefsSaved.has(MultiConversationRegistry.PREF_KEY)){
+                    Object incoming=prefsSaved.opt(MultiConversationRegistry.PREF_KEY);
+                    if(!(incoming instanceof String))
+                        throw new IOException("Неверный формат мультипереписок в резервной копии");
+                    JSONArray merged=MultiConversationRegistry.mergeForRestore(
+                        prefs,(String)incoming,keyMap);
+                    edit.putString(MultiConversationRegistry.PREF_KEY,merged.toString());
+                }
                 localNotes.setTransactionSuccessful();
             }finally{localNotes.endTransaction();store.close();}
             // Publish registry only after the SQLite notes transaction is safely committed.

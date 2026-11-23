@@ -174,7 +174,15 @@ android {
             signingConfig signingConfigs.debug
         }
     }
-    testBuildType (project.findProperty('qaChronologyDirectInstrumentation') == 'true' ? 'chronologyDirectQa' : (project.findProperty('qaRoundReattachInstrumentation') == 'true' ? 'roundReattachQa' : (project.findProperty('qaContentClarityInstrumentation') == 'true' ? 'contentClarityQa' : (project.findProperty('qaUiDensityInstrumentation') == 'true' ? 'uiDensityQa' : (project.findProperty('qaVisualCoherenceInstrumentation') == 'true' ? 'visualCoherenceQa' : (project.findProperty('qaHistoryRoundInstrumentation') == 'true' ? 'historyRoundQa' : (project.findProperty('qaRoundChronologyInstrumentation') == 'true' ? 'roundChronologyQa' : (project.findProperty('qaRealExportInstrumentation') == 'true' ? 'realExportQa' : (project.findProperty('qaGalleryInstrumentation') == 'true' ? 'galleryQa' : (project.findProperty('qaPasswordInstrumentation') == 'true' ? 'passwordOnDemandQa' : (project.findProperty('qaCleanChatInstrumentation') == 'true' ? 'cleanChatQa' : (project.findProperty('qaUiStructureInstrumentation') == 'true' ? 'uiStructureQa' : (project.findProperty('qaUiPolishInstrumentation') == 'true' ? 'uiPolishQa' : (project.findProperty('qaUiReviewInstrumentation') == 'true' ? 'uiReviewQa' : (project.findProperty('qaHandoffInstrumentation') == 'true' ? 'handoffQa' : (project.findProperty('qaStableInstrumentation') == 'true' ? 'stableQa' : 'compactQa'))))))))))))))))
+    buildTypes {
+        // Separate package: test installs cannot overwrite the user's existing archives.
+        multiChatQa {
+            initWith compactQa
+            applicationIdSuffix '.multichat20261123'
+            signingConfig signingConfigs.debug
+        }
+    }
+    testBuildType (project.findProperty('qaMultiChatInstrumentation') == 'true' ? 'multiChatQa' : (project.findProperty('qaChronologyDirectInstrumentation') == 'true' ? 'chronologyDirectQa' : (project.findProperty('qaRoundReattachInstrumentation') == 'true' ? 'roundReattachQa' : (project.findProperty('qaContentClarityInstrumentation') == 'true' ? 'contentClarityQa' : (project.findProperty('qaUiDensityInstrumentation') == 'true' ? 'uiDensityQa' : (project.findProperty('qaVisualCoherenceInstrumentation') == 'true' ? 'visualCoherenceQa' : (project.findProperty('qaHistoryRoundInstrumentation') == 'true' ? 'historyRoundQa' : (project.findProperty('qaRoundChronologyInstrumentation') == 'true' ? 'roundChronologyQa' : (project.findProperty('qaRealExportInstrumentation') == 'true' ? 'realExportQa' : (project.findProperty('qaGalleryInstrumentation') == 'true' ? 'galleryQa' : (project.findProperty('qaPasswordInstrumentation') == 'true' ? 'passwordOnDemandQa' : (project.findProperty('qaCleanChatInstrumentation') == 'true' ? 'cleanChatQa' : (project.findProperty('qaUiStructureInstrumentation') == 'true' ? 'uiStructureQa' : (project.findProperty('qaUiPolishInstrumentation') == 'true' ? 'uiPolishQa' : (project.findProperty('qaUiReviewInstrumentation') == 'true' ? 'uiReviewQa' : (project.findProperty('qaHandoffInstrumentation') == 'true' ? 'handoffQa' : (project.findProperty('qaStableInstrumentation') == 'true' ? 'stableQa' : 'compactQa')))))))))))))))))
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
