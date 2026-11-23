@@ -3096,7 +3096,7 @@ public class MainActivity extends Activity {
     private void analyticsNavChip(LinearLayout row,String label,String section){
         boolean selected=section.equals(analyticsSection);
         // Compact visible labels fit on a 360dp phone; accessibility keeps the full names.
-        String shortLabel="Участники".equals(label)?"Люди":"Медиа и слова".equals(label)?"Медиа":label;
+        String shortLabel="Участники".equals(label)?"Люди":"Медиа и слова".equals(label)?"Контент":label;
         TextView chip=text(shortLabel,12,selected?FG:SUB);
         chip.setTypeface(Typeface.create("sans-serif-medium",selected?Typeface.BOLD:Typeface.NORMAL));
         chip.setGravity(Gravity.CENTER);
@@ -3204,19 +3204,50 @@ public class MainActivity extends Activity {
         LinearLayout media=analyticsCard("Медиатека по типам");
         String[] kinds={"image","video","round","voice","audio","gif","sticker","file"};
         String[] titles={"Фото","Обычные видео","Видеосообщения","Голосовые","Музыка/аудио","GIF","Стикеры","Файлы"};
-        for(int i=0;i<kinds.length;i++)analyticsLine(media,titles[i],r.type(kinds[i]));
+        if(r.totalMedia==0){
+            analyticsText(media,"В этой переписке пока нет медиа и файлов.",SUB,13);
+        }else{
+            long classified=0;
+            for(int i=0;i<kinds.length;i++){
+                long count=r.type(kinds[i]);
+                if(count>0){analyticsLine(media,titles[i],count);classified+=count;}
+            }
+            if(classified<r.totalMedia)analyticsLine(media,"Другие вложения",r.totalMedia-classified);
+            analyticsLine(media,"Всего вложений",r.totalMedia);
+        }
         LinearLayout terms=analyticsCard("Самые частые слова");
-        TextView toggle=text(analyticsCommonWords?"◉ Все слова · скрыть служебные":"◉ Без служебных · показать все",12,ACCENT);
-        toggle.setPadding(px(4),px(8),px(4),px(8));terms.addView(toggle);
-        toggle.setOnClickListener(v->{analyticsCommonWords=!analyticsCommonWords;if(lastAnalytics==r){list.removeAllViews();renderAnalytics(r);}});
+        TextView toggle=text(analyticsCommonWords?
+            "Все слова · выбрать значимые  ▾":"Значимые слова · показать все  ▾",12,ACCENT);
+        toggle.setContentDescription(analyticsCommonWords?
+            "Показаны все слова. Нажми, чтобы скрыть служебные и числовые фрагменты":
+            "Показаны значимые слова. Нажми, чтобы увидеть все слова");
+        toggle.setPadding(px(4),px(6),px(4),px(7));terms.addView(toggle);
+        toggle.setOnClickListener(v->{analyticsCommonWords=!analyticsCommonWords;if(lastAnalytics==r)refreshAnalyticsView();});
         if(r.limitedVocabulary)analyticsText(terms,"Очень большой словарь: редкие новые слова могли не учитываться в рейтинге. Итоги сообщений, слов и медиа полные.",SUB,12);
         List<ChatAnalytics.WordCount> words=analyticsCommonWords?r.topWords:r.topMeaningfulWords;
-        for(ChatAnalytics.WordCount word:words){
-            TextView entry=text("«"+word.word+"»  ·  "+word.count+" раз",14,FG);
-            entry.setPadding(px(6),px(6),px(4),px(6));terms.addView(entry);
-            entry.setOnClickListener(v->openWordSearchFromAnalytics(word.word));
+        if(words.isEmpty()){
+            analyticsText(terms,"Пока нет подходящих слов. Можно переключить фильтр выше.",SUB,13);
+        }else{
+            analyticsText(terms,"Нажми на слово, чтобы найти его в переписке. Полоски — относительно самого частого.",SUB,11);
+            LinearLayout wordRows=column();terms.addView(wordRows,p(-1,-2));
+            final boolean[] expanded={false};
+            final long peak=Math.max(1L,words.get(0).count);
+            Runnable draw=()->{
+                wordRows.removeAllViews();
+                int count=expanded[0]?words.size():Math.min(6,words.size());
+                for(int i=0;i<count;i++)renderAnalyticsWordRow(wordRows,words.get(i),peak);
+            };
+            draw.run();
+            if(words.size()>6){
+                Button showMore=btn("Ещё "+(words.size()-6)+" слов  ▾");
+                LinearLayout.LayoutParams more=p(-1,41);more.setMargins(px(4),px(5),px(4),px(2));
+                terms.addView(showMore,more);
+                showMore.setOnClickListener(v->{
+                    expanded[0]=!expanded[0];draw.run();
+                    showMore.setText(expanded[0]?"Свернуть слова  ▴":"Ещё "+(words.size()-6)+" слов  ▾");
+                });
+            }
         }
-        if(words.isEmpty())analyticsText(terms,"Пока нет текстовых сообщений.",SUB,13);
         if(!r.days.isEmpty()){
             LinearLayout days=analyticsCard("Самые активные дни");
             ArrayList<Map.Entry<String,Long>> ranked=new ArrayList<>(r.days.entrySet());
@@ -3692,6 +3723,29 @@ public class MainActivity extends Activity {
         title.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
         title.setPadding(0,0,0,px(9));card.addView(title);
         return card;
+    }
+    /** Ranked vocabulary: readable relative bars and a real link back to chat search. */
+    private void renderAnalyticsWordRow(LinearLayout destination,ChatAnalytics.WordCount word,long peak){
+        LinearLayout item=column();
+        item.setPadding(px(7),px(5),px(7),px(7));
+        item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x307ad2ff),
+            shape(Color.TRANSPARENT,9),shape(0xffffffff,9)));
+        item.setFocusable(true);item.setClickable(true);
+        item.setContentDescription("Найти слово «"+word.word+"» в переписке. Употреблено "+word.count+" раз");
+        LinearLayout.LayoutParams ip=p(-1,-2);ip.setMargins(0,px(2),0,px(2));destination.addView(item,ip);
+        LinearLayout labels=row();labels.setGravity(Gravity.CENTER_VERTICAL);item.addView(labels,p(-1,25));
+        TextView textValue=text("«"+word.word+"»",13,FG);textValue.setSingleLine(true);
+        textValue.setEllipsize(TextUtils.TruncateAt.END);
+        labels.addView(textValue,new LinearLayout.LayoutParams(0,-2,1f));
+        TextView count=text(word.count+" раз",12,SUB);count.setPadding(px(6),0,0,0);
+        labels.addView(count,p(-2,-2));
+        LinearLayout track=row();track.setBackground(shape(CHIP,4));
+        item.addView(track,p(-1,6));
+        int weight=(int)Math.min(1000L,Math.max(3L,Math.round(1000.0*word.count/Math.max(1L,peak))));
+        View filled=new View(this);filled.setBackground(shape(ACCENT,4));
+        track.addView(filled,new LinearLayout.LayoutParams(0,-1,weight));
+        if(weight<1000)track.addView(new View(this),new LinearLayout.LayoutParams(0,-1,1000-weight));
+        item.setOnClickListener(v->openWordSearchFromAnalytics(word.word));
     }
     private void analyticsLine(LinearLayout parent,String name,long value){
         LinearLayout line=row();line.setGravity(Gravity.CENTER_VERTICAL);parent.addView(line,p(-1,-2));
