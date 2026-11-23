@@ -129,10 +129,20 @@ final class ChatAnalytics {
                 messageCount,wordCount,charCount,mediaCount,capped,trends.snapshot(),
                 switchCount,switchCount==0?0.0:switchSeconds/(60.0*switchCount));
         }
+        // Clock fragments, reference numbers and punctuation-only tokens stay in
+        // the complete ranking but should not crowd out actual words by default.
+        private static boolean hasLetter(String token){
+            for(int offset=0;offset<token.length();){
+                int codePoint=token.codePointAt(offset);
+                if(Character.isLetter(codePoint))return true;
+                offset+=Character.charCount(codePoint);
+            }
+            return false;
+        }
         private List<WordCount> rank(boolean excludeCommon){
             ArrayList<WordCount> ordered=new ArrayList<>();
             for(Map.Entry<String,Long> e:vocabulary.entrySet()){
-                if(excludeCommon&&COMMON.contains(e.getKey()))continue;
+                if(excludeCommon&&(COMMON.contains(e.getKey())||!hasLetter(e.getKey())))continue;
                 ordered.add(new WordCount(e.getKey(),e.getValue()));
             }
             ordered.sort((a,b)->{int n=Long.compare(b.count,a.count);return n!=0?n:a.word.compareTo(b.word);});
