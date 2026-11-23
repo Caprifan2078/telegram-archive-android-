@@ -4657,25 +4657,31 @@ public class MainActivity extends Activity {
         status.setVisibility(View.VISIBLE);status.setText("Загружаю выбранный раздел…");
         scroll.post(()->{if("chronology".equals(screen))scroll.scrollTo(0,0);});
 
-        TextView heading=text("Периоды истории",21,FG);heading.setTypeface(null,Typeface.BOLD);
-        heading.setPadding(px(12),px(11),px(12),px(6));list.addView(heading);
-        analyticsText(list,"Открывай только то, что нужно. Все записи хранятся локально.",SUB,12);
-        Button stages=btn("01 · Этапы переписки  ›");list.addView(stages,p(-1,51));
-        stages.setOnClickListener(v->{chronologySection="stages";renderChronologyPage();});
-        Button calendarButton=btn("02 · Периоды по датам  ›");list.addView(calendarButton,p(-1,51));
-        calendarButton.setOnClickListener(v->{chronologySection="calendar";renderChronologyPage();});
-        Button charts=btn("03 · Сравнение этапов  ›");list.addView(charts,p(-1,51));
-        charts.setOnClickListener(v->{chronologySection="chart";renderChronologyPage();});
-        Button events=btn("04 · Лента событий  ›");list.addView(events,p(-1,51));
-        events.setOnClickListener(v->{historyEventsExpanded=true;screen="relationships";showPage();});
         final String section=chronologySection;
         if("overview".equals(section)){
-            analyticsText(list,"Этапы — промежутки между сообщениями; периоды по датам можно создавать вручную. Графики и события открываются отдельно, без бесконечных таблиц.",SUB,13);
+            TextView heading=text("Периоды истории",21,FG);heading.setTypeface(null,Typeface.BOLD);
+            heading.setPadding(px(12),px(11),px(12),px(6));list.addView(heading);
+            analyticsText(list,"Выбери раздел — остальные материалы не загружаются.",SUB,12);
+            Button stages=btn("01 · Этапы переписки  ›");list.addView(stages,p(-1,51));
+            stages.setOnClickListener(v->{chronologySection="stages";renderChronologyPage();});
+            Button calendarButton=btn("02 · Периоды по датам  ›");list.addView(calendarButton,p(-1,51));
+            calendarButton.setOnClickListener(v->{chronologySection="calendar";renderChronologyPage();});
+            Button charts=btn("03 · Сравнение этапов  ›");list.addView(charts,p(-1,51));
+            charts.setOnClickListener(v->{chronologySection="chart";renderChronologyPage();});
+            Button events=btn("04 · Лента событий  ›");list.addView(events,p(-1,51));
+            events.setOnClickListener(v->{historyEventsExpanded=true;screen="relationships";showPage();});
+            analyticsText(list,"Этапы отмечаются сообщениями; периоды по датам создаются вручную. События и графики открываются отдельно.",SUB,13);
             status.setText("");status.setVisibility(View.GONE);
             return;
         }
+        // A selected section is a focused detail page, not the whole hub repeated.
         Button sections=btn("‹ К разделам хронологии");list.addView(sections,p(-1,43));
         sections.setOnClickListener(v->{chronologySection="overview";renderChronologyPage();});
+        String sectionTitle="stages".equals(section)?"Этапы переписки":
+            "calendar".equals(section)?"Периоды по датам":
+            "chart".equals(section)?"Сравнение этапов":"Раздел истории";
+        TextView heading=text(sectionTitle,20,FG);heading.setTypeface(null,Typeface.BOLD);
+        heading.setPadding(px(12),px(13),px(12),px(7));list.addView(heading);
         if("calendar".equals(section)){
             Button add=btn("+ Добавить период по датам");list.addView(add,p(-1,49));
             add.setOnClickListener(v->editCalendarPeriod(null));
