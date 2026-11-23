@@ -147,6 +147,27 @@ final class ArchiveFileImport {
     }
     private static void extractZipWithPassword(Context ctx,Uri uri,File root,char[] password,
             Budget budget,Progress progress)throws Exception{
+        try{
+            extractZipStreaming(ctx,uri,root,password,budget,progress);
+        }catch(net.lingala.zip4j.exception.ZipException streamFailure){
+            if(password==null||password.length==0)throw streamFailure;
+            // Some AES ZIPs written by 7-Zip rely on central-directory metadata
+            // or data descriptors that a sequential ZIP reader cannot recover.
+            // Retry with Zip4j's random-access reader; do not weaken path or size checks.
+            progress.update("Пробую альтернативное открытие ZIP с паролем…");
+            deleteTree(root);
+            if(!root.mkdirs())throw new IOException("Не удалось очистить временную папку ZIP",streamFailure);
+            budget.count=0;budget.total=0;
+            try{
+                extractZipFromCentralDirectory(ctx,uri,root,password,budget,progress);
+            }catch(Exception recoveryFailure){
+                recoveryFailure.addSuppressed(streamFailure);
+                throw recoveryFailure;
+            }
+        }
+    }
+    private static void extractZipStreaming(Context ctx,Uri uri,File root,char[] password,
+            Budget budget,Progress progress)throws Exception{
         try(InputStream source=ctx.getContentResolver().openInputStream(uri)){
             if(source==null)throw new IOException("Нет доступа к ZIP");
             try(net.lingala.zip4j.io.inputstream.ZipInputStream zip=
@@ -157,7 +178,9 @@ final class ArchiveFileImport {
                 while((entry=zip.getNextEntry())!=null){
                     String name=entry.getFileName();
                     budget.next(name==null?"":name);
-                    BackupEntryPolicy.requireSafe(name,entry.isDirectory());
+                    String safeName=entry.isDirectory()&&name!=null&&!name.endsWith("/")
+                        ?name+"/":name;
+                    BackupEntryPolicy.requireSafe(safeName,entry.isDirectory());
                     if(entry.isEncrypted()&&(password==null||password.length==0))
                         throw new PasswordRequired("ZIP защищён паролем. Введи пароль от архива.");
                     if(entry.isDirectory())continue;
@@ -175,6 +198,62 @@ final class ArchiveFileImport {
                     emit(budget,progress);
                 }
             }
+        }
+    }
+    /**
+     * Central-directory fallback for password-protected ZIPs with unusual
+     * headers. A SAF provider may return a pipe rather than a seekable file;
+     * the bounded private temporary copy is deleted even if decoding fails.
+     */
+    static void extractZipFromCentralDirectory(Context ctx,Uri uri,File root,char[] password,
+            Budget budget,Progress progress)throws Exception{
+        File temporary=File.createTempFile("telegram-zip-retry-", ".zip",ctx.getCacheDir());
+        try{
+            long copied=0;
+            try(InputStream source=ctx.getContentResolver().openInputStream(uri);
+                OutputStream destination=new BufferedOutputStream(new FileOutputStream(temporary))){
+                if(source==null)throw new IOException("Повторно открыть ZIP не удалось");
+                byte[] buffer=new byte[128*1024];int n;
+                while((n=source.read(buffer))!=-1){
+                    copied+=n;
+                    if(copied>2L*1024*1024*1024)
+                        throw new IOException("Для альтернативного чтения ZIP более 2 ГБ нужен архив в обычном формате ZIP с AES-256. Исходный файл не изменён.");
+                    destination.write(buffer,0,n);
+                }
+            }
+            try(net.lingala.zip4j.ZipFile archive=new net.lingala.zip4j.ZipFile(temporary,password)){
+                List<net.lingala.zip4j.model.FileHeader> entries=archive.getFileHeaders();
+                byte[] buffer=new byte[128*1024];
+                for(net.lingala.zip4j.model.FileHeader entry:entries){
+                    String name=entry.getFileName();
+                    budget.next(name==null?"":name);
+                    String safeName=entry.isDirectory()&&name!=null&&!name.endsWith("/")
+                        ?name+"/":name;
+                    BackupEntryPolicy.requireSafe(safeName,entry.isDirectory());
+                    if(entry.isEncrypted()&&(password==null||password.length==0))
+                        throw new PasswordRequired("ZIP защищён паролем. Введи пароль от архива.");
+                    if(entry.isDirectory())continue;
+                    if(entry.getUncompressedSize()>MAX_ENTRY)
+                        throw new IOException("Слишком большой файл в ZIP");
+                    File target=safeFile(root,name);
+                    File parent=target.getParentFile();
+                    if(!parent.isDirectory()&&!parent.mkdirs())
+                        throw new IOException("Не создана папка ZIP");
+                    if(target.exists())throw new IOException("Повторное имя в ZIP");
+                    long written=0;
+                    try(InputStream input=archive.getInputStream(entry);
+                        OutputStream output=new BufferedOutputStream(new FileOutputStream(target))){
+                        int n;
+                        while((n=input.read(buffer))!=-1){
+                            written+=n;budget.add(n,written);
+                            output.write(buffer,0,n);
+                        }
+                    }
+                    emit(budget,progress);
+                }
+            }
+        }finally{
+            if(!temporary.delete())temporary.deleteOnExit();
         }
     }
     private static void extractSevenZ(Context ctx,Uri uri,File root,char[] password,
