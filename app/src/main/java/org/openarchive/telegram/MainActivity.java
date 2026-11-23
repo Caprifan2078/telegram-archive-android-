@@ -2881,7 +2881,20 @@ public class MainActivity extends Activity {
     }
     private void configureBars(){
         filterBar.removeAllViews();searchArea.removeAllViews();
-        if("media".equals(screen)||"favorites".equals(screen)){
+        if("favorites".equals(screen)){
+            // Favorites is a distinct destination. Repeating the entire media-filter
+            // strip wastes space and can crowd narrow screens.
+            TextView backToMedia=text("‹ В медиатеку",13,ACCENT);
+            backToMedia.setGravity(Gravity.CENTER_VERTICAL);
+            backToMedia.setPadding(px(13),px(7),px(13),px(7));
+            backToMedia.setContentDescription("Вернуться к медиатеке");
+            backToMedia.setBackground(new RippleDrawable(ColorStateList.valueOf(0x227ad2ff),
+                shape(Color.TRANSPARENT,11),null));
+            filterBar.addView(backToMedia,p(-1,42));
+            backToMedia.setOnClickListener(v->{screen="media";mediaOffset=0;showPage();});
+            return;
+        }
+        if("media".equals(screen)){
             HorizontalScrollView hsv=new HorizontalScrollView(this);hsv.setHorizontalScrollBarEnabled(false);
             LinearLayout chips=row();hsv.addView(chips);
             for(int i=0;i<MEDIA_KEYS.length;i++){
@@ -2891,7 +2904,6 @@ public class MainActivity extends Activity {
                 c.setOnClickListener(v->{if("favorite".equals(key)){screen="favorites";favOffset=0;}else{screen="media";mediaKind=key;mediaOffset=0;}showPage();});
             }
             filterBar.addView(hsv,p(-1,44));
-            if("favorites".equals(screen))return;
             // One compact media toolbar; advanced actions live in its overflow menu.
             LinearLayout mediaTools=row();mediaTools.setGravity(Gravity.CENTER_VERTICAL);
             Button layoutMode=btn(mediaGridEnabled()?"Список":"Сетка");
@@ -3590,9 +3602,13 @@ public class MainActivity extends Activity {
                     if(count>0&&"chat".equals(tab)){
                         status.setText("");status.setVisibility(View.GONE);
                     }else status.setVisibility(View.VISIBLE);
-                    if(count==0)status.setText(gallery?"":
-                            "chat".equals(tab)?"В этой переписке пока нет сообщений.":
-                            "Ничего не найдено — попробуй другой запрос или выбери папку.");
+                    if(count==0){
+                        status.setText(gallery?"": "chat".equals(tab)?
+                            "В этой переписке пока нет сообщений.":
+                            "favorites".equals(tab)?
+                            "Пока нет избранных сообщений. Удерживай сообщение в чате, чтобы добавить его.":
+                            "Ничего не найдено — попробуй изменить запрос или фильтры.");
+                    }
                     else if(!"chat".equals(tab))status.setText("media".equals(tab)?
                             "Показано "+mediaLoaded+" из "+count+" · листай вниз":
                             "search".equals(tab)?(search.isEmpty()?"Введите слово или фразу":("Сообщений: "+count+"  ·  Точных вхождений «"+clip(search,28)+"»: "+stats.literalOccurrences+(deepMode?"":"  ·  Быстрый поиск учитывает начала слов"))):
