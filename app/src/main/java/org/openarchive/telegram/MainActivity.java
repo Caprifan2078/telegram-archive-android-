@@ -3511,6 +3511,10 @@ public class MainActivity extends Activity {
     private int getLimit(){return screen.equals("media")?MEDIA_PAGE:PAGE;}
     private void setOffset(int x){switch(screen){case "media":mediaOffset=x;break;case "search":searchOffset=x;break;case "favorites":favOffset=x;break;default:chatOffset=x;}}
     private void showPage(){
+        // Every destination (cinema, chronology and combined timelines included)
+        // must reset the notes' fixed bottom editor BEFORE early routing returns.
+        // Otherwise switching from Saved can leave two bottom control rows stacked.
+        if(savedComposer!=null&&!screen.equals("saved"))savedComposer.setVisibility(View.GONE);
         // Floating video is chat-only; never leave a detached grey surface over other pages.
         if((home||!"chat".equals(screen))&&floatingPanel!=null)closeFloatingRound();
         if(mediaRecycler!=null){
@@ -3527,7 +3531,6 @@ public class MainActivity extends Activity {
         if("echo".equals(screen)){renderEchoPage();return;}
         if("chronology".equals(screen)){renderChronologyPage();return;}
         if("cinema".equals(screen)){renderCinemaPage();return;}
-        if(savedComposer!=null&&!screen.equals("saved"))savedComposer.setVisibility(View.GONE);
         if(scheduledPrefetch!=null){handler.removeCallbacks(scheduledPrefetch);scheduledPrefetch=null;}
         if(screen.equals("saved")){if(pdfButton!=null)pdfButton.setVisibility(View.GONE);renderSaved();return;}
         bottomNav.setVisibility(View.GONE);
