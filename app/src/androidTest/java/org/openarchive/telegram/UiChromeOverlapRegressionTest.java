@@ -85,6 +85,28 @@ public final class UiChromeOverlapRegressionTest {
             synthetic.close();a.deleteDatabase("telegram_"+key+".db");
         }
     }
+    @Test public void favoritesHasOneBackLinkInsteadOfCrowdedGalleryFilters()throws Exception{
+        MainActivity a=rule.getActivity();idle(a);
+        Object oldHome=get(a,"home"),oldScreen=get(a,"screen");
+        try{
+            inst.runOnMainSync(()->{
+                try{
+                    put(a,"home",false);put(a,"screen","favorites");
+                    call(a,"configureBars");
+                    LinearLayout filter=(LinearLayout)get(a,"filterBar");
+                    assertEquals("One clear action, not all gallery categories",1,filter.getChildCount());
+                    assertEquals("‹ В медиатеку",
+                        ((android.widget.TextView)filter.getChildAt(0)).getText().toString());
+                    assertTrue(filter.getChildAt(0).isClickable());
+                }catch(Exception e){throw new AssertionError(e);}
+            });
+        }finally{
+            inst.runOnMainSync(()->{
+                try{put(a,"home",oldHome);put(a,"screen",oldScreen);call(a,"showPage");}
+                catch(Exception e){throw new AssertionError(e);}
+            });
+        }
+    }
     @Test public void openingNotesDirectlyFromMediaMustHideGalleryOverlay()throws Exception{
         MainActivity a=rule.getActivity();idle(a);
         Object oldHome=get(a,"home"),oldScreen=get(a,"screen");
