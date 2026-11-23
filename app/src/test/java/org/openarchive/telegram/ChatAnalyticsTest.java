@@ -27,4 +27,23 @@ public class ChatAnalyticsTest {
         assertEquals(0,s.totalMessages);assertEquals(0,ChatAnalytics.percent(0,0),.01);
         assertEquals("",s.firstDay);assertTrue(s.topWords.isEmpty());
     }
+    @Test public void meaningfulWordsExcludeNumericFragmentsWithoutChangingWordTotals(){
+        ChatAnalytics.Accumulator accumulator=new ChatAnalytics.Accumulator();
+        accumulator.message("Аня","2026-11-23 10:00","Встретимся в 17:00, 17:00. PDF pdf и фотографии фотографии.");
+        ChatAnalytics.Snapshot snapshot=accumulator.snapshot();
+        boolean numericRaw=false,numericMeaningful=false,pdfMeaningful=false,photoMeaningful=false;
+        for(ChatAnalytics.WordCount w:snapshot.topWords)
+            if(w.word.equals("17")||w.word.equals("00"))numericRaw=true;
+        for(ChatAnalytics.WordCount w:snapshot.topMeaningfulWords){
+            if(w.word.equals("17")||w.word.equals("00"))numericMeaningful=true;
+            if(w.word.equals("pdf"))pdfMeaningful=true;
+            if(w.word.equals("фотографии"))photoMeaningful=true;
+        }
+        assertTrue("Original unfiltered words remain available",numericRaw);
+        assertFalse("Meaningful words should not be polluted by clock fragments",numericMeaningful);
+        assertTrue(pdfMeaningful);
+        assertTrue(photoMeaningful);
+        assertEquals("Word counting must be independent of presentation filtering",9,snapshot.totalWords);
+    }
 }
+
