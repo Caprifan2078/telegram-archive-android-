@@ -156,10 +156,11 @@ public class MainActivity extends Activity {
     private LinearLayout importProgressPanel;private TextView importProgressText;
     private MediaZoomRecyclerView mediaRecycler;
     private MediaFastScroller mediaFastScroller;
+    private TextView mediaFastLabel;
     private MediaGalleryAdapter mediaAdapter;
     private androidx.recyclerview.widget.GridLayoutManager mediaLayout;
     private int mediaColumns=3,mediaLoaded=0,mediaTotal=0,mediaWindowStart=0;
-    private boolean mediaAppending=false;
+    private boolean mediaAppending=false,mediaPrepending=false;
     private TextView mediaZoomLabel;
     private android.widget.SeekBar mediaZoomSeek;
     private ScrollView scroll;private TextView title,subtitle,status,pageLabel,headerLogo;private Button pdfButton;private Button navBack,menuButton;private String lastRenderedDay="";
@@ -2865,12 +2866,29 @@ public class MainActivity extends Activity {
             @Override public void onScrolled(androidx.recyclerview.widget.RecyclerView rv,int dx,int dy){
                 syncMediaFastScroll();
                 if(dy>=0)maybeAppendMedia();
+                else maybePrependMedia();
             }
         });
         mediaFastScroller=new MediaFastScroller(this);
         mediaFastScroller.setVisibility(View.GONE);
         mediaFastScroller.setOnSeek(this::jumpToMediaFraction);
         scrollHost.addView(mediaFastScroller,new FrameLayout.LayoutParams(px(39),-1,Gravity.END));
+        // A tooltip beside the track shows absolute position, not merely
+        // the 30 thumbnails currently loaded from SQLite.
+        mediaFastLabel=text("",12,FG);
+        mediaFastLabel.setPadding(px(10),px(7),px(10),px(7));
+        mediaFastLabel.setGravity(Gravity.CENTER);
+        mediaFastLabel.setBackground(outlined(PANEL,12,true));
+        mediaFastLabel.setVisibility(View.GONE);
+        FrameLayout.LayoutParams labelLp=new FrameLayout.LayoutParams(-2,-2,
+            Gravity.END|Gravity.CENTER_VERTICAL);
+        labelLp.rightMargin=px(43);
+        scrollHost.addView(mediaFastLabel,labelLp);
+        mediaFastScroller.setOnDrag((position,dragging)->{
+            if(mediaFastLabel==null)return;
+            mediaFastLabel.setText((position+1)+" / "+mediaTotal);
+            mediaFastLabel.setVisibility(dragging?View.VISIBLE:View.GONE);
+        });
         verticalTimeline=new VerticalTimeline();
         scrollHost.addView(verticalTimeline,new FrameLayout.LayoutParams(px(20),-1,Gravity.END));
         list=column();list.setPadding(px(3),px(6),px(3),px(14));scroll.addView(list);
@@ -3530,6 +3548,7 @@ public class MainActivity extends Activity {
             scroll.setVisibility(showingGallery?View.GONE:View.VISIBLE);
             if(mediaFastScroller!=null)
                 mediaFastScroller.setVisibility(showingGallery&&mediaTotal>1?View.VISIBLE:View.GONE);
+            if(mediaFastLabel!=null)mediaFastLabel.setVisibility(View.GONE);
         }
         if("help".equals(screen)){renderHelpPage();return;}
         if("multi_timeline".equals(screen)){renderMultiTimelinePage();return;}
@@ -3601,7 +3620,8 @@ public class MainActivity extends Activity {
                     }
                     else list.setBackgroundColor(BG);
                     if(gallery){
-                        mediaWindowStart=0;mediaLoaded=attachments.size();mediaTotal=count;mediaAppending=false;
+                        mediaWindowStart=0;mediaLoaded=attachments.size();mediaTotal=count;
+                        mediaAppending=false;mediaPrepending=false;
                         mediaAdapter.reset();mediaAdapter.append(attachments);
                         updateMediaLayout(false);
                         mediaFastScroller.setProgress(0,count);
@@ -5784,7 +5804,7 @@ public class MainActivity extends Activity {
             return;
         }
         // Invalidate pending prefetch/append callbacks before swapping the visible window.
-        final int token=++loadToken;mediaAppending=true;
+        final int token=++loadToken;mediaAppending=true;mediaPrepending=false;
         final String archive=activeKey,kind=mediaKind;
         final MessageDb source=db;final int expectedTotal=mediaTotal;
         status.setVisibility(View.VISIBLE);
@@ -5822,6 +5842,52 @@ public class MainActivity extends Activity {
             });
         });
     }
+    /** Prepend earlier pages when scrolling up after a fast seek. Preserve reading position. */
+    private void maybePrependMedia(){
+        if(mediaRecycler==null||mediaLayout==null||mediaAdapter==null||
+            mediaAppending||mediaPrepending||mediaWindowStart<=0||
+            !"media".equals(screen)||home||importing||db==null)return;
+        int first=mediaLayout.findFirstVisibleItemPosition();
+        if(first>8)return;
+        mediaPrepending=true;
+        final int start=Math.max(0,mediaWindowStart-MediaGalleryState.PAGE_SIZE);
+        final int amount=mediaWindowStart-start;
+        final String archive=activeKey,kind=mediaKind;
+        final MessageDb source=db;final int token=loadToken;
+        worker.execute(()->{
+            List<MessageDb.Attachment> earlier;
+            try{earlier=source.mediaPage(kind,start,amount);}
+            catch(Exception error){
+                runOnUiThread(()->{
+                    mediaPrepending=false;
+                    if(token==loadToken&&"media".equals(screen))
+                        status.setText("Не удалось загрузить более ранние файлы");
+                });return;
+            }
+            final List<MessageDb.Attachment> prior=earlier;
+            runOnUiThread(()->{
+                if(isFinishing()||isDestroyed()||token!=loadToken||db!=source||
+                    !archive.equals(activeKey)||!"media".equals(screen)||!kind.equals(mediaKind)){
+                    mediaPrepending=false;return;
+                }
+                mediaPrepending=false;
+                if(prior.isEmpty())return;
+                int firstVisible=Math.max(0,mediaLayout.findFirstVisibleItemPosition());
+                int ordinal=mediaAdapter.ordinalAt(firstVisible);
+                View firstView=mediaLayout.findViewByPosition(firstVisible);
+                int relativeTop=firstView==null?0:firstView.getTop()-mediaRecycler.getPaddingTop();
+                java.util.ArrayList<MessageDb.Attachment> combined=new java.util.ArrayList<>(prior);
+                combined.addAll(mediaAdapter.loadedAttachments());
+                mediaWindowStart=start;
+                mediaAdapter.reset();mediaAdapter.append(combined);
+                int anchor=mediaAdapter.adapterPositionForOrdinal(prior.size()+ordinal);
+                if(anchor>=0)mediaLayout.scrollToPositionWithOffset(anchor,relativeTop);
+                syncMediaFastScroll();
+                status.setText("Открыт участок "+(mediaWindowStart+1)+"–"+mediaLoaded+
+                    " из "+mediaTotal+" · ползунок справа");
+            });
+        });
+    }
     /** Fetch only the next 30 from SQLite; never reset scroll when the next page arrives. */
     private void maybeAppendMedia(){
         if(mediaRecycler==null||mediaLayout==null||mediaAppending
@@ -5850,7 +5916,8 @@ public class MainActivity extends Activity {
                 if(next.isEmpty())mediaLoaded=mediaTotal;
                 mediaAppending=false;
                 syncMediaFastScroll();
-                status.setText("Показано "+mediaLoaded+" из "+mediaTotal+" · листай вниз");
+                status.setText("Открыт участок "+(mediaWindowStart+1)+"–"+mediaLoaded+
+                    " из "+mediaTotal+" · ползунок справа");
                 if(mediaLoaded<mediaTotal)mediaRecycler.post(this::maybeAppendMedia);
             });
         });
@@ -5862,6 +5929,12 @@ public class MainActivity extends Activity {
         private final ArrayList<Integer> attachmentPositions=new ArrayList<>();
         private String lastGroup=null;
         void reset(){entries.clear();attachmentPositions.clear();lastGroup=null;notifyDataSetChanged();}
+        java.util.ArrayList<MessageDb.Attachment> loadedAttachments(){
+            java.util.ArrayList<MessageDb.Attachment> out=new java.util.ArrayList<>();
+            for(Object item:entries)if(item instanceof MessageDb.Attachment)
+                out.add((MessageDb.Attachment)item);
+            return out;
+        }
         int ordinalAt(int adapterPosition){
             if(attachmentPositions.isEmpty())return 0;
             int n=java.util.Collections.binarySearch(attachmentPositions,Math.max(0,adapterPosition));
