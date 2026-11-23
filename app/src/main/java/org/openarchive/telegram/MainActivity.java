@@ -2894,8 +2894,9 @@ public class MainActivity extends Activity {
             if("favorites".equals(screen))return;
             // One compact media toolbar; advanced actions live in its overflow menu.
             LinearLayout mediaTools=row();mediaTools.setGravity(Gravity.CENTER_VERTICAL);
-            Button layoutMode=btn(mediaGridEnabled()?"☷  Список":"▦  Сетка");
-            mediaTools.addView(layoutMode,p(92,42));
+            Button layoutMode=btn(mediaGridEnabled()?"Список":"Сетка");
+            // Grid slider, counter and overflow must all remain tappable on narrow phones.
+            mediaTools.addView(layoutMode,p(76,42));
             layoutMode.setContentDescription(mediaGridEnabled()?
                 "Перейти к списку медиа":"Перейти к масштабируемой галерее");
             layoutMode.setOnClickListener(v->toggleMediaLayout());
@@ -6999,6 +7000,9 @@ public class MainActivity extends Activity {
         ImageView picture=new ImageView(this);picture.setScaleType(ImageView.ScaleType.FIT_CENTER);
         frame.addView(picture,new FrameLayout.LayoutParams(-1,-1));
         TextView caption=text("Фото",14,0xfff1f8ff);caption.setGravity(Gravity.CENTER);
+        caption.setSingleLine(true);caption.setEllipsize(TextUtils.TruncateAt.END);
+        // The 48dp close action is an overlay. Do not render the filename below it.
+        caption.setPadding(px(54),0,px(54),0);
         caption.setBackground(glass(0xdb13283f,19));
         caption.setLetterSpacing(.035f);
         frame.addView(caption,new FrameLayout.LayoutParams(-1,px(52),Gravity.TOP));
