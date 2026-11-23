@@ -110,7 +110,13 @@ public final class QaVisualAuditScreenshotsTest {
         };
         for(int i=0;i<lines.length;i++){
             String d=String.format(java.util.Locale.ROOT,"2026-11-%02d %02d:15:00",1+i/5,10+i%5);
-            synthetic.stage(sql,i%2==0?"Александр":"Мария",d,lines[i],null,"");
+            // Local fake file names exercise populated gallery layout without
+            // putting a real person's photos into public CI artifacts.
+            String path=i==1?"photos/qa_photo01.jpg":i==4?"photos/qa_photo02.jpg":
+                i==6?"video/qa_video01.mp4":null;
+            String kind=i==6?"video":path==null?"":"photo";
+            long id=synthetic.stage(sql,i%2==0?"Александр":"Мария",d,lines[i],path,kind);
+            if(path!=null)synthetic.stageAttachment(sql,id,path,kind);
         }
         synthetic.publishStaged(sql);
         // Real dated events exercise the actual timeline, not only its empty state.
@@ -126,6 +132,11 @@ public final class QaVisualAuditScreenshotsTest {
             oldHome=get(a,"home"),oldScreen=get(a,"screen"),oldFolder=get(a,"folder"),oldArchives=get(a,"archives");
         String oldActive=a.getPreferences(Context.MODE_PRIVATE).getString("active_archive","default");
         String oldRegistry=a.getPreferences(Context.MODE_PRIVATE).getString("archive_registry","[]");
+        String oldGroups=a.getPreferences(Context.MODE_PRIVATE)
+            .getString(MultiConversationRegistry.PREF_KEY,null);
+        Object oldQ=get(a,"q"),oldDeep=get(a,"deep"),oldDualKey=get(a,"dualSecondKey"),
+            oldDualName=get(a,"dualSecondName"),oldMultiGroup=get(a,"multiTimelineGroupId"),
+            oldMultiPage=get(a,"multiTimelinePage"),oldMultiPerSource=get(a,"multiTimelinePerSource");
         try{
             JSONArray entries=new JSONArray();
             entries.put(new JSONObject().put("key",key).put("name","Семья и друзья").put("tree",""));
@@ -201,6 +212,73 @@ public final class QaVisualAuditScreenshotsTest {
                 chip.click();
                 shot(a,step[1]);
             }
+            // Additional routes missing from earlier visual audits:
+            // search modes, favorites, notes, cinema, dual chats, help, and groups.
+            inst.runOnMainSync(()->{
+                try{put(a,"q","архив");put(a,"deep",false);put(a,"screen","search");
+                    method(a,"showPage",new Class<?>[0]);
+                }catch(Exception e){throw new AssertionError(e);}
+            });
+            shot(a,"17-search-quick");
+            inst.runOnMainSync(()->{
+                try{put(a,"deep",true);method(a,"showPage",new Class<?>[0]);}
+                catch(Exception e){throw new AssertionError(e);}
+            });
+            shot(a,"18-search-deep");
+            inst.runOnMainSync(()->{
+                try{put(a,"screen","favorites");method(a,"showPage",new Class<?>[0]);}
+                catch(Exception e){throw new AssertionError(e);}
+            });
+            shot(a,"19-favorites");
+            inst.runOnMainSync(()->{
+                try{put(a,"screen","saved");method(a,"showPage",new Class<?>[0]);}
+                catch(Exception e){throw new AssertionError(e);}
+            });
+            shot(a,"20-notes");
+            inst.runOnMainSync(()->{
+                try{put(a,"screen","cinema");method(a,"showPage",new Class<?>[0]);}
+                catch(Exception e){throw new AssertionError(e);}
+            });
+            shot(a,"21-cinema");
+            inst.runOnMainSync(()->{
+                try{
+                    put(a,"dualSecondKey",key2);put(a,"dualSecondName","Учебная группа");
+                    put(a,"screen","dual_memories");method(a,"showPage",new Class<?>[0]);
+                }catch(Exception e){throw new AssertionError(e);}
+            });
+            shot(a,"22-dual-memories");
+            inst.runOnMainSync(()->{
+                try{put(a,"screen","dual_compare");method(a,"showPage",new Class<?>[0]);}
+                catch(Exception e){throw new AssertionError(e);}
+            });
+            shot(a,"23-dual-compare");
+            inst.runOnMainSync(()->{
+                try{put(a,"screen","help");method(a,"showPage",new Class<?>[0]);}
+                catch(Exception e){throw new AssertionError(e);}
+            });
+            shot(a,"24-help");
+            a.getPreferences(Context.MODE_PRIVATE).edit()
+                .putString(MultiConversationRegistry.PREF_KEY,"[]").commit();
+            String group=MultiConversationRegistry.create(
+                a.getPreferences(Context.MODE_PRIVATE),"Вася");
+            java.util.Set<String> registered=new java.util.HashSet<>(
+                java.util.Arrays.asList(key,key2));
+            MultiConversationRegistry.add(a.getPreferences(Context.MODE_PRIVATE),
+                group,key,"Telegram",registered);
+            MultiConversationRegistry.add(a.getPreferences(Context.MODE_PRIVATE),
+                group,key2,"Второй аккаунт",registered);
+            inst.runOnMainSync(()->{
+                try{
+                    put(a,"home",true);put(a,"screen","chat");
+                    method(a,"renderHome",new Class<?>[0]);
+                }catch(Exception e){throw new AssertionError(e);}
+            });
+            shot(a,"25-multi-chat-home");
+            inst.runOnMainSync(()->{
+                try{method(a,"openMultiTimeline",new Class<?>[]{String.class},group);}
+                catch(Exception e){throw new AssertionError(e);}
+            });
+            shot(a,"26-multi-timeline");
             // MediaStore screenshots stay available to CI after app uninstall.
         }finally{
             idle(a);
@@ -209,7 +287,16 @@ public final class QaVisualAuditScreenshotsTest {
                     put(a,"db",oldDb);put(a,"activeKey",oldKey);put(a,"activeName",oldName);
                     put(a,"home",oldHome);put(a,"screen",oldScreen);put(a,"folder",oldFolder);
                     put(a,"archives",oldArchives);
-                    a.getPreferences(Context.MODE_PRIVATE).edit().putString("active_archive",oldActive).putString("archive_registry",oldRegistry).commit();
+                    put(a,"q",oldQ);put(a,"deep",oldDeep);
+                    put(a,"dualSecondKey",oldDualKey);put(a,"dualSecondName",oldDualName);
+                    put(a,"multiTimelineGroupId",oldMultiGroup);
+                    put(a,"multiTimelinePage",oldMultiPage);
+                    put(a,"multiTimelinePerSource",oldMultiPerSource);
+                    android.content.SharedPreferences.Editor edit=a.getPreferences(Context.MODE_PRIVATE).edit()
+                        .putString("active_archive",oldActive).putString("archive_registry",oldRegistry);
+                    if(oldGroups==null)edit.remove(MultiConversationRegistry.PREF_KEY);
+                    else edit.putString(MultiConversationRegistry.PREF_KEY,oldGroups);
+                    edit.commit();
                     method(a,"showPage",new Class<?>[0]);
                 }catch(Exception e){throw new AssertionError(e);}
             });

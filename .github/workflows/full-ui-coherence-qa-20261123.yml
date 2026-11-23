@@ -1,0 +1,89 @@
+name: QA all screens visual coherence and overlap 2026-11-23
+on:
+  push:
+    branches: [qa/full-ui-coherence-20261123]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android-full-ui:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 48
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Android SDK
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: JVM regressions and isolated review APK
+        run: gradle --no-daemon --max-workers=2 assembleUiAuditQa assembleUiAuditQaAndroidTest testUiAuditQaUnitTest -PqaUiAuditInstrumentation=true
+      - name: Verify package, signature and offline permissions
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/uiAuditQa/app-uiAuditQa.apk
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -q "package: name='org.openarchive.telegram.qa.uiaudit20261123'"
+          if "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$apk" | grep -q 'android.permission.INTERNET'; then
+            echo "Unexpected INTERNET permission"; exit 1
+          fi
+          mkdir -p deliver
+          cp "$apk" deliver/TelegramViewer_UiCoherence_20261123.apk
+          (cd deliver && sha256sum *.apk > SHA256SUMS.txt)
+      - name: Enable emulator KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Android 11 visual screenshots, overlap, search, gallery, chronology and multi-chat
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: |
+            set -e
+            gradle --no-daemon --max-workers=2 connectedUiAuditQaAndroidTest -PqaUiAuditInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.UiChromeOverlapRegressionTest,org.openarchive.telegram.MultiConversationHomeRegressionTest,org.openarchive.telegram.QaVisualAuditScreenshotsTest,org.openarchive.telegram.ChatVisualConsistencyRegressionTest,org.openarchive.telegram.QaUiChatNavigationRegressionTest,org.openarchive.telegram.GroupTimelineScreenRegressionTest,org.openarchive.telegram.MediaInfiniteGalleryRegressionTest,org.openarchive.telegram.ChronologyHubRegressionTest,org.openarchive.telegram.AnalyticsSectionNavigationRegressionTest'
+            mkdir -p ui-captures/review
+            adb pull /sdcard/Pictures/TelegramViewerVisualAudit/. ui-captures/review/
+            adb shell settings put system font_scale 1.35
+            gradle --no-daemon --max-workers=2 connectedUiAuditQaAndroidTest -PqaUiAuditInstrumentation=true '-Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.UiChromeOverlapRegressionTest'
+            adb shell settings put system font_scale 1.0
+      - name: Upload synthetic Android screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TelegramViewer-FullUi-Audit-Screenshots-20261123
+          retention-days: 7
+          path: ui-captures/
+      - name: Upload Android test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TelegramViewer-FullUi-Audit-Reports-20261123
+          retention-days: 7
+          path: |
+            app/build/outputs/androidTest-results/
+            app/build/reports/androidTests/
+            app/build/test-results/
+      - name: Verified standalone UI APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TelegramViewer-FullUi-Audit-APK-20261123
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            deliver/*.apk
+            deliver/SHA256SUMS.txt

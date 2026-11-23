@@ -1415,6 +1415,7 @@ public class MainActivity extends Activity {
         if(mediaRecycler!=null)mediaRecycler.setVisibility(View.GONE);
         if(scroll!=null)scroll.setVisibility(View.VISIBLE);
         list.setBackgroundColor(BG);
+        list.setPadding(px(3),px(6),px(3),px(14));
         savedComposer.setVisibility(View.GONE);
         final int homeToken=++loadToken;list.removeAllViews();list.setTag("home-list");pinnedBar.removeAllViews();filterBar.removeAllViews();searchArea.removeAllViews();
         verticalTimeline.setVisibility(View.GONE);bottomPager.setVisibility(View.GONE);bottomNav.setVisibility(View.GONE);
@@ -1465,6 +1466,9 @@ public class MainActivity extends Activity {
             TextView error=text("Мультипереписки недоступны: настройки повреждены. Данные не изменены.",12,0xffffbe8f);
             error.setPadding(px(9),px(9),px(9),px(9));list.addView(error,p(-1,-2));
         }
+        // The title bar already says "Мои переписки". Do not repeat a second
+        // "Чаты" heading above grouped people when all chats belong to a group.
+        if(multiGroups.length()>0)homeHeading.setVisibility(View.GONE);
         final JSONArray visibleGroups=multiGroups;
         final boolean showGroupedChats=getPreferences(MODE_PRIVATE)
             .getBoolean("show_grouped_individual_chats",false);
@@ -1509,19 +1513,30 @@ public class MainActivity extends Activity {
                 groupCard.setOnClickListener(v->showMultiConversation(id));
                 groupCard.setOnLongClickListener(v->{manageMultiConversation(id);return true;});
             }
-            Button toggleIndividual=btn(showGroupedChats?
+            // One secondary action row instead of two giant stacked buttons.
+            LinearLayout groupControls=row();
+            groupControls.setGravity(Gravity.CENTER_VERTICAL);
+            LinearLayout.LayoutParams controlsLp=p(-1,46);
+            controlsLp.setMargins(px(2),px(5),px(2),px(9));
+            list.addView(groupControls,controlsLp);
+            Button toggleIndividual=btn(showGroupedChats?"Скрыть чаты":"Показать чаты");
+            toggleIndividual.setContentDescription(showGroupedChats?
                 "Скрыть отдельные чаты мультипереписок":"Показать отдельные чаты из групп");
-            list.addView(toggleIndividual,p(-1,42));
+            LinearLayout.LayoutParams toggleLp=new LinearLayout.LayoutParams(0,px(44),1);
+            toggleLp.rightMargin=px(4);groupControls.addView(toggleIndividual,toggleLp);
             toggleIndividual.setOnClickListener(v->{
                 getPreferences(MODE_PRIVATE).edit()
                     .putBoolean("show_grouped_individual_chats",!showGroupedChats).apply();
                 renderHome();
             });
-        }
-        if(archives.length()>0){
-            Button createGroup=btn("＋  Создать мультипереписку");
-            LinearLayout.LayoutParams createSize=p(-1,46);
-            createSize.setMargins(px(2),px(8),px(2),px(10));
+            Button createGroup=btn("＋ Группа");
+            createGroup.setContentDescription("Создать мультипереписку");
+            groupControls.addView(createGroup,new LinearLayout.LayoutParams(0,px(44),1));
+            createGroup.setOnClickListener(v->createMultiConversationDialog());
+        }else if(archives.length()>0){
+            Button createGroup=btn("＋ Создать мультипереписку");
+            LinearLayout.LayoutParams createSize=p(-1,44);
+            createSize.setMargins(px(2),px(7),px(2),px(9));
             list.addView(createGroup,createSize);
             createGroup.setOnClickListener(v->createMultiConversationDialog());
         }
@@ -1533,6 +1548,12 @@ public class MainActivity extends Activity {
                 orderedChats.add(c);
         }
         orderedChats.sort((a,b)->Boolean.compare(isChatPinned(b.optString("key")),isChatPinned(a.optString("key"))));
+        if(multiGroups.length()>0&&!orderedChats.isEmpty()){
+            TextView ungroupedHeading=text("Отдельные переписки",15,FG);
+            ungroupedHeading.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+            ungroupedHeading.setPadding(px(11),px(10),px(11),px(7));
+            list.addView(ungroupedHeading,p(-1,-2));
+        }
         for(int i=0;i<orderedChats.size();i++){
             JSONObject chat=orderedChats.get(i);
             String key=chat.optString("key"),name=chat.optString("name","Переписка");
@@ -1571,7 +1592,9 @@ public class MainActivity extends Activity {
         add.setContentDescription("Добавить переписку из экспорта Telegram");
         LinearLayout.LayoutParams ap=p(-1,60);ap.setMargins(px(2),px(9),px(2),px(8));list.addView(add,ap);
         add.setOnClickListener(v->chooseFolder());
-        if(archives.length()>=2){
+        if(archives.length()>=2&&multiGroups.length()==0){
+            // When groups exist their timeline/comparison tools are already
+            // available from the person card and contextual tool drawer.
             Button tools=btn("Инструменты для двух переписок  ▾");
             LinearLayout.LayoutParams outer=p(-1,43);outer.topMargin=px(10);list.addView(tools,outer);
             LinearLayout advanced=column();advanced.setVisibility(View.GONE);list.addView(advanced,p(-1,-2));
@@ -1723,6 +1746,7 @@ public class MainActivity extends Activity {
         if(mediaRecycler!=null)mediaRecycler.setVisibility(View.GONE);
         if(scroll!=null)scroll.setVisibility(View.VISIBLE);
         if(floatingPanel!=null)closeFloatingRound();
+        list.setPadding(px(3),px(6),px(3),px(14));
         if(savedComposer!=null)savedComposer.setVisibility(View.GONE);
         if(playerStrip!=null)playerStrip.setVisibility(View.GONE);
         menuButton.setVisibility(View.GONE);navBack.setVisibility(View.VISIBLE);
@@ -2251,16 +2275,56 @@ public class MainActivity extends Activity {
         });
     }
     private void renderSaved(){
+        // Drawer can open Notes directly from Media, where the RecyclerView overlays
+        // and hides ScrollView. Always restore the correct viewport/chrome explicitly.
+        if(mediaRecycler!=null)mediaRecycler.setVisibility(View.GONE);
+        if(scroll!=null)scroll.setVisibility(View.VISIBLE);
+        if(playerStrip!=null)playerStrip.setVisibility(View.GONE);
+        if(headerActions!=null)headerActions.setVisibility(View.GONE);
+        if(pdfButton!=null)pdfButton.setVisibility(View.GONE);
+        if(headerLogo!=null)headerLogo.setVisibility(View.GONE);
+        if(folderButton!=null)folderButton.setVisibility(View.GONE);
+        status.setText("");status.setVisibility(View.GONE);
         list.setBackgroundColor(BG);
+        list.setPadding(px(3),px(6),px(3),px(14));
         ++loadToken;home=false;screen="saved";list.removeAllViews();filterBar.removeAllViews();searchArea.removeAllViews();pinnedBar.removeAllViews();bottomNav.setVisibility(View.GONE);bottomPager.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
-        menuButton.setVisibility(View.GONE);navBack.setVisibility(View.VISIBLE);title.setText("★ Избранное");subtitle.setText("Локальные заметки и сохранённые сообщения");
+        menuButton.setVisibility(View.GONE);navBack.setVisibility(View.VISIBLE);
+        title.setText("Личные заметки");subtitle.setText("Цитаты и избранное из всех переписок");
         savedComposer.removeAllViews();savedComposer.setVisibility(View.VISIBLE);
-        LinearLayout compose=row();savedComposer.addView(compose,p(-1,-2));
-        EditText input=new EditText(this);input.setHint("Написать заметку…");input.setTextColor(FG);input.setHintTextColor(SUB);compose.addView(input,new LinearLayout.LayoutParams(0,-2,1));
-        Button send=btn("➤");compose.addView(send,p(50,52));send.setOnClickListener(v->{String value=input.getText().toString().trim();if(value.isEmpty())return;worker.execute(()->{savedStore.add(value,null,null,null);runOnUiThread(this::renderSaved);});});
-        Button attach=btn("📎 Прикрепить файл");savedComposer.addView(attach,p(-1,43));attach.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("*/*");i.addCategory(Intent.CATEGORY_OPENABLE);i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);startActivityForResult(i,28);});
+        savedComposer.setPadding(px(6),px(4),px(6),px(4));
+        LinearLayout compose=row();compose.setGravity(Gravity.CENTER_VERTICAL);
+        savedComposer.addView(compose,p(-1,-2));
+        EditText input=new EditText(this);input.setHint("Написать заметку…");
+        input.setTextColor(FG);input.setHintTextColor(SUB);
+        input.setTextSize(14);input.setMinLines(1);input.setMaxLines(3);
+        input.setPadding(px(10),px(6),px(6),px(6));
+        input.setBackground(shape(PANEL,12));
+        input.setContentDescription("Новая личная заметка");
+        compose.addView(input,new LinearLayout.LayoutParams(0,-2,1));
+        Button attach=btn("📎");attach.setContentDescription("Прикрепить файл к заметкам");
+        LinearLayout.LayoutParams attachSize=p(46,50);attachSize.leftMargin=px(4);
+        compose.addView(attach,attachSize);
+        attach.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("*/*");i.addCategory(Intent.CATEGORY_OPENABLE);i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);startActivityForResult(i,28);});
+        Button send=btn("➤");send.setContentDescription("Сохранить заметку");
+        LinearLayout.LayoutParams sendSize=p(46,50);sendSize.leftMargin=px(4);
+        compose.addView(send,sendSize);
+        send.setOnClickListener(v->{String value=input.getText().toString().trim();if(value.isEmpty())return;worker.execute(()->{savedStore.add(value,null,null,null);runOnUiThread(this::renderSaved);});});
+        scroll.post(()->{if("saved".equals(screen))scroll.scrollTo(0,0);});
+        // An empty list should explain the next action, not leave a blank canvas.
+        final LinearLayout emptyState=column();
+        emptyState.setPadding(px(17),px(19),px(17),px(20));
+        emptyState.setBackground(outlined(PANEL,16,false));
+        LinearLayout.LayoutParams emptyLp=p(-1,-2);
+        emptyLp.setMargins(px(5),px(17),px(5),px(8));list.addView(emptyState,emptyLp);
+        TextView emptyHeading=text("Здесь будут твои заметки",17,FG);
+        emptyHeading.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+        emptyState.addView(emptyHeading,p(-1,-2));
+        TextView emptyHint=text("Пиши ниже или сохраняй цитаты и сообщения из переписок. "+
+            "Все записи остаются локальными.",13,SUB);
+        emptyHint.setPadding(0,px(7),0,0);emptyState.addView(emptyHint,p(-1,-2));
         final int savedToken=loadToken;
         worker.execute(()->{List<SavedStore.Note> notes=savedStore.recent(150);runOnUiThread(()->{if(savedToken!=loadToken||!screen.equals("saved"))return;
+            if(!notes.isEmpty())list.removeView(emptyState);
             for(SavedStore.Note n:notes){
                 TextView text=text("★ "+(n.body==null?"":n.body)+(n.fileName!=null?"\n📎 "+n.fileName:""),15,FG);
                 text.setPadding(px(14),px(12),px(14),px(12));text.setBackground(shape(PANEL,12));
@@ -2292,7 +2356,8 @@ public class MainActivity extends Activity {
                 MessageDb other=new MessageDb(this,key);
                 List<MessageDb.Item> favorites;
                 try{favorites=other.page(0,50,"",false,"",false,true);}finally{other.close();}
-                runOnUiThread(()->{if(!screen.equals("saved"))return;
+                runOnUiThread(()->{if(!screen.equals("saved")||savedToken!=loadToken)return;
+                    if(!favorites.isEmpty())list.removeView(emptyState);
                     for(MessageDb.Item m:favorites){
                         TextView t=text("★ "+label+" · "+day(m.date)+"\n"+clip(m.body,180),14,FG);
                         t.setPadding(px(12),px(12),px(12),px(12));t.setBackground(shape(CHIP,12));
@@ -2585,8 +2650,8 @@ public class MainActivity extends Activity {
         // A calm, readable sheet: media lives behind the chat title,
         // PDF has its own visible action, and advanced tools remain in the drawer.
         LinearLayout content=column();content.setPadding(px(14),px(8),px(14),px(12));
-        TextView guide=text("Фото и файлы — по нажатию на название чата.",12,SUB);
-        guide.setPadding(px(5),0,px(5),px(9));content.addView(guide,p(-1,-2));
+        // The app bar already explains tapping the chat title for media.
+        // Omit the duplicate instruction inside the action sheet.
         String[] labels={"Найти сообщение","Перейти к дате","Анализ диалога","Хронология","Управление чатом","Все инструменты"};
         Runnable[] actions={
             ()->{screen="search";showPage();},
@@ -2734,7 +2799,7 @@ public class MainActivity extends Activity {
         title=text("Telegram Archive",17,FG);title.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
         title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.END);headings.addView(title,p(-1,26));
         subtitle=text("Личный архив · офлайн",11,SUB);
-        subtitle.setSingleLine(true);subtitle.setEllipsize(TextUtils.TruncateAt.END);headings.addView(subtitle,p(-1,19));
+        subtitle.setSingleLine(true);subtitle.setEllipsize(TextUtils.TruncateAt.END);headings.addView(subtitle,p(-1,18));
         pdfButton=btn("PDF");pdfButton.setContentDescription("Сохранить переписку в PDF");head.addView(pdfButton,p(44,42));
         pdfButton.setOnClickListener(v->{if(!home&&"chat".equals(screen))chooseConversationPdf();});
         headerActions=btn("⋯");headerActions.setContentDescription("Другие инструменты переписки");head.addView(headerActions,p(42,42));
@@ -2802,11 +2867,19 @@ public class MainActivity extends Activity {
         verticalTimeline=new VerticalTimeline();
         scrollHost.addView(verticalTimeline,new FrameLayout.LayoutParams(px(20),-1,Gravity.END));
         list=column();list.setPadding(px(3),px(6),px(3),px(14));scroll.addView(list);
-        LinearLayout bottom=row();bottomPager=bottom;base.addView(bottom,p(-1,52));
-        backPage=btn("‹ Назад");nextPage=btn("Далее ›");pageLabel=text("",12,SUB);pageLabel.setGravity(Gravity.CENTER);
+        LinearLayout bottom=row();bottom.setGravity(Gravity.CENTER_VERTICAL);
+        bottomPager=bottom;base.addView(bottom,p(-1,52));
+        // Long labels in 13sp + font scaling used to crowd the page counter on small phones.
+        // Keep compact arrows with full accessibility labels instead of squeezed text.
+        backPage=btn("‹");backPage.setContentDescription("Предыдущая страница");
+        nextPage=btn("›");nextPage.setContentDescription("Следующая страница");
+        pageLabel=text("",12,SUB);pageLabel.setGravity(Gravity.CENTER);
+        pageLabel.setSingleLine(true);pageLabel.setEllipsize(TextUtils.TruncateAt.END);
         savedComposer=column();savedComposer.setVisibility(View.GONE);
         savedComposer.setBackground(glass(PANEL,16));base.addView(savedComposer,p(-1,-2));
-        bottom.addView(backPage,p(95,44));bottom.addView(pageLabel,new LinearLayout.LayoutParams(0,-2,1));bottom.addView(nextPage,p(95,44));
+        bottom.addView(backPage,p(56,44));
+        bottom.addView(pageLabel,new LinearLayout.LayoutParams(0,-2,1));
+        bottom.addView(nextPage,p(56,44));
         backPage.setOnClickListener(v->{setOffset(Math.max(0,getOffset()-getLimit()));showPage();});
         nextPage.setOnClickListener(v->{setOffset(getOffset()+getLimit());showPage();});
         configureBars();
@@ -2844,7 +2917,20 @@ public class MainActivity extends Activity {
     }
     private void configureBars(){
         filterBar.removeAllViews();searchArea.removeAllViews();
-        if("media".equals(screen)||"favorites".equals(screen)){
+        if("favorites".equals(screen)){
+            // Favorites is a distinct destination. Repeating the entire media-filter
+            // strip wastes space and can crowd narrow screens.
+            TextView backToMedia=text("‹ В медиатеку",13,ACCENT);
+            backToMedia.setGravity(Gravity.CENTER_VERTICAL);
+            backToMedia.setPadding(px(13),px(7),px(13),px(7));
+            backToMedia.setContentDescription("Вернуться к медиатеке");
+            backToMedia.setBackground(new RippleDrawable(ColorStateList.valueOf(0x227ad2ff),
+                shape(Color.TRANSPARENT,11),null));
+            filterBar.addView(backToMedia,p(-1,42));
+            backToMedia.setOnClickListener(v->{screen="media";mediaOffset=0;showPage();});
+            return;
+        }
+        if("media".equals(screen)){
             HorizontalScrollView hsv=new HorizontalScrollView(this);hsv.setHorizontalScrollBarEnabled(false);
             LinearLayout chips=row();hsv.addView(chips);
             for(int i=0;i<MEDIA_KEYS.length;i++){
@@ -2854,11 +2940,11 @@ public class MainActivity extends Activity {
                 c.setOnClickListener(v->{if("favorite".equals(key)){screen="favorites";favOffset=0;}else{screen="media";mediaKind=key;mediaOffset=0;}showPage();});
             }
             filterBar.addView(hsv,p(-1,44));
-            if("favorites".equals(screen))return;
             // One compact media toolbar; advanced actions live in its overflow menu.
             LinearLayout mediaTools=row();mediaTools.setGravity(Gravity.CENTER_VERTICAL);
-            Button layoutMode=btn(mediaGridEnabled()?"☷  Список":"▦  Сетка");
-            mediaTools.addView(layoutMode,p(92,42));
+            Button layoutMode=btn(mediaGridEnabled()?"Список":"Сетка");
+            // Grid slider, counter and overflow must all remain tappable on narrow phones.
+            mediaTools.addView(layoutMode,p(76,42));
             layoutMode.setContentDescription(mediaGridEnabled()?
                 "Перейти к списку медиа":"Перейти к масштабируемой галерее");
             layoutMode.setOnClickListener(v->toggleMediaLayout());
@@ -3425,6 +3511,10 @@ public class MainActivity extends Activity {
     private int getLimit(){return screen.equals("media")?MEDIA_PAGE:PAGE;}
     private void setOffset(int x){switch(screen){case "media":mediaOffset=x;break;case "search":searchOffset=x;break;case "favorites":favOffset=x;break;default:chatOffset=x;}}
     private void showPage(){
+        // Every destination (cinema, chronology and combined timelines included)
+        // must reset the notes' fixed bottom editor BEFORE early routing returns.
+        // Otherwise switching from Saved can leave two bottom control rows stacked.
+        if(savedComposer!=null&&!screen.equals("saved"))savedComposer.setVisibility(View.GONE);
         // Floating video is chat-only; never leave a detached grey surface over other pages.
         if((home||!"chat".equals(screen))&&floatingPanel!=null)closeFloatingRound();
         if(mediaRecycler!=null){
@@ -3441,7 +3531,6 @@ public class MainActivity extends Activity {
         if("echo".equals(screen)){renderEchoPage();return;}
         if("chronology".equals(screen)){renderChronologyPage();return;}
         if("cinema".equals(screen)){renderCinemaPage();return;}
-        if(savedComposer!=null&&!screen.equals("saved"))savedComposer.setVisibility(View.GONE);
         if(scheduledPrefetch!=null){handler.removeCallbacks(scheduledPrefetch);scheduledPrefetch=null;}
         if(screen.equals("saved")){if(pdfButton!=null)pdfButton.setVisibility(View.GONE);renderSaved();return;}
         bottomNav.setVisibility(View.GONE);
@@ -3539,7 +3628,11 @@ public class MainActivity extends Activity {
                     bottomPager.setVisibility(favs&&count>getLimit()?View.VISIBLE:View.GONE);
                     int shown=gallery?attachments.size():messages.size();
                     // Keep the chat scrubber only for long histories, not a 14-message sample.
-                    verticalTimeline.setVisibility("chat".equals(tab)&&count>120?View.VISIBLE:View.GONE);
+                    boolean hasScrubber="chat".equals(tab)&&count>120;
+                    verticalTimeline.setVisibility(hasScrubber?View.VISIBLE:View.GONE);
+                    // The scrubber is an overlay at the right edge. Reserve a real
+                    // message gutter or timestamps and bubble actions fall underneath it.
+                    list.setPadding(px(3),px(6),hasScrubber?px(27):px(3),px(14));
                     if("chat".equals(tab))verticalTimeline.setPosition(pos,count);
                     pageLabel.setText(count==0?"Нет данных":(pos+1)+"–"+(pos+shown)+" / "+count);
                     backPage.setEnabled(pos>0);nextPage.setEnabled(pos+shown<count);
@@ -3548,9 +3641,13 @@ public class MainActivity extends Activity {
                     if(count>0&&"chat".equals(tab)){
                         status.setText("");status.setVisibility(View.GONE);
                     }else status.setVisibility(View.VISIBLE);
-                    if(count==0)status.setText(gallery?"":
-                            "chat".equals(tab)?"В этой переписке пока нет сообщений.":
-                            "Ничего не найдено — попробуй другой запрос или выбери папку.");
+                    if(count==0){
+                        status.setText(gallery?"": "chat".equals(tab)?
+                            "В этой переписке пока нет сообщений.":
+                            "favorites".equals(tab)?
+                            "Пока нет избранных сообщений. Удерживай сообщение в чате, чтобы добавить его.":
+                            "Ничего не найдено — попробуй изменить запрос или фильтры.");
+                    }
                     else if(!"chat".equals(tab))status.setText("media".equals(tab)?
                             "Показано "+mediaLoaded+" из "+count+" · листай вниз":
                             "search".equals(tab)?(search.isEmpty()?"Введите слово или фразу":("Сообщений: "+count+"  ·  Точных вхождений «"+clip(search,28)+"»: "+stats.literalOccurrences+(deepMode?"":"  ·  Быстрый поиск учитывает начала слов"))):
@@ -3594,6 +3691,14 @@ public class MainActivity extends Activity {
             renderAnalytics(report);
             scroll.post(()->{if("analytics".equals(screen)&&next.equals(analyticsSection))scroll.scrollTo(0,0);});
         }
+    }
+    private TextView secondaryDisclosure(String label){
+        TextView action=text(label,13,ACCENT);
+        action.setGravity(Gravity.CENTER_VERTICAL);
+        action.setPadding(px(12),px(8),px(12),px(8));
+        action.setBackground(new RippleDrawable(ColorStateList.valueOf(0x297ad2ff),
+            outlined(PANEL,12,false),null));
+        return action;
     }
     private void analyticsNavChip(LinearLayout row,String label,String section){
         boolean selected=section.equals(analyticsSection);
@@ -3770,7 +3875,7 @@ public class MainActivity extends Activity {
         analyticsLine(snapshot,"Активных дней",r.days.size());
         if(!r.firstDay.isEmpty())
             analyticsText(snapshot,"Период: "+friendlyAnalyticsDate(r.firstDay)+" — "+friendlyAnalyticsDate(r.lastDay),SUB,12);
-        Button expandOverview=btn("Все показатели  ▾");
+        TextView expandOverview=secondaryDisclosure("Все показатели  ▾");
         LinearLayout.LayoutParams expandParams=p(-1,42);
         expandParams.setMargins(px(5),px(2),px(5),px(3));
         list.addView(expandOverview,expandParams);
@@ -3790,7 +3895,7 @@ public class MainActivity extends Activity {
             analyticsText(overview,"Активных дней: "+r.days.size(),SUB,12);
 
         if(r.trends!=null&&!r.trends.all.days.isEmpty()){
-            Button openYear=btn("✦ Итоги выбранного года  ▾");
+            TextView openYear=secondaryDisclosure("✦ Итоги выбранного года  ▾");
             LinearLayout.LayoutParams yearButton=p(-1,47);
             yearButton.setMargins(px(5),px(8),px(5),px(5));
             list.addView(openYear,yearButton);
@@ -3809,7 +3914,7 @@ public class MainActivity extends Activity {
                 openYear.setText(opening?"✦ Свернуть итоги года  ▴":"✦ Итоги выбранного года  ▾");
             });
         }
-        Button methodology=btn("Как рассчитана статистика  ▾");
+        TextView methodology=secondaryDisclosure("Как рассчитана статистика  ▾");
         LinearLayout.LayoutParams explainButton=p(-1,43);
         explainButton.setMargins(px(6),px(12),px(6),px(4));
         list.addView(methodology,explainButton);
@@ -5145,11 +5250,22 @@ public class MainActivity extends Activity {
             if(token!=loadToken||!key.equals(activeKey)||isFinishing())return;
             if(periods.isEmpty())analyticsText(container,"Календарных периодов нет. Можно добавить даты вне переписки.",SUB,13);
             for(CalendarPeriod period:periods){
-                LinearLayout card=column();card.setPadding(px(12),px(12),px(12),px(12));card.setBackground(shape(PANEL,16));container.addView(card,p(-1,-2));
-                analyticsText(card,period.name,FG,17);analyticsText(card,period.start+" — "+period.end,ACCENT,14);
+                LinearLayout card=column();card.setPadding(px(12),px(12),px(12),px(12));
+                card.setBackground(shape(PANEL,16));
+                LinearLayout.LayoutParams cardLp=p(-1,-2);
+                cardLp.setMargins(px(3),px(4),px(3),px(4));container.addView(card,cardLp);
+                analyticsText(card,period.name,FG,17);
+                analyticsText(card,period.start+" — "+period.end,ACCENT,14);
                 if(!period.note.isEmpty())analyticsText(card,period.note,FG,14);
-                Button edit=btn("Изменить даты / описание");card.addView(edit);edit.setOnClickListener(v->editCalendarPeriod(period));
-                Button remove=btn("Удалить период");card.addView(remove);remove.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Удалить период?")
+                // One action row, rather than two tall stacked buttons per period.
+                LinearLayout actions=row();actions.setPadding(0,px(7),0,0);
+                card.addView(actions,p(-1,-2));
+                Button edit=btn("Изменить");edit.setContentDescription("Изменить даты и описание периода "+period.name);
+                actions.addView(edit,new LinearLayout.LayoutParams(0,px(44),1));
+                edit.setOnClickListener(v->editCalendarPeriod(period));
+                Button remove=btn("Удалить");remove.setContentDescription("Удалить период "+period.name);
+                actions.addView(remove,new LinearLayout.LayoutParams(0,px(44),1));
+                remove.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Удалить период?")
                     .setMessage("Удалится только личная отметка. Переписка останется.").setNegativeButton("Отмена",null).setPositiveButton("Удалить",(d,w)->worker.execute(()->{source.deleteCalendarPeriod(period.id);runOnUiThread(()->{if(key.equals(activeKey))renderChronologyPage();});})).show());
             }
         });}catch(Exception error){runOnUiThread(()->{if(token==loadToken)analyticsText(container,"Не удалось прочитать периоды",SUB,14);});}});
@@ -5184,7 +5300,14 @@ public class MainActivity extends Activity {
             return;
         }
         // A selected section is a focused detail page, not the whole hub repeated.
-        Button sections=btn("‹ К хронологии");list.addView(sections,p(-1,43));
+        // The header already has Back. A quiet breadcrumb is enough here;
+        // a second full-width primary-looking Back button dominated the page.
+        TextView sections=text("‹ К хронологии",13,ACCENT);
+        sections.setGravity(Gravity.CENTER_VERTICAL);
+        sections.setPadding(px(13),px(9),px(13),px(9));
+        sections.setBackground(new RippleDrawable(ColorStateList.valueOf(0x227ad2ff),
+            shape(Color.TRANSPARENT,11),null));
+        list.addView(sections,p(-1,39));
         sections.setOnClickListener(v->{chronologySection="overview";screen="relationships";showPage();});
         String sectionTitle="stages".equals(section)?"Этапы переписки":
             "calendar".equals(section)?"Периоды по датам":
@@ -5291,20 +5414,23 @@ public class MainActivity extends Activity {
     private void renderCinemaPage(){
         int token=++loadToken;
         if(home){screen="chat";showPage();return;}
-        bottomNav.setVisibility(View.VISIBLE);refreshTabs();
+        refreshTabs();
         title.setText("Кинолента");subtitle.setText("Медиа по годам · офлайн");
         filterBar.removeAllViews();searchArea.removeAllViews();
         bottomPager.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
         list.removeAllViews();list.setBackgroundColor(BG);
-        TextView heading=text("▤ Кинолента воспоминаний",22,FG);heading.setTypeface(null,Typeface.BOLD);
-        heading.setPadding(px(10),px(10),px(10),px(8));list.addView(heading);
+        // The header already says "Кинолента". Keep one clear page title.
         analyticsText(list,"Выбери год и месяц. Медиа открываются локально; загружается не более 18 миниатюр за один раз. Это не автоматическая презентация личных сообщений.",SUB,12);
         String returnLabel="relationships".equals(cinemaReturnScreen)?"К хронологии":
             "media".equals(cinemaReturnScreen)?"К медиатеке":
             "analytics".equals(cinemaReturnScreen)?"К анализу":
             "search".equals(cinemaReturnScreen)?"К поиску":"К переписке";
-        Button back=btn("‹ "+returnLabel);
-        list.addView(back,p(-1,46));back.setOnClickListener(v->backWithinHistory());
+        TextView back=text("‹ "+returnLabel,13,ACCENT);
+        back.setPadding(px(13),px(9),px(13),px(9));
+        back.setGravity(Gravity.CENTER_VERTICAL);
+        back.setBackground(new RippleDrawable(ColorStateList.valueOf(0x227ad2ff),
+            shape(Color.TRANSPARENT,11),null));
+        list.addView(back,p(-1,39));back.setOnClickListener(v->backWithinHistory());
         final MessageDb source=db;final String archive=activeKey;
         worker.execute(()->{try{List<MessageDb.MediaMonth> months=source.mediaMonths();
             runOnUiThread(()->{
@@ -6495,7 +6621,9 @@ public class MainActivity extends Activity {
         Button pause=btn("Ⅱ");actions.addView(pause,new LinearLayout.LayoutParams(0,px(43),1));
         Button forward=btn("+10 с");actions.addView(forward,p(75,43));
         TextView timer=text("0:00 / 0:00",12,FG);timer.setGravity(Gravity.CENTER);bottom.addView(timer,p(-1,23));
-        frame.addView(bottom,new FrameLayout.LayoutParams(-1,px(114),Gravity.BOTTOM));
+        // Children + padding exceed 114dp, so the fixed container clipped the
+        // timecode and made playback controls look stacked/overlapped.
+        frame.addView(bottom,new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM));
         final android.media.MediaPlayer[] prepared={null};
         final float[] selectedSpeed={1f};
         final boolean[] seeking={false};
@@ -6927,6 +7055,9 @@ public class MainActivity extends Activity {
         ImageView picture=new ImageView(this);picture.setScaleType(ImageView.ScaleType.FIT_CENTER);
         frame.addView(picture,new FrameLayout.LayoutParams(-1,-1));
         TextView caption=text("Фото",14,0xfff1f8ff);caption.setGravity(Gravity.CENTER);
+        caption.setSingleLine(true);caption.setEllipsize(TextUtils.TruncateAt.END);
+        // The 48dp close action is an overlay. Do not render the filename below it.
+        caption.setPadding(px(54),0,px(54),0);
         caption.setBackground(glass(0xdb13283f,19));
         caption.setLetterSpacing(.035f);
         frame.addView(caption,new FrameLayout.LayoutParams(-1,px(52),Gravity.TOP));
