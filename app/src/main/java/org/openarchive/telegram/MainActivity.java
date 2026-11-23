@@ -2614,8 +2614,8 @@ public class MainActivity extends Activity {
         // A calm, readable sheet: media lives behind the chat title,
         // PDF has its own visible action, and advanced tools remain in the drawer.
         LinearLayout content=column();content.setPadding(px(14),px(8),px(14),px(12));
-        TextView guide=text("Фото и файлы — по нажатию на название чата.",12,SUB);
-        guide.setPadding(px(5),0,px(5),px(9));content.addView(guide,p(-1,-2));
+        // The app bar already explains tapping the chat title for media.
+        // Omit the duplicate instruction inside the action sheet.
         String[] labels={"Найти сообщение","Перейти к дате","Анализ диалога","Хронология","Управление чатом","Все инструменты"};
         Runnable[] actions={
             ()->{screen="search";showPage();},
@@ -3636,6 +3636,14 @@ public class MainActivity extends Activity {
             scroll.post(()->{if("analytics".equals(screen)&&next.equals(analyticsSection))scroll.scrollTo(0,0);});
         }
     }
+    private TextView secondaryDisclosure(String label){
+        TextView action=text(label,13,ACCENT);
+        action.setGravity(Gravity.CENTER_VERTICAL);
+        action.setPadding(px(12),px(8),px(12),px(8));
+        action.setBackground(new RippleDrawable(ColorStateList.valueOf(0x297ad2ff),
+            outlined(PANEL,12,false),null));
+        return action;
+    }
     private void analyticsNavChip(LinearLayout row,String label,String section){
         boolean selected=section.equals(analyticsSection);
         // Compact visible labels fit on a 360dp phone; accessibility keeps the full names.
@@ -3811,7 +3819,7 @@ public class MainActivity extends Activity {
         analyticsLine(snapshot,"Активных дней",r.days.size());
         if(!r.firstDay.isEmpty())
             analyticsText(snapshot,"Период: "+friendlyAnalyticsDate(r.firstDay)+" — "+friendlyAnalyticsDate(r.lastDay),SUB,12);
-        Button expandOverview=btn("Все показатели  ▾");
+        TextView expandOverview=secondaryDisclosure("Все показатели  ▾");
         LinearLayout.LayoutParams expandParams=p(-1,42);
         expandParams.setMargins(px(5),px(2),px(5),px(3));
         list.addView(expandOverview,expandParams);
@@ -3831,7 +3839,7 @@ public class MainActivity extends Activity {
             analyticsText(overview,"Активных дней: "+r.days.size(),SUB,12);
 
         if(r.trends!=null&&!r.trends.all.days.isEmpty()){
-            Button openYear=btn("✦ Итоги выбранного года  ▾");
+            TextView openYear=secondaryDisclosure("✦ Итоги выбранного года  ▾");
             LinearLayout.LayoutParams yearButton=p(-1,47);
             yearButton.setMargins(px(5),px(8),px(5),px(5));
             list.addView(openYear,yearButton);
@@ -3850,7 +3858,7 @@ public class MainActivity extends Activity {
                 openYear.setText(opening?"✦ Свернуть итоги года  ▴":"✦ Итоги выбранного года  ▾");
             });
         }
-        Button methodology=btn("Как рассчитана статистика  ▾");
+        TextView methodology=secondaryDisclosure("Как рассчитана статистика  ▾");
         LinearLayout.LayoutParams explainButton=p(-1,43);
         explainButton.setMargins(px(6),px(12),px(6),px(4));
         list.addView(methodology,explainButton);
@@ -5355,8 +5363,7 @@ public class MainActivity extends Activity {
         filterBar.removeAllViews();searchArea.removeAllViews();
         bottomPager.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
         list.removeAllViews();list.setBackgroundColor(BG);
-        TextView heading=text("▤ Кинолента воспоминаний",22,FG);heading.setTypeface(null,Typeface.BOLD);
-        heading.setPadding(px(10),px(10),px(10),px(8));list.addView(heading);
+        // The header already says "Кинолента". Keep one clear page title.
         analyticsText(list,"Выбери год и месяц. Медиа открываются локально; загружается не более 18 миниатюр за один раз. Это не автоматическая презентация личных сообщений.",SUB,12);
         String returnLabel="relationships".equals(cinemaReturnScreen)?"К хронологии":
             "media".equals(cinemaReturnScreen)?"К медиатеке":
