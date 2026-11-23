@@ -1,6 +1,9 @@
 package org.openarchive.telegram;
 
 import android.app.Instrumentation;
+import android.app.Activity;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Rect;
@@ -121,7 +124,7 @@ public class UiMenuTourRegressionTest {
         screenshot("drawer-home");
         String[][] groups={
             {"Архивы и резервные копии","Создать резервную копию"},
-            {"Инструменты переписки","Хронология отношений"},
+            {"Инструменты переписки","Хронология"},
             {"Открытия · новые возможности","Студия оформления 2.0"},
             {"Оформление и персонализация","Умная производительность"}
         };
@@ -139,7 +142,6 @@ public class UiMenuTourRegressionTest {
 
     @Test public void safeDrawerDestinationsOpenWithoutCrashing()throws Exception {
         String[][] paths={
-            {"Архивы и резервные копии","Импортировать чат","Добавить переписку"},
             {"Архивы и резервные копии","Создать резервную копию","Создать резервную копию"},
             {"Архивы и резервные копии","Квитанция переноса","Квитанция переноса"},
             {"Архивы и резервные копии","Восстановить архив","Восстановить переписки"},
@@ -178,6 +180,27 @@ public class UiMenuTourRegressionTest {
         screenshot("help");
         close();
         expect("Мои переписки");
+    }
+
+    /** The main screen owns the only Import action. Do not reintroduce an
+     * old duplicate menu item merely to appease a stale navigation test. */
+    @Test public void homeImportOpensAndroidPickerWithoutExtraMenu()throws Exception {
+        expect("Мои переписки");
+        UiObject2 add=scrollFind("Добавить переписку");
+        assertNotNull("Single Add chat action missing from Home",add);
+        Instrumentation.ActivityMonitor picker=new Instrumentation.ActivityMonitor(
+            new IntentFilter(Intent.ACTION_OPEN_DOCUMENT),
+            new Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null),true);
+        inst.addMonitor(picker);
+        try{
+            add.click();
+            inst.waitForIdleSync();
+            assertTrue("Add chat must directly open Android's document picker",picker.getHits()>0);
+        }finally{inst.removeMonitor(picker);}
+        drawer();
+        tap("Архивы и резервные копии");
+        assertNull("Duplicate Import button appeared in drawer",findVisible("Импортировать чат"));
+        close();
     }
 
     @Test public void settingsOptionsAreActuallyAppliedOnAndroid()throws Exception {
