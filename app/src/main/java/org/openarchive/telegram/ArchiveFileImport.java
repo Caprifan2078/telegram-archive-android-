@@ -59,6 +59,13 @@ final class ArchiveFileImport {
     private static final long MAX_ENTRY=12L*1024*1024*1024; // a large exported video can exceed 4 GiB
     private static final long MAX_TOTAL=60L*1024*1024*1024;
     private static final int MAX_FILES=200000;
+    private static final long MIB=1024L*1024L;
+    /** Allow large Telegram exports when there is room; never fill user storage. */
+    static long maxTemporaryCopyForFreeBytes(long freeBytes){
+        if(freeBytes<=0)return 2L*1024*1024*1024; // unknown provider space: conservative
+        long reserve=Math.max(256L*MIB,freeBytes/10L);
+        return Math.min(MAX_TOTAL,Math.max(0,freeBytes-reserve));
+    }
     static final class Budget {
         long total; int count;
         void next(String name) throws IOException{
@@ -151,6 +158,10 @@ final class ArchiveFileImport {
             extractZipStreaming(ctx,uri,root,password,budget,progress);
         }catch(net.lingala.zip4j.exception.ZipException streamFailure){
             if(password==null||password.length==0)throw streamFailure;
+            // A definite authentication failure is not a broken ZIP header:
+            // retrying the entire (possibly multi-gigabyte) file just wastes space.
+            if(streamFailure.getType()==net.lingala.zip4j.exception.ZipException.Type.WRONG_PASSWORD)
+                throw streamFailure;
             // Some AES ZIPs written by 7-Zip rely on central-directory metadata
             // or data descriptors that a sequential ZIP reader cannot recover.
             // Retry with Zip4j's random-access reader; do not weaken path or size checks.
@@ -209,6 +220,7 @@ final class ArchiveFileImport {
             Budget budget,Progress progress)throws Exception{
         File temporary=File.createTempFile("telegram-zip-retry-", ".zip",ctx.getCacheDir());
         try{
+            final long copyLimit=maxTemporaryCopyForFreeBytes(ctx.getCacheDir().getUsableSpace());
             long copied=0;
             try(InputStream source=ctx.getContentResolver().openInputStream(uri);
                 OutputStream destination=new BufferedOutputStream(new FileOutputStream(temporary))){
@@ -216,8 +228,8 @@ final class ArchiveFileImport {
                 byte[] buffer=new byte[128*1024];int n;
                 while((n=source.read(buffer))!=-1){
                     copied+=n;
-                    if(copied>2L*1024*1024*1024)
-                        throw new IOException("Для альтернативного чтения ZIP более 2 ГБ нужен архив в обычном формате ZIP с AES-256. Исходный файл не изменён.");
+                    if(copied>copyLimit)
+                        throw new IOException("Недостаточно свободного места для временного открытия большого ZIP. Освободи место на телефоне и повтори. Исходный файл не изменён.");
                     destination.write(buffer,0,n);
                 }
             }
@@ -279,6 +291,7 @@ final class ArchiveFileImport {
             }
             File temporary=File.createTempFile("telegram-sevenz-", ".7z",ctx.getCacheDir());
             try{
+                final long copyLimit=maxTemporaryCopyForFreeBytes(ctx.getCacheDir().getUsableSpace());
                 long copied=0;
                 try(InputStream input=ctx.getContentResolver().openInputStream(uri);
                     OutputStream output=new BufferedOutputStream(new FileOutputStream(temporary))){
@@ -286,8 +299,8 @@ final class ArchiveFileImport {
                     byte[] block=new byte[128*1024];int count;
                     while((count=input.read(block))!=-1){
                         copied+=count;
-                        if(copied>2L*1024*1024*1024)
-                            throw new IOException("7z из облачного файлового провайдера больше 2 ГБ. Сохрани архив локально и выбери снова.");
+                        if(copied>copyLimit)
+                            throw new IOException("Недостаточно свободного места для временного открытия большого 7z. Освободи место на телефоне или открой локальный файл.");
                         output.write(block,0,count);
                     }
                 }
