@@ -1466,6 +1466,9 @@ public class MainActivity extends Activity {
             TextView error=text("Мультипереписки недоступны: настройки повреждены. Данные не изменены.",12,0xffffbe8f);
             error.setPadding(px(9),px(9),px(9),px(9));list.addView(error,p(-1,-2));
         }
+        // The title bar already says "Мои переписки". Do not repeat a second
+        // "Чаты" heading above grouped people when all chats belong to a group.
+        if(multiGroups.length()>0)homeHeading.setVisibility(View.GONE);
         final JSONArray visibleGroups=multiGroups;
         final boolean showGroupedChats=getPreferences(MODE_PRIVATE)
             .getBoolean("show_grouped_individual_chats",false);
@@ -1510,19 +1513,30 @@ public class MainActivity extends Activity {
                 groupCard.setOnClickListener(v->showMultiConversation(id));
                 groupCard.setOnLongClickListener(v->{manageMultiConversation(id);return true;});
             }
-            Button toggleIndividual=btn(showGroupedChats?
+            // One secondary action row instead of two giant stacked buttons.
+            LinearLayout groupControls=row();
+            groupControls.setGravity(Gravity.CENTER_VERTICAL);
+            LinearLayout.LayoutParams controlsLp=p(-1,46);
+            controlsLp.setMargins(px(2),px(5),px(2),px(9));
+            list.addView(groupControls,controlsLp);
+            Button toggleIndividual=btn(showGroupedChats?"Скрыть чаты":"Показать чаты");
+            toggleIndividual.setContentDescription(showGroupedChats?
                 "Скрыть отдельные чаты мультипереписок":"Показать отдельные чаты из групп");
-            list.addView(toggleIndividual,p(-1,42));
+            LinearLayout.LayoutParams toggleLp=new LinearLayout.LayoutParams(0,px(44),1);
+            toggleLp.rightMargin=px(4);groupControls.addView(toggleIndividual,toggleLp);
             toggleIndividual.setOnClickListener(v->{
                 getPreferences(MODE_PRIVATE).edit()
                     .putBoolean("show_grouped_individual_chats",!showGroupedChats).apply();
                 renderHome();
             });
-        }
-        if(archives.length()>0){
-            Button createGroup=btn("＋  Создать мультипереписку");
-            LinearLayout.LayoutParams createSize=p(-1,46);
-            createSize.setMargins(px(2),px(8),px(2),px(10));
+            Button createGroup=btn("＋ Группа");
+            createGroup.setContentDescription("Создать мультипереписку");
+            groupControls.addView(createGroup,new LinearLayout.LayoutParams(0,px(44),1));
+            createGroup.setOnClickListener(v->createMultiConversationDialog());
+        }else if(archives.length()>0){
+            Button createGroup=btn("＋ Создать мультипереписку");
+            LinearLayout.LayoutParams createSize=p(-1,44);
+            createSize.setMargins(px(2),px(7),px(2),px(9));
             list.addView(createGroup,createSize);
             createGroup.setOnClickListener(v->createMultiConversationDialog());
         }
@@ -1534,6 +1548,12 @@ public class MainActivity extends Activity {
                 orderedChats.add(c);
         }
         orderedChats.sort((a,b)->Boolean.compare(isChatPinned(b.optString("key")),isChatPinned(a.optString("key"))));
+        if(multiGroups.length()>0&&!orderedChats.isEmpty()){
+            TextView ungroupedHeading=text("Отдельные переписки",15,FG);
+            ungroupedHeading.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+            ungroupedHeading.setPadding(px(11),px(10),px(11),px(7));
+            list.addView(ungroupedHeading,p(-1,-2));
+        }
         for(int i=0;i<orderedChats.size();i++){
             JSONObject chat=orderedChats.get(i);
             String key=chat.optString("key"),name=chat.optString("name","Переписка");
@@ -1572,7 +1592,9 @@ public class MainActivity extends Activity {
         add.setContentDescription("Добавить переписку из экспорта Telegram");
         LinearLayout.LayoutParams ap=p(-1,60);ap.setMargins(px(2),px(9),px(2),px(8));list.addView(add,ap);
         add.setOnClickListener(v->chooseFolder());
-        if(archives.length()>=2){
+        if(archives.length()>=2&&multiGroups.length()==0){
+            // When groups exist their timeline/comparison tools are already
+            // available from the person card and contextual tool drawer.
             Button tools=btn("Инструменты для двух переписок  ▾");
             LinearLayout.LayoutParams outer=p(-1,43);outer.topMargin=px(10);list.addView(tools,outer);
             LinearLayout advanced=column();advanced.setVisibility(View.GONE);list.addView(advanced,p(-1,-2));
