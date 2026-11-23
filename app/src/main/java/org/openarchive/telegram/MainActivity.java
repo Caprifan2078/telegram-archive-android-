@@ -1855,7 +1855,9 @@ public class MainActivity extends Activity {
                     older.setOnClickListener(v->{
                         multiTimelinePerSource=Math.min(GroupTimeline.MAX_PER_SOURCE,
                             multiTimelinePerSource+GroupTimeline.PAGE_SIZE);
-                        multiTimelinePage=pages-1;
+                        // If newly fetched rows extend the preview, land on the next older
+                        // page rather than silently redisplaying the current page.
+                        multiTimelinePage=pages;
                         showPage();
                     });
                 }else if(data.hasMore){
