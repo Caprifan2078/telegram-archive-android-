@@ -4761,26 +4761,28 @@ public class MainActivity extends Activity {
         findEvent.setOnEditorActionListener((v,action,event)->{
             searchHistoryEvents(findEvent.getText().toString());return true;
         });
-        Button events=btn(historyEventsExpanded?"01 · События переписки  ▴":"01 · События переписки  ▾");
-        list.addView(events,p(-1,52));
+        TextView events=secondaryDisclosure(historyEventsExpanded?
+            "01 · События переписки  ▴":"01 · События переписки  ▾");
+        list.addView(events,p(-1,44));
         events.setContentDescription("Раскрыть или свернуть ленту событий");
         events.setOnClickListener(v->{
             historyEventsExpanded=!historyEventsExpanded;
             renderRelationshipsPage();
         });
-        Button stages=btn("02 · Этапы переписки  ›");list.addView(stages,p(-1,52));
+        TextView stages=secondaryDisclosure("02 · Этапы переписки  ›");list.addView(stages,p(-1,44));
         stages.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="stages";screen="chronology";showPage();});
-        Button calendar=btn("03 · Периоды по датам  ›");list.addView(calendar,p(-1,52));
+        TextView calendar=secondaryDisclosure("03 · Периоды по датам  ›");list.addView(calendar,p(-1,44));
         calendar.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="calendar";screen="chronology";showPage();});
-        Button charts=btn("04 · Сравнение этапов  ›");list.addView(charts,p(-1,52));
+        TextView charts=secondaryDisclosure("04 · Сравнение этапов  ›");list.addView(charts,p(-1,44));
         charts.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="chart";screen="chronology";showPage();});
-        Button cinemaShortcut=btn("05 · Кинолента медиа по годам  ›");list.addView(cinemaShortcut,p(-1,52));
+        TextView cinemaShortcut=secondaryDisclosure("05 · Кинолента медиа по годам  ›");list.addView(cinemaShortcut,p(-1,44));
         cinemaShortcut.setOnClickListener(v->{historyEventsExpanded=false;cinemaReturnScreen=screen;screen="cinema";showPage();});
         Button backToChat=btn("+ Отметить событие в переписке");list.addView(backToChat,p(-1,46));
         backToChat.setOnClickListener(v->{screen="chat";showPage();
             toast("Удерживай важное сообщение и выбери «Добавить событие истории»");});
         analyticsText(list,"Все отметки личные: оригинальные сообщения и файлы не изменяются.",SUB,12);
-        Button more=btn("Другие инструменты истории  ▾");list.addView(more,p(-1,46));
+        TextView more=secondaryDisclosure("Другие инструменты истории  ▾");
+        list.addView(more,p(-1,44));
         LinearLayout advanced=column();advanced.setVisibility(View.GONE);list.addView(advanced,p(-1,-2));
         more.setOnClickListener(v->{
             boolean expand=advanced.getVisibility()!=View.VISIBLE;
@@ -5376,6 +5378,14 @@ public class MainActivity extends Activity {
 
         final String section=chronologySection;
         if("overview".equals(section)){
+            // One consistent chronology hub. The old second menu duplicated the
+            // events/stages/calendar buttons and made history feel like a maze.
+            screen="relationships";
+            historyEventsExpanded=false;
+            renderRelationshipsPage();
+            return;
+        }
+        if(false){
             TextView heading=text("Периоды истории",21,FG);heading.setTypeface(null,Typeface.BOLD);
             heading.setPadding(px(12),px(11),px(12),px(6));list.addView(heading);
             analyticsText(list,"Выбери раздел — остальные материалы не загружаются.",SUB,12);
