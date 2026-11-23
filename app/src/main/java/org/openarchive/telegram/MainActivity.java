@@ -2288,8 +2288,21 @@ public class MainActivity extends Activity {
         compose.addView(send,sendSize);
         send.setOnClickListener(v->{String value=input.getText().toString().trim();if(value.isEmpty())return;worker.execute(()->{savedStore.add(value,null,null,null);runOnUiThread(this::renderSaved);});});
         scroll.post(()->{if("saved".equals(screen))scroll.scrollTo(0,0);});
+        // An empty list should explain the next action, not leave a blank canvas.
+        final LinearLayout emptyState=column();
+        emptyState.setPadding(px(17),px(19),px(17),px(20));
+        emptyState.setBackground(outlined(PANEL,16,false));
+        LinearLayout.LayoutParams emptyLp=p(-1,-2);
+        emptyLp.setMargins(px(5),px(17),px(5),px(8));list.addView(emptyState,emptyLp);
+        TextView emptyHeading=text("Здесь будут твои заметки",17,FG);
+        emptyHeading.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+        emptyState.addView(emptyHeading,p(-1,-2));
+        TextView emptyHint=text("Пиши ниже или сохраняй цитаты и сообщения из переписок. "+
+            "Все записи остаются локальными.",13,SUB);
+        emptyHint.setPadding(0,px(7),0,0);emptyState.addView(emptyHint,p(-1,-2));
         final int savedToken=loadToken;
         worker.execute(()->{List<SavedStore.Note> notes=savedStore.recent(150);runOnUiThread(()->{if(savedToken!=loadToken||!screen.equals("saved"))return;
+            if(!notes.isEmpty())list.removeView(emptyState);
             for(SavedStore.Note n:notes){
                 TextView text=text("★ "+(n.body==null?"":n.body)+(n.fileName!=null?"\n📎 "+n.fileName:""),15,FG);
                 text.setPadding(px(14),px(12),px(14),px(12));text.setBackground(shape(PANEL,12));
@@ -2321,7 +2334,8 @@ public class MainActivity extends Activity {
                 MessageDb other=new MessageDb(this,key);
                 List<MessageDb.Item> favorites;
                 try{favorites=other.page(0,50,"",false,"",false,true);}finally{other.close();}
-                runOnUiThread(()->{if(!screen.equals("saved"))return;
+                runOnUiThread(()->{if(!screen.equals("saved")||savedToken!=loadToken)return;
+                    if(!favorites.isEmpty())list.removeView(emptyState);
                     for(MessageDb.Item m:favorites){
                         TextView t=text("★ "+label+" · "+day(m.date)+"\n"+clip(m.body,180),14,FG);
                         t.setPadding(px(12),px(12),px(12),px(12));t.setBackground(shape(CHIP,12));
