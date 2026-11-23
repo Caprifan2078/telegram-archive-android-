@@ -99,6 +99,9 @@ public class MainActivity extends Activity {
     // Read-only side-by-side workspaces. The first archive is always the active chat.
     private String dualSecondKey="",dualSecondName="";
     private int dualYear=LocalDate.now().getYear(),dualMonth=0;
+    // Read-only combined timeline state. Original chats retain their own databases and notes.
+    private String multiTimelineGroupId="";
+    private int multiTimelinePerSource=GroupTimeline.PAGE_SIZE,multiTimelinePage=0;
 
     private ConversationPeriods.Boundary pendingPeriodStart;
     private String pendingPeriodArchive="";
@@ -1677,15 +1680,198 @@ public class MainActivity extends Activity {
             keys.add(key);
             labels.add(entry.optString("label","Источник")+" · "+archiveLabelForGroup(key));
         }
+        labels.add(0,"◷  Общая лента сообщений");
         labels.add("＋  Добавить переписку");
         labels.add("⋮  Настроить группу");
         String[] options=labels.toArray(new String[0]);
         new FontDialog.Builder(this).setTitle(group.optString("name")+" · мультипереписка")
             .setItems(options,(d,which)->{
-                if(which<keys.size())activateArchive(keys.get(which));
-                else if(which==keys.size())showAddChatToMultiConversation(id);
+                if(which==0)openMultiTimeline(id);
+                else if(which<=keys.size())activateArchive(keys.get(which-1));
+                else if(which==keys.size()+1)showAddChatToMultiConversation(id);
                 else manageMultiConversation(id);
             }).setNegativeButton("Закрыть",null).show();
+    }
+    /** Opens a shared, read-only view, NOT a new conversation or a merged database. */
+    private void openMultiTimeline(String id){
+        JSONArray groups=multiConversationGroups();if(groups==null)return;
+        if(MultiConversationRegistry.find(groups,id)==null){toast("Группа не найдена");return;}
+        closeFloatingRound();stopPlayback();
+        multiTimelineGroupId=id;multiTimelinePerSource=GroupTimeline.PAGE_SIZE;
+        multiTimelinePage=0;home=false;screen="multi_timeline";returnScreen="";
+        showPage();
+    }
+    private void openMultiTimelineMessage(SharedMemories.Entry item){
+        JSONArray groups=multiConversationGroups();if(groups==null)return;
+        JSONObject group=MultiConversationRegistry.find(groups,multiTimelineGroupId);
+        if(group==null){toast("Мультипереписка уже удалена");return;}
+        boolean allowed=false;
+        JSONArray members=group.optJSONArray("members");
+        if(members!=null)for(int i=0;i<members.length();i++){
+            JSONObject m=members.optJSONObject(i);
+            if(m!=null&&item.archiveKey.equals(m.optString("key")))allowed=true;
+        }
+        boolean reveal=getPreferences(MODE_PRIVATE).getBoolean("show_hidden_chats",false);
+        if(!allowed||!canOpenQuoteArchive(item.archiveKey)||
+            (isChatHidden(item.archiveKey)&&!reveal)){
+            toast("Источник недоступен или скрыт");return;
+        }
+        activateArchive(item.archiveKey,item.messageId);
+    }
+    private void renderMultiTimelinePage(){
+        final int token=++loadToken;
+        if(mediaRecycler!=null)mediaRecycler.setVisibility(View.GONE);
+        if(scroll!=null)scroll.setVisibility(View.VISIBLE);
+        if(floatingPanel!=null)closeFloatingRound();
+        if(savedComposer!=null)savedComposer.setVisibility(View.GONE);
+        if(playerStrip!=null)playerStrip.setVisibility(View.GONE);
+        menuButton.setVisibility(View.GONE);navBack.setVisibility(View.VISIBLE);
+        if(headerActions!=null)headerActions.setVisibility(View.GONE);
+        if(pdfButton!=null)pdfButton.setVisibility(View.GONE);
+        if(headerLogo!=null)headerLogo.setVisibility(View.GONE);
+        if(folderButton!=null)folderButton.setVisibility(View.GONE);
+        if(bottomNav!=null)bottomNav.setVisibility(View.GONE);
+        if(bottomPager!=null)bottomPager.setVisibility(View.GONE);
+        if(verticalTimeline!=null)verticalTimeline.setVisibility(View.GONE);
+        pinnedBar.removeAllViews();filterBar.removeAllViews();searchArea.removeAllViews();
+        list.removeAllViews();list.setBackgroundColor(BG);list.setTag(null);
+        JSONArray groups=multiConversationGroups();
+        if(groups==null)return;
+        final String groupId=multiTimelineGroupId;
+        JSONObject group=MultiConversationRegistry.find(groups,groupId);
+        if(group==null){
+            title.setText("Общая лента");subtitle.setText("Группа не найдена");
+            list.addView(text("Этот человек больше не найден в мультипереписках.",14,SUB));
+            return;
+        }
+        final String groupName=group.optString("name","Мультипереписка");
+        title.setText(groupName);subtitle.setText("Общая лента · локальный просмотр");
+        final int quota=multiTimelinePerSource,pageIndex=multiTimelinePage;
+        TextView loading=text("Собираю сообщения из исходных чатов…",14,SUB);
+        loading.setPadding(px(12),px(16),px(12),px(12));list.addView(loading);
+        final ArrayList<GroupTimeline.Source> sources=new ArrayList<>();
+        final boolean reveal=getPreferences(MODE_PRIVATE)
+            .getBoolean("show_hidden_chats",false);
+        JSONArray members=group.optJSONArray("members");
+        if(members!=null)for(int i=0;i<members.length();i++){
+            JSONObject m=members.optJSONObject(i);if(m==null)continue;
+            String key=m.optString("key");
+            if(!canOpenQuoteArchive(key)||(isChatHidden(key)&&!reveal))continue;
+            try{sources.add(new GroupTimeline.Source(key,m.optString("label","Источник")));}
+            catch(IllegalArgumentException ignored){}
+        }
+        if(sources.isEmpty()){
+            list.removeAllViews();list.addView(text(
+                "Нет доступных переписок. Добавь источник или покажи скрытые чаты.",14,SUB));
+            return;
+        }
+        status.setVisibility(View.VISIBLE);
+        status.setText("Читаю только локальные базы · без изменения источников");
+        worker.execute(()->{
+            GroupTimeline.Result report=null;String failure=null;
+            try{report=GroupTimeline.read(this,sources,quota);}
+            catch(Exception error){failure=error.getMessage();}
+            final GroupTimeline.Result data=report;
+            final String problem=failure;
+            runOnUiThread(()->{
+                if(isFinishing()||isDestroyed()||token!=loadToken||
+                    !"multi_timeline".equals(screen)||!groupId.equals(multiTimelineGroupId))
+                    return;
+                list.removeAllViews();status.setVisibility(View.GONE);
+                if(problem!=null){
+                    TextView error=text("Не удалось прочитать ленту: "+problem,14,0xffffae9e);
+                    error.setPadding(px(13),px(15),px(13),px(13));
+                    list.addView(error,p(-1,-2));return;
+                }
+                TextView description=text("Сообщения разных источников показаны по датам экспорта. "+
+                    "Подписи источников заданы тобой и не подтверждают личность отправителя. "+
+                    "Оригиналы и личные отметки не изменяются.",12,SUB);
+                description.setPadding(px(13),px(12),px(13),px(10));
+                list.addView(description,p(-1,-2));
+                int total=data.items.size();
+                int pages=Math.max(1,(total+GroupTimeline.PAGE_SIZE-1)/GroupTimeline.PAGE_SIZE);
+                int safePage=Math.min(Math.max(0,pageIndex),pages-1);
+                multiTimelinePage=safePage;
+                int start=safePage*GroupTimeline.PAGE_SIZE;
+                int stop=Math.min(total,start+GroupTimeline.PAGE_SIZE);
+                String pageTitle="Сообщения "+(total==0?0:start+1)+"–"+stop+
+                    " из "+total+" · "+sources.size()+" источн.";
+                TextView count=text(pageTitle,13,ACCENT);
+                count.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+                count.setPadding(px(13),px(13),px(13),px(8));
+                list.addView(count,p(-1,-2));
+                if(total==0)list.addView(text("Нет сообщений с распознаваемыми датами.",14,SUB));
+                String previousDay="";
+                for(int i=start;i<stop;i++){
+                    SharedMemories.Entry row=data.items.get(i);
+                    String dayLabel=row.day.toString();
+                    if(!dayLabel.equals(previousDay)){
+                        TextView dateHeader=text(dayLabel,12,SUB);
+                        dateHeader.setPadding(px(14),px(12),px(8),px(5));
+                        list.addView(dateHeader,p(-1,-2));previousDay=dayLabel;
+                    }
+                    LinearLayout card=column();
+                    card.setPadding(px(14),px(11),px(13),px(12));
+                    card.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2a6fc6f4),
+                        outlined(PANEL,15,false),null));
+                    LinearLayout.LayoutParams cardLp=p(-1,-2);
+                    cardLp.setMargins(px(3),px(2),px(3),px(5));
+                    list.addView(card,cardLp);
+                    String stamp=row.date==null?"":row.date;
+                    TextView source=text(row.archiveName+" · "+stamp,12,ACCENT);
+                    source.setSingleLine(true);source.setEllipsize(TextUtils.TruncateAt.END);
+                    card.addView(source,p(-1,-2));
+                    TextView author=text(row.author.isEmpty()?"Без имени":row.author,13,FG);
+                    author.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+                    author.setPadding(0,px(6),0,px(4));card.addView(author,p(-1,-2));
+                    TextView excerpt=text(row.preview.isEmpty()?"Сообщение без текста":row.preview,14,FG);
+                    excerpt.setMaxLines(4);excerpt.setEllipsize(TextUtils.TruncateAt.END);
+                    card.addView(excerpt,p(-1,-2));
+                    card.setContentDescription(row.archiveName+" · "+stamp+" · "+
+                        row.author+" · "+row.preview+". Нажми, чтобы открыть исходное сообщение");
+                    card.setOnClickListener(v->openMultiTimelineMessage(row));
+                }
+                if(data.invalidDates>0||data.missingSources>0){
+                    TextView caveat=text("Без даты: "+data.invalidDates+
+                        " · недоступных баз: "+data.missingSources+
+                        ". Такие записи нельзя безопасно расположить по времени.",12,0xffffc18b);
+                    caveat.setPadding(px(12),px(12),px(12),px(10));
+                    list.addView(caveat,p(-1,-2));
+                }
+                LinearLayout controls=row();
+                controls.setPadding(px(3),px(10),px(3),px(4));
+                list.addView(controls,p(-1,-2));
+                Button previous=btn("‹ Новее");previous.setEnabled(safePage>0);
+                controls.addView(previous,new LinearLayout.LayoutParams(0,px(46),1));
+                previous.setOnClickListener(v->{multiTimelinePage--;showPage();});
+                Button next=btn("Старее ›");next.setEnabled(safePage<pages-1);
+                controls.addView(next,new LinearLayout.LayoutParams(0,px(46),1));
+                next.setOnClickListener(v->{multiTimelinePage++;showPage();});
+                if(data.hasMore&&quota<GroupTimeline.MAX_PER_SOURCE){
+                    Button older=btn("＋  Загрузить более ранние из каждого источника");
+                    LinearLayout.LayoutParams olderLp=p(-1,48);
+                    olderLp.setMargins(px(3),px(5),px(3),px(10));
+                    list.addView(older,olderLp);
+                    older.setOnClickListener(v->{
+                        multiTimelinePerSource=Math.min(GroupTimeline.MAX_PER_SOURCE,
+                            multiTimelinePerSource+GroupTimeline.PAGE_SIZE);
+                        multiTimelinePage=pages-1;
+                        showPage();
+                    });
+                }else if(data.hasMore){
+                    TextView limit=text("Достигнут лимит предварительного просмотра: "+
+                        GroupTimeline.MAX_PER_SOURCE+" последних сообщений на источник. "+
+                        "Для более ранних сообщений открой исходный чат.",12,SUB);
+                    limit.setPadding(px(12),px(10),px(12),px(8));
+                    list.addView(limit,p(-1,-2));
+                }
+                TextView note=text("Это общий просмотр, не склейка оригинальных файлов. "+
+                    "Одинаковые тексты из разных источников сохраняются отдельно.",12,SUB);
+                note.setPadding(px(12),px(11),px(12),px(22));
+                list.addView(note,p(-1,-2));
+                scroll.post(()->scroll.scrollTo(0,0));
+            });
+        });
     }
     private void showAddChatToMultiConversation(String groupId){
         if(importing||restoringBackup){toast("Дождись завершения операции");return;}
@@ -2315,7 +2501,9 @@ public class MainActivity extends Activity {
     private void registerArchive(String name,String tree){
         try{JSONObject o=new JSONObject();String key=UUID.randomUUID().toString().replace("-","");o.put("key",key);o.put("name",name);o.put("tree",tree);archives.put(o);activateArchive(key);}catch(Exception e){toast("Ошибка добавления чата");}
     }
-    private void activateArchive(String key){
+    private void activateArchive(String key){activateArchive(key,-1);}
+    /** Direct jump from grouped timeline avoids the old chat's saved-scroll restoration. */
+    private void activateArchive(String key,long exactMessageId){
         saveReadingProgress();
         if(importing){toast("Импорт ещё идёт");return;}
         JSONObject choice=null;for(int i=0;i<archives.length();i++){JSONObject o=archives.optJSONObject(i);if(o!=null&&key.equals(o.optString("key")))choice=o;}
@@ -2327,6 +2515,11 @@ public class MainActivity extends Activity {
         chatOffset=searchOffset=mediaOffset=favOffset=0;autoLoaded=PAGE;home=false;screen="chat";returnScreen="";searchReturnsToAnalytics=false;chatOffset=getPreferences(MODE_PRIVATE).getInt("read_offset_"+activeKey,0);
         pendingRestoreId=getPreferences(MODE_PRIVATE).getLong("read_id_"+activeKey,-1);
         pendingRestoreTop=getPreferences(MODE_PRIVATE).getInt("read_top_"+activeKey,0);
+        if(exactMessageId>0){
+            pendingRestoreId=-1;
+            jump(exactMessageId,"multi_timeline");
+            return;
+        }
         if(pendingRestoreId>0){
             final String openedKey=activeKey;
             final MessageDb restoreDb=db;
@@ -3238,6 +3431,7 @@ public class MainActivity extends Activity {
             scroll.setVisibility(showingGallery?View.GONE:View.VISIBLE);
         }
         if("help".equals(screen)){renderHelpPage();return;}
+        if("multi_timeline".equals(screen)){renderMultiTimelinePage();return;}
         if("dual_compare".equals(screen)||"dual_memories".equals(screen)){
             renderDualChatScreen();return;
         }
