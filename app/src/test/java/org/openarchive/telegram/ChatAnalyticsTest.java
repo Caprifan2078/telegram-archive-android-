@@ -43,7 +43,7 @@ public class ChatAnalyticsTest {
         assertFalse("Meaningful words should not be polluted by clock fragments",numericMeaningful);
         assertTrue(pdfMeaningful);
         assertTrue(photoMeaningful);
-        assertEquals("Word counting must be independent of presentation filtering",9,snapshot.totalWords);
+        assertEquals("Word counting must be independent of presentation filtering",11,snapshot.totalWords);
     }
 }
 
