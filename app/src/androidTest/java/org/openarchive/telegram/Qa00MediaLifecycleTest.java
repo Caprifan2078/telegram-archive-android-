@@ -104,6 +104,16 @@ public class Qa00MediaLifecycleTest {
         openMediaFromChat();tap("Фото");
         assertNotNull("Synthetic photo tile missing",device.wait(Until.findObject(By.descContains("Фото ·")),15000));
     }
+    private void jumpFromPhotoTile(){
+        // The modern RecyclerView gallery has one tile instead of a permanent
+        // 44dp jump badge. The tile's long-press actions expose the source chat.
+        UiObject2 tile=device.wait(Until.findObject(By.descContains("Фото ·")),15000);
+        assertNotNull("Photo gallery tile missing",tile);
+        tile.longClick();device.waitForIdle();
+        UiObject2 jump=device.wait(Until.findObject(By.textContains("Перейти к сообщению")),10000);
+        assertNotNull("Gallery must expose source-message navigation",jump);
+        jump.click();device.waitForIdle();
+    }
     @Test public void searchResultsPositionAndQuerySurviveHelpRoundTrip()throws Exception{
         fixture(scenario->{
             tap("⋯");tap("Найти сообщение");
@@ -150,8 +160,7 @@ public class Qa00MediaLifecycleTest {
     @Test public void explicitMediaJumpWinsOverSavedChatPosition()throws Exception{
         fixture(scenario->{
             scrollToVisibleMarker();openPhotoFilter();
-            UiObject2 go=device.wait(Until.findObject(By.desc("К исходному сообщению")),15000);
-            assertNotNull("Jump control missing",go);go.click();device.waitForIdle();
+            jumpFromPhotoTile();
             assertNotNull("Did not jump to the photo message",
                 device.wait(Until.findObject(By.text("QA_LIFE_026")),15000));
         });
@@ -181,10 +190,16 @@ public class Qa00MediaLifecycleTest {
                     f.setAccessible(true);saved[0]=f.getLong(a);
                 }catch(Exception e){throw new AssertionError(e);}
             });
-            assertTrue("Old anchor must be in same page and sufficiently far from target: "+saved[0],
-                saved[0]>=19&&saved[0]<=21);
-            UiObject2 go=device.wait(Until.findObject(By.desc("К исходному сообщению")),15000);
-            assertNotNull(go);go.click();device.waitForIdle();
+            // The updated chat layout can save a different old reading
+            // anchor depending on screen height and dynamic media rows.
+            // Force an older valid position to verify jump priority itself.
+            scenario.onActivity(a->{
+                try{
+                    java.lang.reflect.Field f=MainActivity.class.getDeclaredField("pendingRestoreId");
+                    f.setAccessible(true);f.setLong(a,20L);
+                }catch(Exception e){throw new AssertionError(e);}
+            });
+            jumpFromPhotoTile();
             UiObject2 target=device.wait(Until.findObject(By.text("QA_LIFE_026")),15000);
             assertNotNull("Old anchor overrode explicit jump",target);
             UiObject2 chatViewport=device.wait(Until.findObject(By.clazz("android.widget.ScrollView")),15000);
