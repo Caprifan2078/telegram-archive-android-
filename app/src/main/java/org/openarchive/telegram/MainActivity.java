@@ -2589,11 +2589,15 @@ public class MainActivity extends Activity {
             startRoundPlayback(attachment,sourceHolder,sourcePoster,sourceOverlay,resumeMs,resumePlaying);
             return;
         }
-        if(player==null||inlineHolder==null||!inlineHolder.isAttachedToWindow())return;
+        if(player==null||inlineHolder==null)return;
         try{if(!player.isPlaying())return;}catch(Exception badState){return;}
-        int[] tile=new int[2];inlineHolder.getLocationOnScreen(tile);
-        if(RoundPlaybackTarget.isOutside(tile[1],tile[1]+inlineHolder.getHeight(),
-            viewportTop,viewportBottom)){
+        // A chat rebuild can detach the original round view before another
+        // scroll callback arrives. Keep the active video visible by floating it.
+        boolean attached=inlineHolder.isAttachedToWindow();
+        int[] tile=new int[2];
+        if(attached)inlineHolder.getLocationOnScreen(tile);
+        if(RoundPlaybackTarget.shouldAutoFloat(attached,tile[1],
+            tile[1]+inlineHolder.getHeight(),viewportTop,viewportBottom)){
             if(playingAttachment!=null&&"round".equals(playingAttachment.kind)){
                 RoundControls controls=inlineHolder.getTag() instanceof RoundControls
                     ?(RoundControls)inlineHolder.getTag():null;
@@ -4589,7 +4593,8 @@ public class MainActivity extends Activity {
         lastRenderedDay=last;
         // Layout can recreate the source without a scroll callback; check the return
         // after the new chat tiles have attached rather than holding a stale bubble.
-        if(autoFloating&&"chat".equals(screen))scroll.post(this::scheduleFloatingCheck);
+        if((autoFloating||(playingAttachment!=null&&"round".equals(playingAttachment.kind)))
+                &&"chat".equals(screen))scroll.post(this::scheduleFloatingCheck);
         if(append)return; // Never jump to the top when more history is appended.
         if(results&&pendingSearchScroll>=0)return; // The return path restores after layout.
         if("chat".equals(screen)&&pendingRestoreId>0){
