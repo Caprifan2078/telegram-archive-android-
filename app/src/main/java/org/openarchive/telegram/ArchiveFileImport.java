@@ -351,6 +351,10 @@ final class ArchiveFileImport {
         // until import has finished; original remains at its selected SAF location.
         File compressed=File.createTempFile("telegram-", ".rar",ctx.getCacheDir());
         try{
+            // RAR also needs a seekable temporary copy. Apply the same free-space
+            // reserve as ZIP/7z rather than relying on the 60 GiB archive limit:
+            // otherwise a large import could consume nearly all phone storage.
+            final long copyLimit=maxTemporaryCopyForFreeBytes(ctx.getCacheDir().getUsableSpace());
             try(InputStream source=ctx.getContentResolver().openInputStream(uri);
                 OutputStream out=new BufferedOutputStream(new FileOutputStream(compressed))){
                 if(source==null)throw new IOException("RAR недоступен");
@@ -358,7 +362,8 @@ final class ArchiveFileImport {
                 long archiveBytes=0;
                 while((n=source.read(buffer))!=-1){
                     archiveBytes+=n;
-                    if(archiveBytes>MAX_TOTAL)throw new IOException("Слишком большой исходный RAR");
+                    if(archiveBytes>copyLimit)
+                        throw new IOException("Недостаточно свободного места для временного открытия RAR. Освободи место на телефоне; исходный архив не изменён.");
                     out.write(buffer,0,n);
                 }
             }
