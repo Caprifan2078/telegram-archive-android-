@@ -62,6 +62,10 @@ public final class DrawerAesZipRegressionTest {
             limit>4L*1024*1024*1024);
         assertTrue("Keep storage reserve for Android and the extracted content",limit<free);
         assertEquals(0,ArchiveFileImport.maxTemporaryCopyForFreeBytes(128L*1024*1024));
+        assertEquals("No usable space must never permit an unbounded temp copy",0,
+            ArchiveFileImport.maxTemporaryCopyForFreeBytes(0));
+        assertEquals("Unknown/negative free-space readings must fail closed",0,
+            ArchiveFileImport.maxTemporaryCopyForFreeBytes(-1));
     }
 
     @Test public void fallbackOpensAes256ZipThroughCentralDirectory()throws Exception{
