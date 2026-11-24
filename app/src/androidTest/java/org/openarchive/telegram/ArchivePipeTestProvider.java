@@ -23,6 +23,48 @@ public final class ArchivePipeTestProvider extends ContentProvider {
     @Override public int delete(Uri uri,String s,String[] a){throw new UnsupportedOperationException();}
     @Override public int update(Uri uri,ContentValues v,String s,String[] a){throw new UnsupportedOperationException();}
 
+    /**
+     * Android SAF providers can return a sliced AssetFileDescriptor, which can
+     * be streamed but is not a whole-file descriptor for random-access APIs.
+     */
+    @Override public android.content.res.AssetFileDescriptor openAssetFile(Uri uri,String mode)
+            throws java.io.FileNotFoundException{
+        if(uri.getPathSegments().size()==2&&"stream".equals(uri.getPathSegments().get(0))){
+            if(!"r".equals(mode))throw new java.io.FileNotFoundException("Read only");
+            String payload=uri.getLastPathSegment();
+            if(payload==null||payload.length()>8192||
+                    !payload.matches("[A-Za-z0-9_-]+"))
+                throw new java.io.FileNotFoundException("Invalid synthetic stream");
+            byte[] bytes;
+            try{bytes=android.util.Base64.decode(payload,
+                android.util.Base64.URL_SAFE|android.util.Base64.NO_WRAP);}
+            catch(IllegalArgumentException bad){
+                throw new java.io.FileNotFoundException("Invalid synthetic stream payload");
+            }
+            if(bytes.length==0||bytes.length>6144)
+                throw new java.io.FileNotFoundException("Oversized synthetic stream");
+            ParcelFileDescriptor[] pair;
+            try{pair=ParcelFileDescriptor.createPipe();}
+            catch(IOException ex){java.io.FileNotFoundException failure=
+                new java.io.FileNotFoundException("Pipe unavailable");
+                failure.initCause(ex);throw failure;}
+            Thread writer=new Thread(()->{
+                try(ByteArrayInputStream in=new ByteArrayInputStream(bytes);
+                    FileOutputStream out=new ParcelFileDescriptor.AutoCloseOutputStream(pair[1])){
+                    byte[] block=new byte[2048];int n;
+                    while((n=in.read(block))!=-1)out.write(block,0,n);
+                }catch(IOException ignored){
+                    try{pair[1].close();}catch(IOException ignoredClose){}
+                }
+            },"synthetic-asset-stream");
+            writer.setDaemon(true);writer.start();
+            // Declared length makes ContentResolver.openFileDescriptor reject
+            // this as a whole file, but openInputStream still succeeds.
+            return new android.content.res.AssetFileDescriptor(pair[0],0,bytes.length);
+        }
+        return super.openAssetFile(uri,mode);
+    }
+
     @Override public ParcelFileDescriptor openFile(Uri uri,String mode)throws java.io.FileNotFoundException{
         if(!"r".equals(mode))throw new java.io.FileNotFoundException("Read only fixture");
         // The instrumentation APK has a separate data directory from the
