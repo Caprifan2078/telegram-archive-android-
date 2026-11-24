@@ -3679,9 +3679,12 @@ public class MainActivity extends Activity {
                 }
                 boolean gallery="media".equals(tab),find="search".equals(tab),favs="favorites".equals(tab);
                 int count=gallery?db.mediaCount(kind):db.count(find?search:"",find&&deepMode,find&&deepMode?who:"",find&&deepMode&&hasMedia,favs);
-                int pos=gallery?0:(count==0?0:Math.min(requested,Math.max(0,count-1)));
+                // Restore the actual source attachment position (including after
+                // rotation), not always attachment zero. Filter changes reset
+                // mediaOffset via their click handlers.
+                int pos=count==0?0:Math.max(0,Math.min(requested,count-1));
                 List<MessageDb.Attachment> attachments=gallery?
-                    db.mediaPage(kind,0,MediaGalleryState.PAGE_SIZE):null;
+                    db.mediaPage(kind,pos,MediaGalleryState.PAGE_SIZE):null;
                 List<MessageDb.Item> messages=gallery?null:db.page(pos,tab.equals("chat")?Math.max(PAGE,autoLoaded):tab.equals("search")?Math.max(PAGE,searchLoaded):PAGE,find?search:"",find&&deepMode,find&&deepMode?who:"",find&&deepMode&&hasMedia,favs);
                 Map<Long,List<MessageDb.Attachment>> links=messages==null?new HashMap<>():db.attachmentsForMessages(messages);
                 Map<Long,MessageDb.ReplyInfo> replies=messages==null?new HashMap<>():db.replyPreviews(messages);
@@ -3695,11 +3698,11 @@ public class MainActivity extends Activity {
                     }
                     else list.setBackgroundColor(BG);
                     if(gallery){
-                        mediaWindowStart=0;mediaLoaded=attachments.size();mediaTotal=count;
+                        mediaWindowStart=pos;mediaLoaded=pos+attachments.size();mediaTotal=count;
                         mediaAppending=false;mediaPrepending=false;
                         mediaAdapter.reset();mediaAdapter.append(attachments);
                         updateMediaLayout(false);
-                        mediaFastScroller.setProgress(0,count);
+                        mediaFastScroller.setProgress(pos,count);
                         mediaFastScroller.setVisibility(count>1?View.VISIBLE:View.GONE);
                         if(count==0){
                             mediaRecycler.setVisibility(View.GONE);
@@ -5864,6 +5867,7 @@ public class MainActivity extends Activity {
             mediaTotal<=0||!"media".equals(screen)||home)return;
         int first=mediaLayout.findFirstVisibleItemPosition();
         int absolute=mediaWindowStart+mediaAdapter.ordinalAt(first);
+        mediaOffset=absolute; // persisted across Activity recreation
         mediaFastScroller.setProgress(absolute,mediaTotal);
     }
     /** A fast seek opens the requested source page directly. It never copies media bytes. */
@@ -5871,6 +5875,7 @@ public class MainActivity extends Activity {
         if(mediaFastScroller==null||mediaLayout==null||mediaAdapter==null||
             !"media".equals(screen)||home||importing||db==null||mediaTotal<=0)return;
         final int target=MediaFastScroller.indexForFraction(fraction,mediaTotal);
+        mediaOffset=target;
         mediaFastScroller.setProgress(target,mediaTotal);
         if(target>=mediaWindowStart&&target<mediaLoaded){
             int adapterPos=mediaAdapter.adapterPositionForOrdinal(target-mediaWindowStart);
