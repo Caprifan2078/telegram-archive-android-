@@ -260,8 +260,21 @@ public class UiMenuTourRegressionTest {
         assertEquals("Motion action must persist the opposite choice",!old,prefs.getBoolean("appearance_less_motion",old));
         openDialog("bubbleStyleDialog");
         expect("Скругление сообщений");
-        tap("Применить");
-        assertTrue(prefs.getInt("appearance_bubble_radius",-1)>=0);
+        // On Android 15 the tap can be dispatched while the dialog is still
+        // transitioning. Check the actual positive button and wait for its
+        // application callback rather than racing SharedPreferences.apply().
+        UiObject2 apply=findVisible("Применить");
+        assertNotNull("Bubble radius Apply button is not visible",apply);
+        assertFalse("Bubble radius Apply button is clipped",apply.getVisibleBounds().isEmpty());
+        apply.click();
+        for(int attempt=0;attempt<25&&prefs.getInt("appearance_bubble_radius",-1)<0;attempt++){
+            inst.waitForIdleSync();
+            android.os.SystemClock.sleep(120L);
+        }
+        if(prefs.getInt("appearance_bubble_radius",-1)<0)
+            screenshot("bubble-radius-not-saved");
+        assertTrue("Bubble radius was not saved by the Apply button on this Android version",
+            prefs.getInt("appearance_bubble_radius",-1)>=0);
         screenshot("settings-applied");
     }
 
