@@ -62,7 +62,7 @@ final class ArchiveFileImport {
     private static final long MIB=1024L*1024L;
     /** Allow large Telegram exports when there is room; never fill user storage. */
     static long maxTemporaryCopyForFreeBytes(long freeBytes){
-        if(freeBytes<=0)return 2L*1024*1024*1024; // unknown provider space: conservative
+        if(freeBytes<=0)return 0; // no confirmed free space: never risk filling storage
         long reserve=Math.max(256L*MIB,freeBytes/10L);
         return Math.min(MAX_TOTAL,Math.max(0,freeBytes-reserve));
     }
@@ -274,20 +274,31 @@ final class ArchiveFileImport {
         // SevenZFile requires seeking; use the local channel where possible,
         // otherwise spool safely to a bounded temporary file.
         try{
-            try(android.os.ParcelFileDescriptor descriptor=ctx.getContentResolver().openFileDescriptor(uri,"r")){
-                if(descriptor==null)throw new IOException("Нет доступа к 7z");
-                try(FileInputStream input=new FileInputStream(descriptor.getFileDescriptor())){
-                    boolean seekable;
-                    try{
-                        input.getChannel().position(0);
-                        input.getChannel().size();
-                        seekable=true;
-                    }catch(IOException|UnsupportedOperationException notSeekable){seekable=false;}
-                    if(seekable){
-                        readSevenZ(input.getChannel(),root,password,budget,progress);
-                        return;
+            // Some Android document providers expose a stream or a sliced asset
+            // rather than a whole-file descriptor. A missing seekable descriptor
+            // is not an import failure if openInputStream is still available.
+            try{
+                try(android.os.ParcelFileDescriptor descriptor=
+                        ctx.getContentResolver().openFileDescriptor(uri,"r")){
+                    if(descriptor!=null){
+                        try(FileInputStream input=new FileInputStream(descriptor.getFileDescriptor())){
+                            boolean seekable;
+                            try{
+                                input.getChannel().position(0);
+                                input.getChannel().size();
+                                seekable=true;
+                            }catch(IOException|UnsupportedOperationException notSeekable){
+                                seekable=false;
+                            }
+                            if(seekable){
+                                readSevenZ(input.getChannel(),root,password,budget,progress);
+                                return;
+                            }
+                        }
                     }
                 }
+            }catch(java.io.FileNotFoundException noWholeFile){
+                // Retry as a bounded private stream below.
             }
             File temporary=File.createTempFile("telegram-sevenz-", ".7z",ctx.getCacheDir());
             try{
