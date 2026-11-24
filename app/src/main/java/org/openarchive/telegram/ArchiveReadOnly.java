@@ -157,43 +157,71 @@ final class ArchiveReadOnly {
         }
     }
     private static byte[] zip(Context ctx,Uri uri,char[] password,String requested,int limit,List<Entry> found)throws Exception{
+        // A SAF-backed content URI is not guaranteed to be seekable. Detect pipes
+        // before asking Commons Compress to parse its central directory.
         try(ParcelFileDescriptor fd=ctx.getContentResolver().openFileDescriptor(uri,"r")){
-            if(fd==null)throw new IOException("ZIP недоступен");
-            try(FileInputStream stream=new FileInputStream(fd.getFileDescriptor());
-                org.apache.commons.compress.archivers.zip.ZipFile archive=
-                    org.apache.commons.compress.archivers.zip.ZipFile.builder().setSeekableByteChannel(stream.getChannel()).get()){
-                Enumeration<ZipArchiveEntry> entries=archive.getEntries();int count=0;
-                while(entries.hasMoreElements()){
-                    ZipArchiveEntry e=entries.nextElement();
-                    if(++count>MAX_ENTRIES)throw new IOException("Слишком много элементов ZIP");
-                    boolean encrypted=e.getGeneralPurposeBit().usesEncryption();
-                    if(found!=null)add(found,e.getName(),e.getSize(),e.isDirectory(),encrypted);
-                    if(requested!=null&&requested.equals(e.getName())&&!e.isDirectory()){
-                        if(!safeName(e.getName()))throw new IOException("Небезопасный путь вложения");
-                        if(e.getSize()>limit)throw new IOException("Вложение слишком большое");
-                        if(encrypted){
-                            if(password==null||password.length==0)throw new IOException("ZIP зашифрован: введите пароль");
-                            return encryptedZip(ctx,uri,requested,password,limit);
+            if(fd!=null){
+                try(FileInputStream stream=new FileInputStream(fd.getFileDescriptor())){
+                    boolean seekable;
+                    try{
+                        stream.getChannel().position(0);
+                        stream.getChannel().size();
+                        seekable=true;
+                    }catch(IOException|UnsupportedOperationException notSeekable){
+                        seekable=false;
+                    }
+                    if(seekable)return zipSeekable(ctx,uri,stream.getChannel(),null,
+                        password,requested,limit,found);
+                }
+            }
+        }catch(java.io.FileNotFoundException unavailable){
+            // A provider may expose an InputStream without a file descriptor.
+        }
+        File temporary=cached(ctx,uri,"zip");
+        try(FileInputStream input=new FileInputStream(temporary)){
+            return zipSeekable(ctx,uri,input.getChannel(),temporary,password,requested,limit,found);
+        }finally{temporary.delete();}
+    }
+    private static byte[] zipSeekable(Context ctx,Uri uri,
+                    java.nio.channels.SeekableByteChannel channel,File temporary,
+                    char[] password,String requested,int limit,List<Entry> found)throws Exception{
+        try(org.apache.commons.compress.archivers.zip.ZipFile archive=
+                org.apache.commons.compress.archivers.zip.ZipFile.builder().setSeekableByteChannel(channel).get()){
+            Enumeration<ZipArchiveEntry> entries=archive.getEntries();int count=0;
+            while(entries.hasMoreElements()){
+                ZipArchiveEntry e=entries.nextElement();
+                if(++count>MAX_ENTRIES)throw new IOException("Слишком много элементов ZIP");
+                boolean encrypted=e.getGeneralPurposeBit().usesEncryption();
+                if(found!=null)add(found,e.getName(),e.getSize(),e.isDirectory(),encrypted);
+                if(requested!=null&&requested.equals(e.getName())&&!e.isDirectory()){
+                    if(!safeName(e.getName()))throw new IOException("Небезопасный путь вложения");
+                    if(e.getSize()>limit)throw new IOException("Вложение слишком большое");
+                    if(encrypted){
+                        if(password==null||password.length==0)
+                            throw new IOException("ZIP зашифрован: введите пароль");
+                        // Reuse the one seekable temporary copy on pipe providers;
+                        // a second full copy could exhaust storage on large exports.
+                        return temporary!=null
+                            ?encryptedZipFromFile(temporary,requested,password,limit)
+                            :encryptedZip(ctx,uri,requested,password,limit);
+                    }
+                    // ZIP ZSTD requires an optional native library deliberately excluded
+                    // from the offline reader to keep APK portable and small.
+                    if(e.getMethod()==93||e.getMethod()==20)
+                        throw new IOException("ZIP Zstandard пока не поддерживается");
+                    if(!archive.canReadEntryData(e))
+                        throw new IOException("Сжатие вложения не поддерживается");
+                    try(InputStream input=archive.getInputStream(e)){
+                        byte[] content=copyLimited(input,limit);
+                        if(e.getSize()>=0&&content.length!=e.getSize())
+                            throw new IOException("Размер ZIP-вложения не совпадает с заголовком");
+                        if(e.getCrc()>=0){
+                            java.util.zip.CRC32 sum=new java.util.zip.CRC32();
+                            sum.update(content);
+                            if(sum.getValue()!=e.getCrc())
+                                throw new IOException("Повреждённый ZIP: контрольная сумма CRC не совпала");
                         }
-                        // ZIP ZSTD requires an optional native library deliberately excluded
-                        // from the offline reader to keep APK portable and small.
-                        if(e.getMethod()==93||e.getMethod()==20)
-                            throw new IOException("ZIP Zstandard пока не поддерживается");
-                        if(!archive.canReadEntryData(e))throw new IOException("Сжатие вложения не поддерживается");
-                        try(InputStream input=archive.getInputStream(e)){
-                            byte[] content=copyLimited(input,limit);
-                            // Seekable ZIP readers may not verify CRC on getInputStream.
-                            // Never display silently corrupted text or Office data.
-                            if(e.getSize()>=0&&content.length!=e.getSize())
-                                throw new IOException("Размер ZIP-вложения не совпадает с заголовком");
-                            if(e.getCrc()>=0){
-                                java.util.zip.CRC32 sum=new java.util.zip.CRC32();
-                                sum.update(content);
-                                if(sum.getValue()!=e.getCrc())
-                                    throw new IOException("Повреждённый ZIP: контрольная сумма CRC не совпала");
-                            }
-                            return content;
-                        }
+                        return content;
                     }
                 }
             }
@@ -221,12 +249,16 @@ final class ArchiveReadOnly {
     }
     private static byte[] encryptedZip(Context ctx,Uri uri,String path,char[] password,int limit)throws Exception{
         File file=cached(ctx,uri,"zip");
+        try{return encryptedZipFromFile(file,path,password,limit);}
+        finally{file.delete();}
+    }
+    private static byte[] encryptedZipFromFile(File file,String path,char[] password,int limit)throws Exception{
         try(net.lingala.zip4j.ZipFile archive=new net.lingala.zip4j.ZipFile(file,password)){
             net.lingala.zip4j.model.FileHeader e=archive.getFileHeader(path);
             if(e==null||e.isDirectory())throw new IOException("Файл в ZIP отсутствует");
             if(e.getUncompressedSize()>limit)throw new IOException("Вложение слишком большое");
             try(InputStream input=archive.getInputStream(e)){return copyLimited(input,limit);}
-        }finally{file.delete();}
+        }
     }
     private static byte[] rar(Context ctx,Uri uri,char[] password,String requested,int limit,List<Entry> found)throws Exception{
         File file=cached(ctx,uri,"rar");
