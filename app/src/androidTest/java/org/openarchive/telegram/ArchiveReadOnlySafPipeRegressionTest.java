@@ -28,19 +28,16 @@ import static org.junit.Assert.*;
 @RunWith(AndroidJUnit4.class)
 public final class ArchiveReadOnlySafPipeRegressionTest {
     private final Context target=InstrumentationRegistry.getInstrumentation().getTargetContext();
-    private final Context tests=InstrumentationRegistry.getInstrumentation().getContext();
     private static final String ENTRY="Telegram/messages.html";
     private static final String MESSAGE="<html>Encrypted Telegram test archive through SAF pipe</html>";
 
     private File fixture(boolean zip,char[] password)throws Exception{
-        // The instrumentation test APK's cache directory is not guaranteed to
-        // have been created on a fresh emulator before the first fixture.
-        File cache=tests.getCacheDir();
-        if(!cache.isDirectory()&&!cache.mkdirs())
-            throw new java.io.IOException("Cannot create test fixture cache directory: "+cache);
+        // The fixture writer executes under the target app's instrumentation.
+        // The .test package's sandbox may not be writable on the emulator.
+        File cache=target.getCacheDir();
         String name=UUID.randomUUID().toString().replace("-","")+(zip?".zip":".7z");
-        File output=new File(tests.getCacheDir(),name);
-        File text=File.createTempFile("synthetic-html-",".html",tests.getCacheDir());
+        File output=new File(cache,name);
+        File text=File.createTempFile("synthetic-html-",".html",cache);
         try{
             try(FileOutputStream out=new FileOutputStream(text)){
                 out.write(MESSAGE.getBytes(StandardCharsets.UTF_8));
@@ -70,8 +67,15 @@ public final class ArchiveReadOnlySafPipeRegressionTest {
         String[] names=target.getCacheDir().list((d,n)->n.startsWith("archive-view-"));
         return names==null?new HashSet<>():new HashSet<>(Arrays.asList(names));
     }
-    private Uri uri(File file){
-        return Uri.parse("content://"+ArchivePipeTestProvider.AUTHORITY+"/"+file.getName());
+    private Uri uri(File file)throws Exception{
+        // A small synthetic archive is embedded in the URI. The test-only
+        // content provider can stream it regardless of Android package UID.
+        byte[] data=java.nio.file.Files.readAllBytes(file.toPath());
+        assertTrue("SAF pipe fixture must remain small",data.length>0&&data.length<6144);
+        String encoded=android.util.Base64.encodeToString(data,
+            android.util.Base64.NO_WRAP|android.util.Base64.NO_PADDING|
+            android.util.Base64.URL_SAFE);
+        return Uri.parse("content://"+ArchivePipeTestProvider.AUTHORITY+"/fixture/"+encoded);
     }
     private void verify(boolean zip)throws Exception{
         char[] secret="synthetic-pipe-archive-password".toCharArray();
