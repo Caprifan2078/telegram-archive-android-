@@ -84,6 +84,8 @@ public final class MediaInfiniteGalleryRegressionTest {
             onUi(activity,()->{
                 try{
                     set(activity,"mediaKind","round");
+                    // Real filter taps reset the saved absolute media offset.
+                    set(activity,"mediaOffset",0);
                     activity.getPreferences(Context.MODE_PRIVATE).edit()
                         .putBoolean("gallery_grid_round",true).commit();
                     invoke(activity,"showPage",new Class<?>[0]);
