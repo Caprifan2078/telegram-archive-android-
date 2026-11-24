@@ -33,6 +33,11 @@ public final class ArchiveReadOnlySafPipeRegressionTest {
     private static final String MESSAGE="<html>Encrypted Telegram test archive through SAF pipe</html>";
 
     private File fixture(boolean zip,char[] password)throws Exception{
+        // The instrumentation test APK's cache directory is not guaranteed to
+        // have been created on a fresh emulator before the first fixture.
+        File cache=tests.getCacheDir();
+        if(!cache.isDirectory()&&!cache.mkdirs())
+            throw new java.io.IOException("Cannot create test fixture cache directory: "+cache);
         String name=UUID.randomUUID().toString().replace("-","")+(zip?".zip":".7z");
         File output=new File(tests.getCacheDir(),name);
         File text=File.createTempFile("synthetic-html-",".html",tests.getCacheDir());
