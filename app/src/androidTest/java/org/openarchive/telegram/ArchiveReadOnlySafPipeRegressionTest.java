@@ -112,6 +112,44 @@ public final class ArchiveReadOnlySafPipeRegressionTest {
                 existing,temporaryCopies());
         }
     }
+    @Test public void encryptedSevenZImportsFromStreamOnlySafAsset()throws Exception{
+        char[] password="stream-only-7z-secret".toCharArray();
+        File fixture=fixture(false,password);
+        String key=UUID.randomUUID().toString().replace("-","");
+        File importRoot=new File(new File(target.getFilesDir(),"telegram_imports"),key);
+        try{
+            byte[] archiveBytes=java.nio.file.Files.readAllBytes(fixture.toPath());
+            String encoded=android.util.Base64.encodeToString(archiveBytes,
+                android.util.Base64.NO_WRAP|android.util.Base64.NO_PADDING|
+                    android.util.Base64.URL_SAFE);
+            Uri source=Uri.parse("content://"+ArchivePipeTestProvider.AUTHORITY+
+                "/stream/"+encoded);
+            // This provider exposes a sized asset stream, not a whole-file
+            // descriptor. The extractor must retry with openInputStream.
+            try(ParcelFileDescriptor unused=target.getContentResolver()
+                    .openFileDescriptor(source,"r")){
+                fail("Fixture unexpectedly exposed a whole-file descriptor");
+            }catch(java.io.FileNotFoundException expected){}
+            try(java.io.InputStream input=target.getContentResolver().openInputStream(source)){
+                assertNotNull("Stream must remain readable",input);
+                assertEquals(0x37,input.read());
+                assertEquals(0x7a,input.read());
+            }
+            File extracted=ArchiveFileImport.extract(target,source,"7z",key,password,p->{});
+            File html=new File(extracted,"messages.html");
+            assertTrue("Stream-only encrypted 7z must import messages.html",html.isFile());
+            assertTrue(html.length()>10);
+            List<ArchiveReadOnly.Entry> entries=
+                ArchiveReadOnly.list(target,source,"archive.7z",password);
+            assertEquals(1,entries.size());
+            assertEquals(ENTRY,entries.get(0).name);
+        }finally{
+            Arrays.fill(password,'\0');
+            fixture.delete();
+            ArchiveFileImport.deleteTree(importRoot);
+        }
+    }
+
     @Test public void encryptedZipPreviewWorksThroughPipe()throws Exception{verify(true);}
     @Test public void encryptedSevenZPreviewWorksThroughPipe()throws Exception{verify(false);}
     @Test public void previewCanCopyLargeArchivesWhenStorageAllowsWithoutFillingPhone(){
