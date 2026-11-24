@@ -121,7 +121,7 @@ public class UiMenuTourRegressionTest {
         screenshot("drawer-home");
         String[][] groups={
             {"Архивы и резервные копии","Создать резервную копию"},
-            {"Инструменты переписки","Хронология отношений"},
+            {"Инструменты переписки","Хронология"},
             {"Открытия · новые возможности","Студия оформления 2.0"},
             {"Оформление и персонализация","Умная производительность"}
         };
@@ -139,7 +139,6 @@ public class UiMenuTourRegressionTest {
 
     @Test public void safeDrawerDestinationsOpenWithoutCrashing()throws Exception {
         String[][] paths={
-            {"Архивы и резервные копии","Импортировать чат","Добавить переписку"},
             {"Архивы и резервные копии","Создать резервную копию","Создать резервную копию"},
             {"Архивы и резервные копии","Квитанция переноса","Квитанция переноса"},
             {"Архивы и резервные копии","Восстановить архив","Восстановить переписки"},
@@ -180,6 +179,54 @@ public class UiMenuTourRegressionTest {
         expect("Мои переписки");
     }
 
+    /** The main screen owns the only Import action. Do not reintroduce an
+     * old duplicate menu item merely to appease a stale navigation test. */
+    @Test public void homeImportOpensAndroidPickerWithoutExtraMenu()throws Exception {
+        expect("Мои переписки");
+        UiObject2 add=scrollFind("Добавить переписку");
+        assertNotNull("Single Add chat action missing from Home",add);
+        // UI Automator drives the app from outside its instrumentation process.
+        // ActivityMonitor can miss ACTION_OPEN_DOCUMENT and, when blocking,
+        // strand the system DocumentsUI, poisoning all subsequent test launches.
+        // Verify the actual external Android file-picker window instead.
+        String appPackage=activity.getActivity().getPackageName();
+        boolean pickerOpened=false;
+        String foreground="";
+        try{
+            add.click();
+            for(int attempt=0;attempt<60;attempt++){
+                foreground=device.getCurrentPackageName();
+                if(foreground!=null&&!foreground.equals(appPackage)
+                    &&(foreground.contains("documentsui")
+                       ||foreground.contains("intentresolver")
+                       ||foreground.contains("resolver"))){
+                    pickerOpened=true;
+                    break;
+                }
+                android.os.SystemClock.sleep(200);
+            }
+            if(!pickerOpened){
+                android.util.Log.e("UI_MENU_TOUR",
+                    "Add chat did not reach DocumentsUI; foreground="+foreground);
+                screenshot("import-picker-failure");
+            }
+            assertTrue("Add chat must open Android's document picker; foreground="+foreground,
+                pickerOpened);
+        }finally{
+            // Never leave a system picker open after this test (including an
+            // assertion failure): the next ActivityTestRule must launch cleanly.
+            String current=device.getCurrentPackageName();
+            if(current!=null&&!current.equals(appPackage)){
+                device.pressBack();
+                device.waitForIdle();
+            }
+        }
+        drawer();
+        tap("Архивы и резервные копии");
+        assertNull("Duplicate Import button appeared in drawer",findVisible("Импортировать чат"));
+        close();
+    }
+
     @Test public void settingsOptionsAreActuallyAppliedOnAndroid()throws Exception {
         SharedPreferences prefs=activity.getActivity().getPreferences(Context.MODE_PRIVATE);
         // Start with a DIFFERENT radio option: clicking the already selected
@@ -213,8 +260,21 @@ public class UiMenuTourRegressionTest {
         assertEquals("Motion action must persist the opposite choice",!old,prefs.getBoolean("appearance_less_motion",old));
         openDialog("bubbleStyleDialog");
         expect("Скругление сообщений");
-        tap("Применить");
-        assertTrue(prefs.getInt("appearance_bubble_radius",-1)>=0);
+        // On Android 15 the tap can be dispatched while the dialog is still
+        // transitioning. Check the actual positive button and wait for its
+        // application callback rather than racing SharedPreferences.apply().
+        UiObject2 apply=findVisible("Применить");
+        assertNotNull("Bubble radius Apply button is not visible",apply);
+        assertFalse("Bubble radius Apply button is clipped",apply.getVisibleBounds().isEmpty());
+        apply.click();
+        for(int attempt=0;attempt<25&&prefs.getInt("appearance_bubble_radius",-1)<0;attempt++){
+            inst.waitForIdleSync();
+            android.os.SystemClock.sleep(120L);
+        }
+        if(prefs.getInt("appearance_bubble_radius",-1)<0)
+            screenshot("bubble-radius-not-saved");
+        assertTrue("Bubble radius was not saved by the Apply button on this Android version",
+            prefs.getInt("appearance_bubble_radius",-1)>=0);
         screenshot("settings-applied");
     }
 
@@ -235,8 +295,19 @@ public class UiMenuTourRegressionTest {
             visible.height()>=Math.round(40*density));
         button.click();
         device.waitForIdle();
-        assertEquals(!reduced,activity.getActivity().getPreferences(Context.MODE_PRIVATE)
-            .getBoolean("appearance_less_motion",reduced));
+        // Android 15 can dispatch accessibility click and persist preference
+        // after UI Automator first reports an idle transition. Observe the
+        // actual persisted result before asserting; do not change app behavior.
+        SharedPreferences settings=activity.getActivity().getPreferences(Context.MODE_PRIVATE);
+        long deadline=android.os.SystemClock.uptimeMillis()+4000L;
+        boolean updated=settings.getBoolean("appearance_less_motion",reduced);
+        while(updated==reduced&&android.os.SystemClock.uptimeMillis()<deadline){
+            inst.waitForIdleSync();
+            android.os.SystemClock.sleep(120);
+            updated=settings.getBoolean("appearance_less_motion",reduced);
+        }
+        if(updated==reduced)screenshot("motion-setting-not-applied");
+        assertEquals("Motion button must actually update saved preference",!reduced,updated);
     }
 
     @Test public void fontPreviewAndThemeSelectionAreClickable()throws Exception {

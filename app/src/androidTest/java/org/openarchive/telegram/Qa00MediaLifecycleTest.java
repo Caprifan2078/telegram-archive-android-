@@ -29,6 +29,27 @@ public class Qa00MediaLifecycleTest {
         UiObject2 v=device.wait(Until.findObject(By.text(text)),15000);
         assertNotNull("Missing UI control: "+text,v);v.click();device.waitForIdle();
     }
+    private void openMediaFromChat(){
+        // The user-requested single chat header replaces the removed bottom
+        // "Переписка / Медиа" tabs; do not restore a redundant tab for tests.
+        UiObject2 heading=device.wait(
+            Until.findObject(By.desc("Открыть медиатеку переписки")),15000);
+        assertNotNull("Chat heading must open the gallery",heading);
+        heading.click();device.waitForIdle();
+    }
+    private void openHelpFromCurrentScreen(ActivityScenario<MainActivity> scenario)throws Exception{
+        // The chat drawer no longer overlaps Search or other tool screens.
+        // This regression specifically checks state restoration from Help;
+        // the separate menu-tour test covers visible drawer navigation.
+        scenario.onActivity(a->{
+            try{
+                java.lang.reflect.Method show=MainActivity.class.getDeclaredMethod("showHelp");
+                show.setAccessible(true);show.invoke(a);
+            }catch(Exception e){throw new AssertionError("Cannot open Help for restoration test",e);}
+        });
+        device.waitForIdle();
+    }
+
     private void fixture(ScenarioCheck check)throws Exception{
         Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
         String key="qa00life_"+UUID.randomUUID().toString().replace("-","");
@@ -80,29 +101,27 @@ public class Qa00MediaLifecycleTest {
         throw new AssertionError("No synthetic message visible after scrolling");
     }
     private void openPhotoFilter(){
-        tap("▦ Медиа");tap("Фото");
+        openMediaFromChat();tap("Фото");
         assertNotNull("Synthetic photo tile missing",device.wait(Until.findObject(By.descContains("Фото ·")),15000));
+    }
+    private void jumpFromPhotoTile(){
+        // The modern RecyclerView gallery has one tile instead of a permanent
+        // 44dp jump badge. The tile's long-press actions expose the source chat.
+        UiObject2 tile=device.wait(Until.findObject(By.descContains("Фото ·")),15000);
+        assertNotNull("Photo gallery tile missing",tile);
+        tile.longClick();device.waitForIdle();
+        UiObject2 jump=device.wait(Until.findObject(By.textContains("Перейти к сообщению")),10000);
+        assertNotNull("Gallery must expose source-message navigation",jump);
+        jump.click();device.waitForIdle();
     }
     @Test public void searchResultsPositionAndQuerySurviveHelpRoundTrip()throws Exception{
         fixture(scenario->{
-            tap("≡");
-            UiObject2 search=device.wait(Until.findObject(By.textContains("Поиск")),15000);
-            assertNotNull("Search menu missing",search);search.click();device.waitForIdle();
+            tap("⋯");tap("Найти сообщение");
             UiObject2 input=device.wait(Until.findObject(By.desc("Поиск по сообщениям")),15000);
             assertNotNull("Search input missing",input);input.setText("QA");tap("Найти");
             assertNotNull("Synthetic results missing",device.wait(Until.findObject(By.textContains("QA_LIFE_")),15000));
             String marker=scrollToVisibleMarker();
-            tap("≡");UiObject2 tools=device.wait(Until.findObject(By.textContains("Все инструменты")),15000);
-            assertNotNull("Tools menu missing",tools);tools.click();device.waitForIdle();
-            UiObject2 help=null;
-            for(int i=0;i<10;i++){
-                help=device.findObject(By.textContains("Помощь и инструкция"));
-                if(help!=null&&!help.getVisibleBounds().isEmpty())break;
-                UiObject2 scroll=device.findObject(By.clazz("android.widget.ScrollView"));
-                assertNotNull("Drawer viewport missing",scroll);Rect b=scroll.getVisibleBounds();
-                device.swipe(b.centerX(),b.top+b.height()*3/4,b.centerX(),b.top+b.height()/4,25);device.waitForIdle();
-            }
-            assertNotNull("Help item missing",help);help.click();device.waitForIdle();
+            openHelpFromCurrentScreen(scenario);
             assertNotNull("Help did not open",device.wait(Until.findObject(By.text("СПРАВОЧНИК")),15000));
             device.pressBack();device.waitForIdle();
             UiObject2 restored=device.wait(Until.findObject(By.text(marker)),15000);
@@ -117,18 +136,7 @@ public class Qa00MediaLifecycleTest {
     @Test public void helpRoundTripPreservesScrolledChatPosition()throws Exception{
         fixture(scenario->{
             String marker=scrollToVisibleMarker();
-            tap("≡");
-            UiObject2 tools=device.wait(Until.findObject(By.textContains("Все инструменты")),15000);
-            assertNotNull("Tools menu missing",tools);tools.click();device.waitForIdle();
-            UiObject2 help=null;
-            for(int i=0;i<10;i++){
-                help=device.findObject(By.textContains("Помощь и инструкция"));
-                if(help!=null&&!help.getVisibleBounds().isEmpty())break;
-                UiObject2 scroll=device.findObject(By.clazz("android.widget.ScrollView"));
-                assertNotNull("Drawer viewport missing",scroll);Rect b=scroll.getVisibleBounds();
-                device.swipe(b.centerX(),b.top+b.height()*3/4,b.centerX(),b.top+b.height()/4,25);device.waitForIdle();
-            }
-            assertNotNull("Help item missing",help);help.click();device.waitForIdle();
+            openHelpFromCurrentScreen(scenario);
             assertNotNull("Help did not open",device.wait(Until.findObject(By.text("СПРАВОЧНИК")),15000));
             device.pressBack();device.waitForIdle();
             UiObject2 restored=device.wait(Until.findObject(By.text(marker)),15000);
@@ -144,7 +152,7 @@ public class Qa00MediaLifecycleTest {
             String marker=scrollToVisibleMarker();openPhotoFilter();
             scenario.recreate();device.waitForIdle();
             assertNotNull("Media page lost after recreation",device.wait(Until.findObject(By.descContains("Фото ·")),15000));
-            tap("💬 Переписка");
+            tap("‹");
             assertNotNull("Chat position lost after recreating media: "+marker,
                 device.wait(Until.findObject(By.text(marker)),15000));
         });
@@ -152,8 +160,7 @@ public class Qa00MediaLifecycleTest {
     @Test public void explicitMediaJumpWinsOverSavedChatPosition()throws Exception{
         fixture(scenario->{
             scrollToVisibleMarker();openPhotoFilter();
-            UiObject2 go=device.wait(Until.findObject(By.desc("К исходному сообщению")),15000);
-            assertNotNull("Jump control missing",go);go.click();device.waitForIdle();
+            jumpFromPhotoTile();
             assertNotNull("Did not jump to the photo message",
                 device.wait(Until.findObject(By.text("QA_LIFE_026")),15000));
         });
@@ -183,10 +190,16 @@ public class Qa00MediaLifecycleTest {
                     f.setAccessible(true);saved[0]=f.getLong(a);
                 }catch(Exception e){throw new AssertionError(e);}
             });
-            assertTrue("Old anchor must be in same page and sufficiently far from target: "+saved[0],
-                saved[0]>=19&&saved[0]<=21);
-            UiObject2 go=device.wait(Until.findObject(By.desc("К исходному сообщению")),15000);
-            assertNotNull(go);go.click();device.waitForIdle();
+            // The updated chat layout can save a different old reading
+            // anchor depending on screen height and dynamic media rows.
+            // Force an older valid position to verify jump priority itself.
+            scenario.onActivity(a->{
+                try{
+                    java.lang.reflect.Field f=MainActivity.class.getDeclaredField("pendingRestoreId");
+                    f.setAccessible(true);f.setLong(a,20L);
+                }catch(Exception e){throw new AssertionError(e);}
+            });
+            jumpFromPhotoTile();
             UiObject2 target=device.wait(Until.findObject(By.text("QA_LIFE_026")),15000);
             assertNotNull("Old anchor overrode explicit jump",target);
             UiObject2 chatViewport=device.wait(Until.findObject(By.clazz("android.widget.ScrollView")),15000);

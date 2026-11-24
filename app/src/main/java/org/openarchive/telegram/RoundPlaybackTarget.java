@@ -8,6 +8,14 @@ final class RoundPlaybackTarget {
         return tileBottom<=viewportTop||tileTop>=viewportBottom;
     }
 
+    /**
+     * Chat pagination can remove a playing tile without a final scroll event.
+     * A detached playing source should float, not continue invisibly.
+     */
+    static boolean shouldAutoFloat(boolean attached,int top,int bottom,int viewportTop,int viewportBottom){
+        return !attached||isOutside(top,bottom,viewportTop,viewportBottom);
+    }
+
     /** Require two-thirds visibility to return from the bubble, avoiding edge flicker. */
     static boolean isMostlyVisible(int tileTop,int tileBottom,int viewportTop,int viewportBottom){
         int height=tileBottom-tileTop;

@@ -23,7 +23,13 @@ import org.apache.commons.compress.compressors.xz.XZCompressorInputStream;
  */
 final class ArchiveReadOnly {
     static final int MAX_ENTRIES=20000, MAX_PREVIEW_BYTES=16*1024*1024;
-    static final long MAX_TEMP_BYTES=512L*1024*1024;
+    /**
+     * Large encrypted exports must not fail because of an old 512 MiB preview cap.
+     * Keep a real free-space reserve, shared with the bounded import path.
+     */
+    static long temporaryCopyLimit(long availableBytes){
+        return ArchiveFileImport.maxTemporaryCopyForFreeBytes(availableBytes);
+    }
     static final class Entry {
         final String name;final long size;final boolean directory,encrypted;
         Entry(String n,long s,boolean d,boolean e){name=n;size=s;directory=d;encrypted=e;}
@@ -105,65 +111,117 @@ final class ArchiveReadOnly {
         throw new IOException("Формат архива пока не поддерживается");
     }
     private static byte[] seven(Context ctx,Uri uri,char[] password,String requested,int limit,List<Entry> found)throws Exception{
+        // The Android document picker may return a pipe (e.g. cloud/third-party
+        // providers). SevenZFile requires random access; retry only when the
+        // descriptor is not seekable, not when decryption/CRC validation fails.
         try(ParcelFileDescriptor fd=ctx.getContentResolver().openFileDescriptor(uri,"r")){
-            if(fd==null)throw new IOException("7z недоступен");
-            try(FileInputStream stream=new FileInputStream(fd.getFileDescriptor());
-                SevenZFile archive=SevenZFile.builder().setSeekableByteChannel(stream.getChannel())
-                    .setMaxMemoryLimitKiB(65536).setPassword(password).get()){
-                SevenZArchiveEntry e;int count=0;
-                while((e=archive.getNextEntry())!=null){
-                    if(++count>MAX_ENTRIES)throw new IOException("Слишком много элементов 7z");
-                    String path=e.getName();
-                    if(found!=null)add(found,path,e.getSize(),e.isDirectory(),e.getContentMethods()!=null&&
-                        e.getContentMethods().toString().contains("AES"));
-                    if(requested!=null&&requested.equals(path)&&!e.isDirectory()){
-                        if(e.getSize()>limit)throw new IOException("Вложение слишком большое");
-                        return copy7z(archive,limit);
+            if(fd!=null){
+                try(FileInputStream stream=new FileInputStream(fd.getFileDescriptor())){
+                    boolean seekable;
+                    try{
+                        stream.getChannel().position(0);
+                        stream.getChannel().size();
+                        seekable=true;
+                    }catch(IOException|UnsupportedOperationException notSeekable){
+                        seekable=false;
                     }
+                    if(seekable)return sevenSeekable(stream.getChannel(),password,requested,limit,found);
                 }
-                if(requested!=null)throw new IOException("Вложенный файл не найден");
-                return null;
             }
+        }catch(java.io.FileNotFoundException unavailable){
+            // Some content providers expose only an InputStream. Copy safely.
+        }
+        File temporary=cached(ctx,uri,"7z");
+        try(FileInputStream input=new FileInputStream(temporary)){
+            return sevenSeekable(input.getChannel(),password,requested,limit,found);
+        }finally{temporary.delete();}
+    }
+    private static byte[] sevenSeekable(java.nio.channels.SeekableByteChannel channel,
+                                       char[] password,String requested,int limit,List<Entry> found)throws Exception{
+        // Match the import reader's 128 MiB dictionary bound.
+        try(SevenZFile archive=SevenZFile.builder().setSeekableByteChannel(channel)
+                .setMaxMemoryLimitKiB(131072).setPassword(password).get()){
+            SevenZArchiveEntry e;int count=0;
+            while((e=archive.getNextEntry())!=null){
+                if(++count>MAX_ENTRIES)throw new IOException("Слишком много элементов 7z");
+                String path=e.getName();
+                if(found!=null)add(found,path,e.getSize(),e.isDirectory(),e.getContentMethods()!=null&&
+                    e.getContentMethods().toString().contains("AES"));
+                if(requested!=null&&requested.equals(path)&&!e.isDirectory()){
+                    if(e.getSize()>limit)throw new IOException("Вложение слишком большое");
+                    return copy7z(archive,limit);
+                }
+            }
+            if(requested!=null)throw new IOException("Вложенный файл не найден");
+            return null;
         }
     }
     private static byte[] zip(Context ctx,Uri uri,char[] password,String requested,int limit,List<Entry> found)throws Exception{
+        // A SAF-backed content URI is not guaranteed to be seekable. Detect pipes
+        // before asking Commons Compress to parse its central directory.
         try(ParcelFileDescriptor fd=ctx.getContentResolver().openFileDescriptor(uri,"r")){
-            if(fd==null)throw new IOException("ZIP недоступен");
-            try(FileInputStream stream=new FileInputStream(fd.getFileDescriptor());
-                org.apache.commons.compress.archivers.zip.ZipFile archive=
-                    org.apache.commons.compress.archivers.zip.ZipFile.builder().setSeekableByteChannel(stream.getChannel()).get()){
-                Enumeration<ZipArchiveEntry> entries=archive.getEntries();int count=0;
-                while(entries.hasMoreElements()){
-                    ZipArchiveEntry e=entries.nextElement();
-                    if(++count>MAX_ENTRIES)throw new IOException("Слишком много элементов ZIP");
-                    boolean encrypted=e.getGeneralPurposeBit().usesEncryption();
-                    if(found!=null)add(found,e.getName(),e.getSize(),e.isDirectory(),encrypted);
-                    if(requested!=null&&requested.equals(e.getName())&&!e.isDirectory()){
-                        if(!safeName(e.getName()))throw new IOException("Небезопасный путь вложения");
-                        if(e.getSize()>limit)throw new IOException("Вложение слишком большое");
-                        if(encrypted){
-                            if(password==null||password.length==0)throw new IOException("ZIP зашифрован: введите пароль");
-                            return encryptedZip(ctx,uri,requested,password,limit);
+            if(fd!=null){
+                try(FileInputStream stream=new FileInputStream(fd.getFileDescriptor())){
+                    boolean seekable;
+                    try{
+                        stream.getChannel().position(0);
+                        stream.getChannel().size();
+                        seekable=true;
+                    }catch(IOException|UnsupportedOperationException notSeekable){
+                        seekable=false;
+                    }
+                    if(seekable)return zipSeekable(ctx,uri,stream.getChannel(),null,
+                        password,requested,limit,found);
+                }
+            }
+        }catch(java.io.FileNotFoundException unavailable){
+            // A provider may expose an InputStream without a file descriptor.
+        }
+        File temporary=cached(ctx,uri,"zip");
+        try(FileInputStream input=new FileInputStream(temporary)){
+            return zipSeekable(ctx,uri,input.getChannel(),temporary,password,requested,limit,found);
+        }finally{temporary.delete();}
+    }
+    private static byte[] zipSeekable(Context ctx,Uri uri,
+                    java.nio.channels.SeekableByteChannel channel,File temporary,
+                    char[] password,String requested,int limit,List<Entry> found)throws Exception{
+        try(org.apache.commons.compress.archivers.zip.ZipFile archive=
+                org.apache.commons.compress.archivers.zip.ZipFile.builder().setSeekableByteChannel(channel).get()){
+            Enumeration<ZipArchiveEntry> entries=archive.getEntries();int count=0;
+            while(entries.hasMoreElements()){
+                ZipArchiveEntry e=entries.nextElement();
+                if(++count>MAX_ENTRIES)throw new IOException("Слишком много элементов ZIP");
+                boolean encrypted=e.getGeneralPurposeBit().usesEncryption();
+                if(found!=null)add(found,e.getName(),e.getSize(),e.isDirectory(),encrypted);
+                if(requested!=null&&requested.equals(e.getName())&&!e.isDirectory()){
+                    if(!safeName(e.getName()))throw new IOException("Небезопасный путь вложения");
+                    if(e.getSize()>limit)throw new IOException("Вложение слишком большое");
+                    if(encrypted){
+                        if(password==null||password.length==0)
+                            throw new IOException("ZIP зашифрован: введите пароль");
+                        // Reuse the one seekable temporary copy on pipe providers;
+                        // a second full copy could exhaust storage on large exports.
+                        return temporary!=null
+                            ?encryptedZipFromFile(temporary,requested,password,limit)
+                            :encryptedZip(ctx,uri,requested,password,limit);
+                    }
+                    // ZIP ZSTD requires an optional native library deliberately excluded
+                    // from the offline reader to keep APK portable and small.
+                    if(e.getMethod()==93||e.getMethod()==20)
+                        throw new IOException("ZIP Zstandard пока не поддерживается");
+                    if(!archive.canReadEntryData(e))
+                        throw new IOException("Сжатие вложения не поддерживается");
+                    try(InputStream input=archive.getInputStream(e)){
+                        byte[] content=copyLimited(input,limit);
+                        if(e.getSize()>=0&&content.length!=e.getSize())
+                            throw new IOException("Размер ZIP-вложения не совпадает с заголовком");
+                        if(e.getCrc()>=0){
+                            java.util.zip.CRC32 sum=new java.util.zip.CRC32();
+                            sum.update(content);
+                            if(sum.getValue()!=e.getCrc())
+                                throw new IOException("Повреждённый ZIP: контрольная сумма CRC не совпала");
                         }
-                        // ZIP ZSTD requires an optional native library deliberately excluded
-                        // from the offline reader to keep APK portable and small.
-                        if(e.getMethod()==93||e.getMethod()==20)
-                            throw new IOException("ZIP Zstandard пока не поддерживается");
-                        if(!archive.canReadEntryData(e))throw new IOException("Сжатие вложения не поддерживается");
-                        try(InputStream input=archive.getInputStream(e)){
-                            byte[] content=copyLimited(input,limit);
-                            // Seekable ZIP readers may not verify CRC on getInputStream.
-                            // Never display silently corrupted text or Office data.
-                            if(e.getSize()>=0&&content.length!=e.getSize())
-                                throw new IOException("Размер ZIP-вложения не совпадает с заголовком");
-                            if(e.getCrc()>=0){
-                                java.util.zip.CRC32 sum=new java.util.zip.CRC32();
-                                sum.update(content);
-                                if(sum.getValue()!=e.getCrc())
-                                    throw new IOException("Повреждённый ZIP: контрольная сумма CRC не совпала");
-                            }
-                            return content;
-                        }
+                        return content;
                     }
                 }
             }
@@ -176,11 +234,14 @@ final class ArchiveReadOnly {
         try(InputStream raw=ctx.getContentResolver().openInputStream(uri);
             OutputStream out=new BufferedOutputStream(new FileOutputStream(temp))){
             if(raw==null)throw new IOException("Не удалось открыть архив");
+            // Leave 10% (at least 256 MiB) free for Android and other apps.
+            final long copyLimit=temporaryCopyLimit(ctx.getCacheDir().getUsableSpace());
             byte[] buf=new byte[65536];int n;long copied=0;
             while((n=raw.read(buf))!=-1){
                 if(n==0)continue;
                 copied+=n;
-                if(copied>MAX_TEMP_BYTES)throw new IOException("RAR/ZIP с шифрованием превышает лимит временного просмотра 512 МБ");
+                if(copied>copyLimit)
+                    throw new IOException("Недостаточно свободного места для просмотра большого архива. Освободи место на телефоне; исходный файл не изменён.");
                 out.write(buf,0,n);
             }
             return temp;
@@ -188,12 +249,16 @@ final class ArchiveReadOnly {
     }
     private static byte[] encryptedZip(Context ctx,Uri uri,String path,char[] password,int limit)throws Exception{
         File file=cached(ctx,uri,"zip");
+        try{return encryptedZipFromFile(file,path,password,limit);}
+        finally{file.delete();}
+    }
+    private static byte[] encryptedZipFromFile(File file,String path,char[] password,int limit)throws Exception{
         try(net.lingala.zip4j.ZipFile archive=new net.lingala.zip4j.ZipFile(file,password)){
             net.lingala.zip4j.model.FileHeader e=archive.getFileHeader(path);
             if(e==null||e.isDirectory())throw new IOException("Файл в ZIP отсутствует");
             if(e.getUncompressedSize()>limit)throw new IOException("Вложение слишком большое");
             try(InputStream input=archive.getInputStream(e)){return copyLimited(input,limit);}
-        }finally{file.delete();}
+        }
     }
     private static byte[] rar(Context ctx,Uri uri,char[] password,String requested,int limit,List<Entry> found)throws Exception{
         File file=cached(ctx,uri,"rar");

@@ -59,6 +59,13 @@ final class ArchiveFileImport {
     private static final long MAX_ENTRY=12L*1024*1024*1024; // a large exported video can exceed 4 GiB
     private static final long MAX_TOTAL=60L*1024*1024*1024;
     private static final int MAX_FILES=200000;
+    private static final long MIB=1024L*1024L;
+    /** Allow large Telegram exports when there is room; never fill user storage. */
+    static long maxTemporaryCopyForFreeBytes(long freeBytes){
+        if(freeBytes<=0)return 0; // no confirmed free space: never risk filling storage
+        long reserve=Math.max(256L*MIB,freeBytes/10L);
+        return Math.min(MAX_TOTAL,Math.max(0,freeBytes-reserve));
+    }
     static final class Budget {
         long total; int count;
         void next(String name) throws IOException{
@@ -147,6 +154,31 @@ final class ArchiveFileImport {
     }
     private static void extractZipWithPassword(Context ctx,Uri uri,File root,char[] password,
             Budget budget,Progress progress)throws Exception{
+        try{
+            extractZipStreaming(ctx,uri,root,password,budget,progress);
+        }catch(net.lingala.zip4j.exception.ZipException streamFailure){
+            if(password==null||password.length==0)throw streamFailure;
+            // A definite authentication failure is not a broken ZIP header:
+            // retrying the entire (possibly multi-gigabyte) file just wastes space.
+            if(streamFailure.getType()==net.lingala.zip4j.exception.ZipException.Type.WRONG_PASSWORD)
+                throw streamFailure;
+            // Some AES ZIPs written by 7-Zip rely on central-directory metadata
+            // or data descriptors that a sequential ZIP reader cannot recover.
+            // Retry with Zip4j's random-access reader; do not weaken path or size checks.
+            progress.update("Пробую альтернативное открытие ZIP с паролем…");
+            deleteTree(root);
+            if(!root.mkdirs())throw new IOException("Не удалось очистить временную папку ZIP",streamFailure);
+            budget.count=0;budget.total=0;
+            try{
+                extractZipFromCentralDirectory(ctx,uri,root,password,budget,progress);
+            }catch(Exception recoveryFailure){
+                recoveryFailure.addSuppressed(streamFailure);
+                throw recoveryFailure;
+            }
+        }
+    }
+    private static void extractZipStreaming(Context ctx,Uri uri,File root,char[] password,
+            Budget budget,Progress progress)throws Exception{
         try(InputStream source=ctx.getContentResolver().openInputStream(uri)){
             if(source==null)throw new IOException("Нет доступа к ZIP");
             try(net.lingala.zip4j.io.inputstream.ZipInputStream zip=
@@ -157,7 +189,9 @@ final class ArchiveFileImport {
                 while((entry=zip.getNextEntry())!=null){
                     String name=entry.getFileName();
                     budget.next(name==null?"":name);
-                    BackupEntryPolicy.requireSafe(name,entry.isDirectory());
+                    String safeName=entry.isDirectory()&&name!=null&&!name.endsWith("/")
+                        ?name+"/":name;
+                    BackupEntryPolicy.requireSafe(safeName,entry.isDirectory());
                     if(entry.isEncrypted()&&(password==null||password.length==0))
                         throw new PasswordRequired("ZIP защищён паролем. Введи пароль от архива.");
                     if(entry.isDirectory())continue;
@@ -177,29 +211,98 @@ final class ArchiveFileImport {
             }
         }
     }
+    /**
+     * Central-directory fallback for password-protected ZIPs with unusual
+     * headers. A SAF provider may return a pipe rather than a seekable file;
+     * the bounded private temporary copy is deleted even if decoding fails.
+     */
+    static void extractZipFromCentralDirectory(Context ctx,Uri uri,File root,char[] password,
+            Budget budget,Progress progress)throws Exception{
+        File temporary=File.createTempFile("telegram-zip-retry-", ".zip",ctx.getCacheDir());
+        try{
+            final long copyLimit=maxTemporaryCopyForFreeBytes(ctx.getCacheDir().getUsableSpace());
+            long copied=0;
+            try(InputStream source=ctx.getContentResolver().openInputStream(uri);
+                OutputStream destination=new BufferedOutputStream(new FileOutputStream(temporary))){
+                if(source==null)throw new IOException("Повторно открыть ZIP не удалось");
+                byte[] buffer=new byte[128*1024];int n;
+                while((n=source.read(buffer))!=-1){
+                    copied+=n;
+                    if(copied>copyLimit)
+                        throw new IOException("Недостаточно свободного места для временного открытия большого ZIP. Освободи место на телефоне и повтори. Исходный файл не изменён.");
+                    destination.write(buffer,0,n);
+                }
+            }
+            try(net.lingala.zip4j.ZipFile archive=new net.lingala.zip4j.ZipFile(temporary,password)){
+                List<net.lingala.zip4j.model.FileHeader> entries=archive.getFileHeaders();
+                byte[] buffer=new byte[128*1024];
+                for(net.lingala.zip4j.model.FileHeader entry:entries){
+                    String name=entry.getFileName();
+                    budget.next(name==null?"":name);
+                    String safeName=entry.isDirectory()&&name!=null&&!name.endsWith("/")
+                        ?name+"/":name;
+                    BackupEntryPolicy.requireSafe(safeName,entry.isDirectory());
+                    if(entry.isEncrypted()&&(password==null||password.length==0))
+                        throw new PasswordRequired("ZIP защищён паролем. Введи пароль от архива.");
+                    if(entry.isDirectory())continue;
+                    if(entry.getUncompressedSize()>MAX_ENTRY)
+                        throw new IOException("Слишком большой файл в ZIP");
+                    File target=safeFile(root,name);
+                    File parent=target.getParentFile();
+                    if(!parent.isDirectory()&&!parent.mkdirs())
+                        throw new IOException("Не создана папка ZIP");
+                    if(target.exists())throw new IOException("Повторное имя в ZIP");
+                    long written=0;
+                    try(InputStream input=archive.getInputStream(entry);
+                        OutputStream output=new BufferedOutputStream(new FileOutputStream(target))){
+                        int n;
+                        while((n=input.read(buffer))!=-1){
+                            written+=n;budget.add(n,written);
+                            output.write(buffer,0,n);
+                        }
+                    }
+                    emit(budget,progress);
+                }
+            }
+        }finally{
+            if(!temporary.delete())temporary.deleteOnExit();
+        }
+    }
     private static void extractSevenZ(Context ctx,Uri uri,File root,char[] password,
             Budget budget,Progress progress)throws Exception{
         // SAF document providers may return a pipe instead of a seekable file.
         // SevenZFile requires seeking; use the local channel where possible,
         // otherwise spool safely to a bounded temporary file.
         try{
-            try(android.os.ParcelFileDescriptor descriptor=ctx.getContentResolver().openFileDescriptor(uri,"r")){
-                if(descriptor==null)throw new IOException("Нет доступа к 7z");
-                try(FileInputStream input=new FileInputStream(descriptor.getFileDescriptor())){
-                    boolean seekable;
-                    try{
-                        input.getChannel().position(0);
-                        input.getChannel().size();
-                        seekable=true;
-                    }catch(IOException|UnsupportedOperationException notSeekable){seekable=false;}
-                    if(seekable){
-                        readSevenZ(input.getChannel(),root,password,budget,progress);
-                        return;
+            // Some Android document providers expose a stream or a sliced asset
+            // rather than a whole-file descriptor. A missing seekable descriptor
+            // is not an import failure if openInputStream is still available.
+            try{
+                try(android.os.ParcelFileDescriptor descriptor=
+                        ctx.getContentResolver().openFileDescriptor(uri,"r")){
+                    if(descriptor!=null){
+                        try(FileInputStream input=new FileInputStream(descriptor.getFileDescriptor())){
+                            boolean seekable;
+                            try{
+                                input.getChannel().position(0);
+                                input.getChannel().size();
+                                seekable=true;
+                            }catch(IOException|UnsupportedOperationException notSeekable){
+                                seekable=false;
+                            }
+                            if(seekable){
+                                readSevenZ(input.getChannel(),root,password,budget,progress);
+                                return;
+                            }
+                        }
                     }
                 }
+            }catch(java.io.FileNotFoundException noWholeFile){
+                // Retry as a bounded private stream below.
             }
             File temporary=File.createTempFile("telegram-sevenz-", ".7z",ctx.getCacheDir());
             try{
+                final long copyLimit=maxTemporaryCopyForFreeBytes(ctx.getCacheDir().getUsableSpace());
                 long copied=0;
                 try(InputStream input=ctx.getContentResolver().openInputStream(uri);
                     OutputStream output=new BufferedOutputStream(new FileOutputStream(temporary))){
@@ -207,8 +310,8 @@ final class ArchiveFileImport {
                     byte[] block=new byte[128*1024];int count;
                     while((count=input.read(block))!=-1){
                         copied+=count;
-                        if(copied>2L*1024*1024*1024)
-                            throw new IOException("7z из облачного файлового провайдера больше 2 ГБ. Сохрани архив локально и выбери снова.");
+                        if(copied>copyLimit)
+                            throw new IOException("Недостаточно свободного места для временного открытия большого 7z. Освободи место на телефоне или открой локальный файл.");
                         output.write(block,0,count);
                     }
                 }
@@ -259,6 +362,10 @@ final class ArchiveFileImport {
         // until import has finished; original remains at its selected SAF location.
         File compressed=File.createTempFile("telegram-", ".rar",ctx.getCacheDir());
         try{
+            // RAR also needs a seekable temporary copy. Apply the same free-space
+            // reserve as ZIP/7z rather than relying on the 60 GiB archive limit:
+            // otherwise a large import could consume nearly all phone storage.
+            final long copyLimit=maxTemporaryCopyForFreeBytes(ctx.getCacheDir().getUsableSpace());
             try(InputStream source=ctx.getContentResolver().openInputStream(uri);
                 OutputStream out=new BufferedOutputStream(new FileOutputStream(compressed))){
                 if(source==null)throw new IOException("RAR недоступен");
@@ -266,7 +373,8 @@ final class ArchiveFileImport {
                 long archiveBytes=0;
                 while((n=source.read(buffer))!=-1){
                     archiveBytes+=n;
-                    if(archiveBytes>MAX_TOTAL)throw new IOException("Слишком большой исходный RAR");
+                    if(archiveBytes>copyLimit)
+                        throw new IOException("Недостаточно свободного места для временного открытия RAR. Освободи место на телефоне; исходный архив не изменён.");
                     out.write(buffer,0,n);
                 }
             }

@@ -1013,16 +1013,14 @@ public class MainActivity extends Activity {
     private void showSideMenu(){
         final Dialog dialog=new FontDialog(this,android.R.style.Theme_Translucent_NoTitleBar);
         FrameLayout overlay=new FrameLayout(this);overlay.setBackgroundColor(0x99040912);
-        // The translucent drawer is laid out behind system bars on some Android
-        // versions. Respect both insets so the title/footer are never clipped.
-        int statusId=getResources().getIdentifier("status_bar_height","dimen","android");
-        int navigationId=getResources().getIdentifier("navigation_bar_height","dimen","android");
-        int topInset=statusId==0?px(24):getResources().getDimensionPixelSize(statusId);
-        int bottomInset=navigationId==0?px(20):getResources().getDimensionPixelSize(navigationId);
+        // Draw the drawer background through the system bars, but keep its contents
+        // inside actual device insets (including cutouts and gesture navigation).
         LinearLayout pane=column();
-        pane.setPadding(px(14),topInset+px(13),px(14),bottomInset+px(12));
+        pane.setPadding(px(14),px(13),px(14),px(12));
+        // This panel touches the display edge: rounded top corners exposed the
+        // dark dialog scrim behind Android's status bar as a black notch.
         pane.setBackground(gradient(themeIndex==2?0xfaffffff:0xff172b3d,
-            themeIndex==2?0xffe8edf4:0xff112132,18));pane.setElevation(px(12));
+            themeIndex==2?0xffe8edf4:0xff112132,0));pane.setElevation(px(12));
         int width=Math.min(px(348),getResources().getDisplayMetrics().widthPixels-px(38));
         FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(width,-1,Gravity.START);
         overlay.addView(pane,lp);
@@ -1095,9 +1093,51 @@ public class MainActivity extends Activity {
         TextView label=text("Telegram Archive · "+installedVersionName()+" QA\nЛокально · Без аккаунта · Без серверов",11,SUB);
         label.setPadding(px(5),px(12),0,px(5));pane.addView(label);
         overlay.setOnClickListener(v->closeDrawer(dialog,pane,null));pane.setOnClickListener(v->{});
-        dialog.setContentView(overlay);dialog.show();Window w=dialog.getWindow();if(w!=null)w.setLayout(-1,-1);
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(overlay,(view,insets)->{
+            androidx.core.graphics.Insets safe=insets.getInsets(
+                androidx.core.view.WindowInsetsCompat.Type.systemBars()|
+                androidx.core.view.WindowInsetsCompat.Type.displayCutout());
+            pane.setPadding(px(14)+safe.left,safe.top+px(13),
+                px(14)+safe.right,safe.bottom+px(12));
+            return insets;
+        });
+        dialog.setContentView(overlay);
+        dialog.show();
+        Window w=dialog.getWindow();
+        if(w!=null)styleDrawerWindow(w,themeIndex==2);
+        androidx.core.view.ViewCompat.requestApplyInsets(overlay);
         pane.setTranslationX(-width);pane.animate().translationX(0).setDuration(motionDuration(260))
             .setInterpolator(new DecelerateInterpolator()).start();
+    }
+    /** A true edge-to-edge drawer, with system-bar icon contrast matching the theme. */
+    static void styleDrawerWindow(Window window,boolean lightSystemBars){
+        // A transparent window is required so the drawer (rather than the
+        // dialog theme's default dark background) paints behind system bars.
+        window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+        window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS|
+            WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window,false);
+        window.setStatusBarColor(Color.TRANSPARENT);
+        window.setNavigationBarColor(Color.TRANSPARENT);
+        if(Build.VERSION.SDK_INT>=29){
+            window.setStatusBarContrastEnforced(false);
+            window.setNavigationBarContrastEnforced(false);
+        }
+        int flags=View.SYSTEM_UI_FLAG_LAYOUT_STABLE|
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+        if(lightSystemBars)flags|=View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|
+            View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        window.getDecorView().setSystemUiVisibility(flags);
+        if(Build.VERSION.SDK_INT>=30){
+            WindowInsetsController controller=window.getInsetsController();
+            if(controller!=null){
+                int mask=WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|
+                    WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                controller.setSystemBarsAppearance(lightSystemBars?mask:0,mask);
+            }
+        }
+        window.setLayout(-1,-1);
     }
     private void closeDrawer(Dialog dialog,View pane,Runnable next){
         if(!dialog.isShowing())return;
@@ -1120,8 +1160,19 @@ public class MainActivity extends Activity {
             title.setText((expand?"⌄  ":"›  ")+name);
             title.setContentDescription((expand?"Свернуть ":"Развернуть ")+name);
             contents.setVisibility(expand?View.VISIBLE:View.GONE);
-            if(expand){contents.setAlpha(0f);contents.animate().alpha(1f)
-                .setDuration(motionDuration(170)).start();}
+            if(expand){
+                contents.setAlpha(0f);contents.animate().alpha(1f)
+                    .setDuration(motionDuration(170)).start();
+                // A section expanded near the bottom must reveal its actions;
+                // otherwise users can tap a heading and see no visible change.
+                group.post(()->{
+                    if(contents.getVisibility()!=View.VISIBLE)return;
+                    if(parent.getParent() instanceof ScrollView){
+                        ScrollView menu=(ScrollView)parent.getParent();
+                        menu.smoothScrollTo(0,Math.max(0,group.getTop()-px(12)));
+                    }
+                });
+            }
         });
         space(group,3);
     }
@@ -2538,11 +2589,15 @@ public class MainActivity extends Activity {
             startRoundPlayback(attachment,sourceHolder,sourcePoster,sourceOverlay,resumeMs,resumePlaying);
             return;
         }
-        if(player==null||inlineHolder==null||!inlineHolder.isAttachedToWindow())return;
+        if(player==null||inlineHolder==null)return;
         try{if(!player.isPlaying())return;}catch(Exception badState){return;}
-        int[] tile=new int[2];inlineHolder.getLocationOnScreen(tile);
-        if(RoundPlaybackTarget.isOutside(tile[1],tile[1]+inlineHolder.getHeight(),
-            viewportTop,viewportBottom)){
+        // A chat rebuild can detach the original round view before another
+        // scroll callback arrives. Keep the active video visible by floating it.
+        boolean attached=inlineHolder.isAttachedToWindow();
+        int[] tile=new int[2];
+        if(attached)inlineHolder.getLocationOnScreen(tile);
+        if(RoundPlaybackTarget.shouldAutoFloat(attached,tile[1],
+            tile[1]+inlineHolder.getHeight(),viewportTop,viewportBottom)){
             if(playingAttachment!=null&&"round".equals(playingAttachment.kind)){
                 RoundControls controls=inlineHolder.getTag() instanceof RoundControls
                     ?(RoundControls)inlineHolder.getTag():null;
@@ -2803,6 +2858,8 @@ public class MainActivity extends Activity {
             if(!home){saveReadingProgress();home=true;screen="chat";returnScreen="";searchReturnsToAnalytics=false;showPage();}});
         headerLogo=text("◇",29,ACCENT);headerLogo.setGravity(Gravity.CENTER);headerLogo.setContentDescription("Локальный архив");head.addView(headerLogo,p(34,42));
         LinearLayout headings=column();headings.setGravity(Gravity.CENTER_VERTICAL);
+        // Keep the heading away from the circular Back button on compact phones.
+        headings.setPadding(px(7),0,0,0);
         head.addView(headings,new LinearLayout.LayoutParams(0,px(44),1));
         title=text("Telegram Archive",17,FG);title.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
         title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.END);headings.addView(title,p(-1,26));
@@ -2939,7 +2996,9 @@ public class MainActivity extends Activity {
             }else{t.animate().cancel();t.setAlpha(1f);}
         }
         menuButton.setVisibility(View.GONE);navBack.setVisibility(View.VISIBLE);
-        if(headerActions!=null)headerActions.setVisibility(View.VISIBLE);
+        // Each tool screen has its own actions. Repeating the chat overflow in
+        // Media (which already has a gallery menu) creates two identical dots.
+        if(headerActions!=null)headerActions.setVisibility("chat".equals(screen)?View.VISIBLE:View.GONE);
         if(pdfButton!=null)pdfButton.setVisibility("chat".equals(screen)?View.VISIBLE:View.GONE);
         if(headerLogo!=null)headerLogo.setVisibility(View.GONE);
         if(folderButton!=null)folderButton.setVisibility(View.GONE);
@@ -3492,9 +3551,15 @@ public class MainActivity extends Activity {
                 boolean missing=password==null||password.length==0;
                 // An entered wrong 7z key can surface as a generic CRC/decode
                 // failure. Allow another password without guessing corruption.
-                boolean auth=ArchiveFileImport.isPasswordFailure(error)
-                    ||(!missing&&!message.contains("messages.html")&&!message.contains("Слишком")
-                        &&!message.contains("Лимит безопасной"));
+                String lowerMessage=message.toLowerCase(Locale.ROOT);
+                boolean unsupported=lowerMessage.contains("unsupported")||
+                    lowerMessage.contains("not supported")||
+                    lowerMessage.contains("не поддерж");
+                // Unsupported compression and malformed files are not proof of
+                // an incorrect password. Still let users enter one manually.
+                boolean auth=!unsupported&&(ArchiveFileImport.isPasswordFailure(error)
+                    ||(!missing&&"7z".equalsIgnoreCase(extension)&&
+                        (lowerMessage.contains("crc")||lowerMessage.contains("checksum"))));
                 runOnUiThread(()->{
                     importing=false;endImportProgress();folderButton.setEnabled(true);
                     status.setVisibility(View.VISIBLE);
@@ -3512,7 +3577,9 @@ public class MainActivity extends Activity {
                     new FontDialog.Builder(this).setTitle("Не удалось импортировать архив")
                         .setMessage(message+"\nИсходный файл не изменён. Проверь, что внутри есть экспорт Telegram в HTML.")
                         .setNegativeButton("Закрыть",null)
-                        .setPositiveButton("Повторить",(d,w)->importCompressed(source,extension,label,null))
+                        .setNeutralButton("Повторить",(d,w)->importCompressed(source,extension,label,null))
+                        .setPositiveButton(missing?"Ввести пароль":"Другой пароль",
+                            (d,w)->confirmArchiveImport(source,extension,label))
                         .show();
                 });
             }finally{if(password!=null)java.util.Arrays.fill(password,'\0');}
@@ -3612,9 +3679,12 @@ public class MainActivity extends Activity {
                 }
                 boolean gallery="media".equals(tab),find="search".equals(tab),favs="favorites".equals(tab);
                 int count=gallery?db.mediaCount(kind):db.count(find?search:"",find&&deepMode,find&&deepMode?who:"",find&&deepMode&&hasMedia,favs);
-                int pos=gallery?0:(count==0?0:Math.min(requested,Math.max(0,count-1)));
+                // Restore the actual source attachment position (including after
+                // rotation), not always attachment zero. Filter changes reset
+                // mediaOffset via their click handlers.
+                int pos=count==0?0:Math.max(0,Math.min(requested,count-1));
                 List<MessageDb.Attachment> attachments=gallery?
-                    db.mediaPage(kind,0,MediaGalleryState.PAGE_SIZE):null;
+                    db.mediaPage(kind,pos,MediaGalleryState.PAGE_SIZE):null;
                 List<MessageDb.Item> messages=gallery?null:db.page(pos,tab.equals("chat")?Math.max(PAGE,autoLoaded):tab.equals("search")?Math.max(PAGE,searchLoaded):PAGE,find?search:"",find&&deepMode,find&&deepMode?who:"",find&&deepMode&&hasMedia,favs);
                 Map<Long,List<MessageDb.Attachment>> links=messages==null?new HashMap<>():db.attachmentsForMessages(messages);
                 Map<Long,MessageDb.ReplyInfo> replies=messages==null?new HashMap<>():db.replyPreviews(messages);
@@ -3628,11 +3698,11 @@ public class MainActivity extends Activity {
                     }
                     else list.setBackgroundColor(BG);
                     if(gallery){
-                        mediaWindowStart=0;mediaLoaded=attachments.size();mediaTotal=count;
+                        mediaWindowStart=pos;mediaLoaded=pos+attachments.size();mediaTotal=count;
                         mediaAppending=false;mediaPrepending=false;
                         mediaAdapter.reset();mediaAdapter.append(attachments);
                         updateMediaLayout(false);
-                        mediaFastScroller.setProgress(0,count);
+                        mediaFastScroller.setProgress(pos,count);
                         mediaFastScroller.setVisibility(count>1?View.VISIBLE:View.GONE);
                         if(count==0){
                             mediaRecycler.setVisibility(View.GONE);
@@ -3688,7 +3758,8 @@ public class MainActivity extends Activity {
                             "Ничего не найдено — попробуй изменить запрос или фильтры.");
                     }
                     else if(!"chat".equals(tab))status.setText("media".equals(tab)?
-                            "Показано "+mediaLoaded+" из "+count+" · листай вниз":
+                            (mediaLoaded<count?"Показано "+mediaLoaded+" из "+count+" · листай вниз":
+                                "Медиафайлов: "+count):
                             "search".equals(tab)?(search.isEmpty()?"Введите слово или фразу":("Сообщений: "+count+"  ·  Точных вхождений «"+clip(search,28)+"»: "+stats.literalOccurrences+(deepMode?"":"  ·  Быстрый поиск учитывает начала слов"))):
                             "favorites".equals(tab)?"Твои избранные сообщения": "История · удерживай сообщение для действий");
                 });
@@ -4525,7 +4596,8 @@ public class MainActivity extends Activity {
         lastRenderedDay=last;
         // Layout can recreate the source without a scroll callback; check the return
         // after the new chat tiles have attached rather than holding a stale bubble.
-        if(autoFloating&&"chat".equals(screen))scroll.post(this::scheduleFloatingCheck);
+        if((autoFloating||(playingAttachment!=null&&"round".equals(playingAttachment.kind)))
+                &&"chat".equals(screen))scroll.post(this::scheduleFloatingCheck);
         if(append)return; // Never jump to the top when more history is appended.
         if(results&&pendingSearchScroll>=0)return; // The return path restores after layout.
         if("chat".equals(screen)&&pendingRestoreId>0){
@@ -5795,6 +5867,7 @@ public class MainActivity extends Activity {
             mediaTotal<=0||!"media".equals(screen)||home)return;
         int first=mediaLayout.findFirstVisibleItemPosition();
         int absolute=mediaWindowStart+mediaAdapter.ordinalAt(first);
+        mediaOffset=absolute; // persisted across Activity recreation
         mediaFastScroller.setProgress(absolute,mediaTotal);
     }
     /** A fast seek opens the requested source page directly. It never copies media bytes. */
@@ -5802,6 +5875,7 @@ public class MainActivity extends Activity {
         if(mediaFastScroller==null||mediaLayout==null||mediaAdapter==null||
             !"media".equals(screen)||home||importing||db==null||mediaTotal<=0)return;
         final int target=MediaFastScroller.indexForFraction(fraction,mediaTotal);
+        mediaOffset=target;
         mediaFastScroller.setProgress(target,mediaTotal);
         if(target>=mediaWindowStart&&target<mediaLoaded){
             int adapterPos=mediaAdapter.adapterPositionForOrdinal(target-mediaWindowStart);

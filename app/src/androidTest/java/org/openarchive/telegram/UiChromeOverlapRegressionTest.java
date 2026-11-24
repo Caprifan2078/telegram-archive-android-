@@ -109,6 +109,38 @@ public final class UiChromeOverlapRegressionTest {
             });
         }
     }
+    @Test public void mediaHasOneRelevantOverflowAndReadableBackHeader()throws Exception{
+        MainActivity a=rule.getActivity();idle(a);
+        Object oldHome=get(a,"home"),oldScreen=get(a,"screen");
+        try{
+            inst.runOnMainSync(()->{
+                try{
+                    put(a,"home",false);put(a,"screen","media");call(a,"showPage");
+                    assertEquals("Avoid duplicate dots above media overflow",View.GONE,
+                        ((View)get(a,"headerActions")).getVisibility());
+                    LinearLayout filter=(LinearLayout)get(a,"filterBar");
+                    assertTrue("Media must keep its own actions",filter.getChildCount()>=2);
+                    LinearLayout tools=(LinearLayout)filter.getChildAt(1);
+                    android.widget.TextView overflow=(android.widget.TextView)
+                        tools.getChildAt(tools.getChildCount()-1);
+                    assertEquals("⋯",overflow.getText().toString());
+                    assertTrue("Gallery actions must be clickable",overflow.isClickable());
+                    assertTrue("Heading must not touch Back",
+                        ((View)get(a,"title")).getParent() instanceof LinearLayout);
+                    assertTrue(((LinearLayout)((View)get(a,"title")).getParent()).getPaddingLeft()>0);
+                    put(a,"screen","chat");call(a,"showPage");
+                    assertEquals("Chat keeps its own tools",View.VISIBLE,
+                        ((View)get(a,"headerActions")).getVisibility());
+                }catch(Exception e){throw new AssertionError(e);}
+            });
+        }finally{
+            inst.runOnMainSync(()->{
+                try{put(a,"home",oldHome);put(a,"screen",oldScreen);call(a,"showPage");}
+                catch(Exception e){throw new AssertionError(e);}
+            });
+        }
+    }
+
     @Test public void favoritesHasOneBackLinkInsteadOfCrowdedGalleryFilters()throws Exception{
         MainActivity a=rule.getActivity();idle(a);
         Object oldHome=get(a,"home"),oldScreen=get(a,"screen");

@@ -62,6 +62,53 @@ public final class MediaFastScrollRegressionTest {
         assertEquals(0,MediaFastScroller.indexForFraction(.8f,1));
         assertEquals(1f,MediaFastScroller.fractionForIndex(199,200),.00001f);
     }
+    @Test public void reopeningGalleryRestoresSourceOffsetRatherThanJumpingToFirstPhoto()throws Exception{
+        MainActivity a=rule.getActivity();
+        String key="restoremedia"+UUID.randomUUID().toString().replace("-","");
+        MessageDb synthetic=new MessageDb(a,key);
+        Object oldDb=get(a,"db"),oldHome=get(a,"home"),
+            oldScreen=get(a,"screen"),oldKind=get(a,"mediaKind"),
+            oldKey=get(a,"activeKey"),oldOffset=get(a,"mediaOffset");
+        try{
+            SQLiteDatabase sql=synthetic.getWritableDatabase();
+            for(int i=0;i<100;i++){
+                long id=synthetic.stage(sql,"QA","2026-11-25 08:00",
+                    "Restorable photo "+i,null,"");
+                synthetic.stageAttachment(sql,id,"photos/"+i+".jpg","image");
+            }
+            synthetic.publishStaged(sql);
+            inst.runOnMainSync(()->{
+                try{
+                    put(a,"db",synthetic);put(a,"activeKey",key);
+                    put(a,"home",false);put(a,"screen","media");
+                    put(a,"mediaKind","image");put(a,"mediaOffset",65);
+                    method(a,"showPage",new Class<?>[0]);
+                }catch(Exception error){throw new AssertionError(error);}
+            });
+            waitFor(a,"mediaLoaded",95);
+            inst.runOnMainSync(()->{
+                try{
+                    int start=(int)get(a,"mediaWindowStart");
+                    int end=(int)get(a,"mediaLoaded");
+                    assertTrue("Restored media must include the old 66th file: "+
+                        start+"–"+end,start<=65&&end>65);
+                    assertTrue("Gallery unexpectedly jumped back to its first page",
+                        start>=35);
+                    assertEquals(100,get(a,"mediaTotal"));
+                }catch(Exception error){throw new AssertionError(error);}
+            });
+        }finally{
+            inst.runOnMainSync(()->{
+                try{
+                    put(a,"db",oldDb);put(a,"home",oldHome);
+                    put(a,"screen",oldScreen);put(a,"mediaKind",oldKind);
+                    put(a,"activeKey",oldKey);put(a,"mediaOffset",oldOffset);
+                    method(a,"showPage",new Class<?>[0]);
+                }catch(Exception e){throw new AssertionError(e);}
+            });
+            synthetic.close();a.deleteDatabase("telegram_"+key+".db");
+        }
+    }
     @Test public void everyMediaCategoryHasRealRightScrubberAndCanJumpBeyondInitialThirty()throws Exception{
         MainActivity a=rule.getActivity();
         String key="fastscroll"+UUID.randomUUID().toString().replace("-","");
@@ -87,6 +134,8 @@ public final class MediaFastScrollRegressionTest {
                     try{
                         put(a,"db",synthetic);put(a,"activeKey",key);
                         put(a,"home",false);put(a,"screen","media");put(a,"mediaKind",kind);
+                        // The real filter tap resets the saved media position.
+                        put(a,"mediaOffset",0);
                         method(a,"showPage",new Class<?>[0]);
                     }catch(Exception ex){throw new AssertionError(ex);}
                 });
