@@ -97,7 +97,7 @@ public final class ArchiveReadOnlySafPipeRegressionTest {
             }catch(Exception expected){}
             assertTrue("Synthetic original must remain intact",file.isFile()&&file.length()>0);
         }finally{
-            Arrays.fill(secret,'\\0');
+            Arrays.fill(secret,'\0');
             file.delete();
             assertEquals("Temporary copies must be deleted after every preview",
                 existing,temporaryCopies());
