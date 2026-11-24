@@ -1,9 +1,6 @@
 package org.openarchive.telegram;
 
 import android.app.Instrumentation;
-import android.app.Activity;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Rect;
@@ -188,15 +185,42 @@ public class UiMenuTourRegressionTest {
         expect("Мои переписки");
         UiObject2 add=scrollFind("Добавить переписку");
         assertNotNull("Single Add chat action missing from Home",add);
-        Instrumentation.ActivityMonitor picker=new Instrumentation.ActivityMonitor(
-            new IntentFilter(Intent.ACTION_OPEN_DOCUMENT),
-            new Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null),true);
-        inst.addMonitor(picker);
+        // UI Automator drives the app from outside its instrumentation process.
+        // ActivityMonitor can miss ACTION_OPEN_DOCUMENT and, when blocking,
+        // strand the system DocumentsUI, poisoning all subsequent test launches.
+        // Verify the actual external Android file-picker window instead.
+        String appPackage=activity.getActivity().getPackageName();
+        boolean pickerOpened=false;
+        String foreground="";
         try{
             add.click();
-            inst.waitForIdleSync();
-            assertTrue("Add chat must directly open Android's document picker",picker.getHits()>0);
-        }finally{inst.removeMonitor(picker);}
+            for(int attempt=0;attempt<60;attempt++){
+                foreground=device.getCurrentPackageName();
+                if(foreground!=null&&!foreground.equals(appPackage)
+                    &&(foreground.contains("documentsui")
+                       ||foreground.contains("intentresolver")
+                       ||foreground.contains("resolver"))){
+                    pickerOpened=true;
+                    break;
+                }
+                android.os.SystemClock.sleep(200);
+            }
+            if(!pickerOpened){
+                android.util.Log.e("UI_MENU_TOUR",
+                    "Add chat did not reach DocumentsUI; foreground="+foreground);
+                screenshot("import-picker-failure");
+            }
+            assertTrue("Add chat must open Android's document picker; foreground="+foreground,
+                pickerOpened);
+        }finally{
+            // Never leave a system picker open after this test (including an
+            // assertion failure): the next ActivityTestRule must launch cleanly.
+            String current=device.getCurrentPackageName();
+            if(current!=null&&!current.equals(appPackage)){
+                device.pressBack();
+                device.waitForIdle();
+            }
+        }
         drawer();
         tap("Архивы и резервные копии");
         assertNull("Duplicate Import button appeared in drawer",findVisible("Импортировать чат"));
