@@ -295,8 +295,19 @@ public class UiMenuTourRegressionTest {
             visible.height()>=Math.round(40*density));
         button.click();
         device.waitForIdle();
-        assertEquals(!reduced,activity.getActivity().getPreferences(Context.MODE_PRIVATE)
-            .getBoolean("appearance_less_motion",reduced));
+        // Android 15 can dispatch accessibility click and persist preference
+        // after UI Automator first reports an idle transition. Observe the
+        // actual persisted result before asserting; do not change app behavior.
+        SharedPreferences settings=activity.getActivity().getPreferences(Context.MODE_PRIVATE);
+        long deadline=android.os.SystemClock.uptimeMillis()+4000L;
+        boolean updated=settings.getBoolean("appearance_less_motion",reduced);
+        while(updated==reduced&&android.os.SystemClock.uptimeMillis()<deadline){
+            inst.waitForIdleSync();
+            android.os.SystemClock.sleep(120);
+            updated=settings.getBoolean("appearance_less_motion",reduced);
+        }
+        if(updated==reduced)screenshot("motion-setting-not-applied");
+        assertEquals("Motion button must actually update saved preference",!reduced,updated);
     }
 
     @Test public void fontPreviewAndThemeSelectionAreClickable()throws Exception {
