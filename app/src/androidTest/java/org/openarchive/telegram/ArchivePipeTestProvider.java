@@ -24,7 +24,7 @@ public final class ArchivePipeTestProvider extends ContentProvider {
     @Override public int delete(Uri uri,String s,String[] a){throw new UnsupportedOperationException();}
     @Override public int update(Uri uri,ContentValues v,String s,String[] a){throw new UnsupportedOperationException();}
 
-    @Override public ParcelFileDescriptor openFile(Uri uri,String mode)throws IOException{
+    @Override public ParcelFileDescriptor openFile(Uri uri,String mode)throws java.io.FileNotFoundException{
         if(!"r".equals(mode))throw new java.io.FileNotFoundException("Read only fixture");
         String name=uri.getLastPathSegment();
         if(name==null||!name.matches("[a-f0-9]{32}\\.(zip|7z)"))
@@ -32,7 +32,9 @@ public final class ArchivePipeTestProvider extends ContentProvider {
         File source=new File(getContext().getCacheDir(),name);
         if(!source.isFile()||source.length()>2L*1024*1024)
             throw new java.io.FileNotFoundException("No bounded fixture");
-        ParcelFileDescriptor[] pair=ParcelFileDescriptor.createPipe();
+        ParcelFileDescriptor[] pair;
+        try{pair=ParcelFileDescriptor.createPipe();}
+        catch(IOException ex){java.io.FileNotFoundException failure=new java.io.FileNotFoundException("Pipe unavailable");failure.initCause(ex);throw failure;}
         Thread copy=new Thread(()->{
             try(FileInputStream in=new FileInputStream(source);
                 FileOutputStream out=new ParcelFileDescriptor.AutoCloseOutputStream(pair[1])){
