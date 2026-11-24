@@ -36,6 +36,15 @@ public final class FloatingRoundReattachRegressionTest {
         holder.setTag(controls);
         return holder;
     }
+    @Test public void removedPlayingTileMustFloatInsteadOfContinuingAsInvisibleAudio(){
+        assertTrue("Detached playing round needs a bubble even without a scroll event",
+            RoundPlaybackTarget.shouldAutoFloat(false,0,0,100,700));
+        assertFalse("Visible attached round must remain inline",
+            RoundPlaybackTarget.shouldAutoFloat(true,200,350,100,700));
+        assertTrue("A fully scrolled-out attached tile also needs a bubble",
+            RoundPlaybackTarget.shouldAutoFloat(true,0,100,100,700));
+    }
+
     @SuppressWarnings("unchecked")
     @Test public void recreatedTileIsReboundByAttachmentIdNotByOldViewOrSharedFilePath()throws Exception{
         try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
