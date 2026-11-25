@@ -236,6 +236,7 @@ public final class ProtectedArchiveActivity extends Activity {
             finally{if(data!=null)Arrays.fill(data,(byte)0);}
         });
     }
+    private static void closeMediaSource(android.media.MediaDataSource source){try{source.close();}catch(IOException ignored){}}
     private void cancelPreview(){
         previewGeneration++;
         if(mediaPlayer!=null){mediaPlayer.close();mediaPlayer=null;}
@@ -248,23 +249,33 @@ public final class ProtectedArchiveActivity extends Activity {
         Runtime runtime=Runtime.getRuntime();
         long headroom=runtime.maxMemory()-(runtime.totalMemory()-runtime.freeMemory());
         final long limit=Math.min(64L*1024*1024,Math.max(0,headroom/3));
-        if(limit<1024*1024){Toast.makeText(this,"Недостаточно оперативной памяти для медиа",Toast.LENGTH_SHORT).show();return;}
+
         Toast.makeText(this,"Читаю выбранное вложение…",Toast.LENGTH_SHORT).show();
         task=reader.submit(()->{
-            ProtectedMediaSource source=null;
+            android.media.MediaDataSource source=null;
             try{
-                source=ProtectedMediaSource.load(current,path,limit);
-                final ProtectedMediaSource ready=source;
+                long size=-1;
+                String wanted=path.replace('\\','/');
+                for(ProtectedArchiveSession.Entry e:current.list())if(e.name.equals(wanted)){size=e.size;break;}
+                if(size<0)throw new FileNotFoundException("Вложение отсутствует");
+                if(size<=limit&&limit>0)source=ProtectedMediaSource.load(current,path,limit);
+                else{
+                    long free=ArchiveFileImport.maxTemporaryCopyForFreeBytes(getCacheDir().getUsableSpace());
+                    long diskLimit=Math.min(8L*1024*1024*1024,free-free/1024);
+                    if(size>diskLimit||diskLimit<=0)throw new IOException("Недостаточно места для зашифрованного кеша");
+                    source=ProtectedEncryptedMediaSource.load(this,current,path,diskLimit);
+                }
+                final android.media.MediaDataSource ready=source;
                 source=null;
                 runOnUiThread(()->{
                     if(token!=generation||previewToken!=previewGeneration||isFinishing()||isDestroyed()){ready.close();return;}
                     try{mediaPlayer=new ProtectedMediaPlayer(this,ready,video);}
-                    catch(RuntimeException e){ready.close();Toast.makeText(this,"Плеер не открылся",Toast.LENGTH_SHORT).show();}
+                    catch(RuntimeException e){closeMediaSource(ready);Toast.makeText(this,"Плеер не открылся",Toast.LENGTH_SHORT).show();}
                 });
             }catch(Exception|OutOfMemoryError e){
                 runOnUiThread(()->{if(token==generation&&previewToken==previewGeneration)
-                    Toast.makeText(this,"Вложение не прочитано или превышает лимит "+(limit/(1024*1024))+" МБ",Toast.LENGTH_LONG).show();});
-            }finally{if(source!=null)source.close();}
+                    Toast.makeText(this,"Вложение не прочитано: проверь формат и свободное место",Toast.LENGTH_LONG).show();});
+            }finally{if(source!=null)closeMediaSource(source);}
         });
     }
     private void lock(){
