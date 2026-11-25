@@ -1,7 +1,7 @@
 name: Protected archive isolated QA
 on:
   push:
-    branches: [qa/protected-archive-session-20261125]
+    branches: [qa/protected-archive-session-20261125, qa/protected-video-regression-20261125]
   pull_request:
     branches: [qa/drawer-aes-zip-20261123]
     paths:
@@ -37,7 +37,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Protected ZIP session tests
+      - name: Protected ZIP/RAR, UI and media tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
