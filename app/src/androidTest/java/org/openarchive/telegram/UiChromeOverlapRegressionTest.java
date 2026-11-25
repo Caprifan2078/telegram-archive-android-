@@ -150,7 +150,7 @@ public final class UiChromeOverlapRegressionTest {
                     put(a,"home",false);put(a,"screen","favorites");
                     call(a,"configureBars");
                     LinearLayout filter=(LinearLayout)get(a,"filterBar");
-                    assertEquals("One clear action, not all gallery categories",1,filter.getChildCount());
+                    assertEquals("Back row and dedicated favorites tools, not gallery categories",2,filter.getChildCount());
                     assertEquals("‹ В медиатеку",
                         ((android.widget.TextView)filter.getChildAt(0)).getText().toString());
                     assertTrue(filter.getChildAt(0).isClickable());
