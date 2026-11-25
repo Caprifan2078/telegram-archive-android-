@@ -381,7 +381,6 @@ public class MainActivity extends Activity {
                 getPreferences(MODE_PRIVATE).edit().putInt("appearance_theme",index).apply();
                 dialog.dismiss();loadAppearance();recreate();
             })
-            .setNeutralButton("Плотность сообщений",(dialog,button)->densityDialog())
             .setPositiveButton("Готово",null).show();
     }
     private void wallpaperDialog(){
@@ -731,34 +730,6 @@ public class MainActivity extends Activity {
     }
 
     // The five discovery tools are strictly opt-in, local and bounded.
-    private void discoveryStudio(){
-        LinearLayout preview=column();preview.setPadding(px(18),px(18),px(18),px(10));
-        preview.setBackground(gradient(PANEL,CHIP,22));
-        TextView h=text("СТУДИЯ ОФОРМЛЕНИЯ 2.0",15,ACCENT);h.setTypeface(null,Typeface.BOLD);preview.addView(h);
-        TextView a=text("  Привет! Это пример входящего сообщения.  ",14,FG);
-        a.setPadding(px(12),px(13),px(12),px(13));a.setBackground(shape(INCOMING,bubbleRadius));
-        LinearLayout.LayoutParams al=p(-2,-2);al.setMargins(0,px(17),px(38),px(8));preview.addView(a,al);
-        TextView b=text("  А это твой ответ ✨  ",14,FG);
-        b.setPadding(px(12),px(13),px(12),px(13));b.setBackground(shape(OUTGOING,bubbleRadius));
-        LinearLayout.LayoutParams bl=p(-2,-2);bl.gravity=Gravity.END;preview.addView(b,bl);
-        String[] choices={"Цветовая тема", "Фон переписки", "Аватары чата и людей", "Форма пузырьков", "Плотность сообщений", "Плавность и производительность"};
-        new FontDialog.Builder(this).setTitle("Студия чата 2.0").setView(preview)
-            .setItems(choices,(d,which)->{
-                switch(which){case 0:appearanceDialog();break;case 1:wallpaperDialog();break;
-                    case 2:avatarSelection();break;case 3:bubbleStyleDialog();break;
-                    case 4:densityDialog();break;default:performanceDialog();}
-            }).setNegativeButton("Закрыть",null).show();
-    }
-    private void discoveryMediaPro(){
-        if(home){toast("Выбери переписку для её медиатеки");return;}
-        String[] entries={"Галерея медиа · по типам", "Кинолента · по годам и месяцам", "Мои коллекции", "Проверка недостающих оригиналов"};
-        new FontDialog.Builder(this).setTitle("Медиатека PRO")
-            .setItems(entries,(d,i)->{
-                if(i==0){screen="media";showPage();}
-                else if(i==1){cinemaReturnScreen=screen;screen="cinema";showPage();}
-                else if(i==2)showCollectionPicker();else showMediaHealth();
-            }).setNegativeButton("Закрыть",null).show();
-    }
     private void discoveryYearPicker(String title,java.util.function.IntConsumer action){
         EditText year=new EditText(this);year.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         year.setSingleLine(true);year.setText(String.valueOf(LocalDate.now().getYear()));
@@ -770,58 +741,9 @@ public class MainActivity extends Activity {
                 }catch(NumberFormatException e){toast("Нужен год от 1 до 9999");}
             }).show();
     }
-    private void discoveryHistoryMap(){
+    private void showFavoritesByYear(){
         if(home){toast("Открой переписку");return;}
-        discoveryYearPicker("Карта истории · год",year->{
-            final String key=activeKey;final MessageDb source=db;
-            status.setText("Строю локальную карту месяцев…");
-            worker.execute(()->{
-                try{
-                    ParallelCalendars.YearData stats=source.calendarYear(year);
-                    String[] months={"Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"};
-                    String[] labels=new String[12];for(int i=0;i<12;i++)labels[i]=months[i]+" · "+stats.months[i]+" сообщений";
-                    runOnUiThread(()->{
-                        if(isFinishing()||!key.equals(activeKey))return;
-                        status.setText("Карта истории · "+year);
-                        new FontDialog.Builder(this).setTitle("Карта истории · "+year)
-                            .setMessage("Сообщений: "+stats.total()+" · активных дней: "+stats.activeDays()+
-                                (stats.partial?"\nЧАСТИЧНО: достигнут лимит 300 000 сообщений.":""))
-                            .setItems(labels,(d,month)->discoveryHistoryMonth(key,year,month+1))
-                            .setNegativeButton("Закрыть",null).show();
-                    });
-                }catch(Exception e){runOnUiThread(()->toast("Карта истории: ошибка чтения"));}
-            });
-        });
-    }
-    private void discoveryHistoryMonth(String key,int year,int month){
-        if(!canOpenQuoteArchive(key)||!key.equals(activeKey))return;
-        final MessageDb source=db;
-        worker.execute(()->{
-            ArrayList<DiscoveryRules.Hit> hits=new ArrayList<>();
-            String yyyy=String.format(Locale.ROOT,"%04d",year),mm=String.format(Locale.ROOT,"%02d",month);
-            try(android.database.Cursor c=source.getReadableDatabase().rawQuery(
-                "SELECT id,author,date_text,body FROM messages WHERE " +
-                "substr(date_text,1,7)=? OR substr(date_text,4,7)=? ORDER BY id DESC LIMIT 45",
-                new String[]{yyyy+"-"+mm,mm+"."+yyyy})){
-                while(c.moveToNext()&&hits.size()<30){
-                    ChatTrends.Moment dt=ChatTrends.parse(c.getString(2));
-                    if(dt!=null&&dt.day.getYear()==year&&dt.day.getMonthValue()==month)
-                        hits.add(new DiscoveryRules.Hit(key,activeName,c.getLong(0),c.getString(1),c.getString(2),c.getString(3)));
-                }
-            }catch(Exception ignored){}
-            runOnUiThread(()->{
-                if(isFinishing()||!key.equals(activeKey))return;
-                if(hits.isEmpty()){toast("Сообщений за месяц не найдено");return;}
-                String[] labels=new String[hits.size()];for(int i=0;i<labels.length;i++)labels[i]=hits.get(i).label();
-                new FontDialog.Builder(this).setTitle("Сообщения · "+month+"/"+year)
-                    .setItems(labels,(d,i)->jump(hits.get(i).id,""))
-                    .setNegativeButton("Закрыть",null).show();
-            });
-        });
-    }
-    private void discoveryTimeCapsule(){
-        if(home){toast("Открой переписку");return;}
-        discoveryYearPicker("Капсула времени · избранное за год",year->{
+        discoveryYearPicker("Избранное за год",year->{
             final String key=activeKey;final MessageDb source=db;
             worker.execute(()->{
                 ArrayList<DiscoveryRules.Hit> hits=new ArrayList<>();
@@ -840,9 +762,8 @@ public class MainActivity extends Activity {
                     if(isFinishing()||!key.equals(activeKey))return;
                     if(hits.isEmpty()){toast("Избранных сообщений за этот год не найдено");return;}
                     String[] labels=new String[hits.size()];for(int i=0;i<labels.length;i++)labels[i]=hits.get(i).label();
-                    new FontDialog.Builder(this).setTitle("Капсула времени · "+year)
-                        .setMessage("Это подборка уже отмеченных тобой сообщений. Оригиналы и медиа не копируются и не изменяются.")
-                        .setItems(labels,(d,i)->jump(hits.get(i).id,""))
+                    new FontDialog.Builder(this).setTitle("Избранное · "+year+" · до 80 сообщений")
+                        .setItems(labels,(d,i)->jump(hits.get(i).id,"favorites"))
                         .setNegativeButton("Закрыть",null).show();
                 });
             });
@@ -1047,49 +968,26 @@ public class MainActivity extends Activity {
             sideMenuItem(group,dialog,pane,"◈  Пробное восстановление","Тест без изменения переписок",this::dryRunPicker);
             sideMenuItem(group,dialog,pane,"▤  Квитанция переноса","Сверка последнего восстановления",this::showLastRestoreReceipt);
             sideMenuItem(group,dialog,pane,"⇩  Восстановить архив","Импорт резервной копии",this::restorePicker);
-            sideMenuItem(group,dialog,pane,"✧  Капсула избранного","Только зашифрованные тексты, не полный бэкап",()->{
-                if(home)toast("Сначала открой переписку");else askCapsulePassword();});
         });
-        sideMenuSection(items,"Инструменты переписки",false,group->{
-            sideMenuItem(group,dialog,pane,"▤  Кинолента медиа","По годам и месяцам, без сетевых запросов",()->{
-                if(home){toast("Сначала открой переписку");return;}cinemaReturnScreen=screen;screen="cinema";showPage();});
-            sideMenuItem(group,dialog,pane,"◷  Хронология","События, периоды и воспоминания",()->{
-                if(home){toast("Сначала открой переписку");return;}screen="relationships";showPage();});
-            sideMenuItem(group,dialog,pane,"⇄  Сравнение диалогов","Два чата · месяцы, медиа, участники",()->{
-                if(home){toast("Сначала открой переписку");return;}chooseDualChat("dual_compare");});
-            sideMenuItem(group,dialog,pane,"◷  Воспоминания двух чатов","Общая временная линия двух переписок",()->{
-                if(home){toast("Сначала открой переписку");return;}chooseDualChat("dual_memories");});
-            sideMenuItem(group,dialog,pane,"▥  Анализ диалога","Графики, активность и сравнения",()->{
-                if(home){toast("Сначала открой переписку");return;}analyticsSection="overview";screen="analytics";showPage();});
-            sideMenuItem(group,dialog,pane,"⌁  В этот день","Сообщения в эту дату разных лет",()->{
-                if(home){toast("Сначала открой переписку");return;}
-                LocalDate today=LocalDate.now();showOnThisDay(today.getMonthValue(),today.getDayOfMonth());});
-            sideMenuItem(group,dialog,pane,"◎  Здоровье медиатеки","Проверка отсутствующих файлов",()->{
-                if(home)toast("Сначала открой переписку");else showMediaHealth();});
-            sideMenuItem(group,dialog,pane,"◌  Навигатор пауз","Промежутки в истории · без изменения файлов",()->{
-                if(home)toast("Сначала открой переписку");else showConversationPauses();});
-        });
-        sideMenuSection(items,"Открытия · новые возможности",false,group->{
-            sideMenuItem(group,dialog,pane,"▤  Просмотреть отдельный файл","Office, архивы и документы · без импорта чата",this::chooseReadOnlyPreview);
-            sideMenuItem(group,dialog,pane,"⌕  Умный поиск по всем чатам","Текст, автор, год, медиа · только локально",this::discoverySmartSearch);
-            sideMenuItem(group,dialog,pane,"✦  Студия оформления 2.0","Предпросмотр, темы, обои и аватары",this::discoveryStudio);
-            sideMenuItem(group,dialog,pane,"▦  Медиатека PRO","Галерея, кинолента, коллекции, проверка файлов",this::discoveryMediaPro);
-            sideMenuItem(group,dialog,pane,"◷  Карта истории","Месяцы, активность и оригиналы сообщений",this::discoveryHistoryMap);
-            sideMenuItem(group,dialog,pane,"✧  Капсула времени","Избранное за выбранный год",this::discoveryTimeCapsule);
+        sideMenuSection(items,"Поиск и файлы",false,group->{
+            sideMenuItem(group,dialog,pane,"Умный поиск по всем чатам","Слова, авторы, год и вложения; офлайн",this::discoverySmartSearch);
+            sideMenuItem(group,dialog,pane,"Просмотреть отдельный файл","Текст Office, документы и архивы",this::chooseReadOnlyPreview);
         });
         sideMenuSection(items,"Оформление и персонализация",false,group->{
-            sideMenuItem(group,dialog,pane,"◐  Темы и оформление","Цвет, плотность и плавность",this::appearanceDialog);
-            sideMenuItem(group,dialog,pane,"✧  Стеклянные карточки","Лёгкая прозрачность без тяжёлого размытия",this::glassDialog);
-            sideMenuItem(group,dialog,pane,"⚡  Умная производительность","Автоматическая экономия памяти",this::performanceDialog);
-            sideMenuItem(group,dialog,pane,"▧  Обои переписки","Свой фон, узоры и прозрачность",this::wallpaperDialog);
-            sideMenuItem(group,dialog,pane,"◉  Аватары","Один аватар нескольким участникам",this::avatarSelection);
-            sideMenuItem(group,dialog,pane,"⚙  Настройки переписки","Имя, цвета и пузырьки",this::settingsMenu);
+            sideMenuItem(group,dialog,pane,"Темы и оформление","Светлая или тёмная цветовая схема",this::appearanceDialog);
+            sideMenuItem(group,dialog,pane,"Стеклянные карточки","Прозрачный или сплошной фон",this::glassDialog);
+            sideMenuItem(group,dialog,pane,"Шрифты","Системный шрифт или свой TTF/OTF",this::showFontStudio);
+            sideMenuItem(group,dialog,pane,"Обои переписки","Фото, узор и его интенсивность",this::wallpaperDialog);
+            sideMenuItem(group,dialog,pane,"Аватары","Изображения участников и чатов",this::avatarSelection);
+            sideMenuItem(group,dialog,pane,"Настройки переписки","Пузырьки, плотность, имя и цвета",this::settingsMenu);
+            sideMenuItem(group,dialog,pane,"Умная производительность","Скорость, память и анимации",this::performanceDialog);
         });
-        sideMenuItem(items,dialog,pane,"Aa  Шрифты · изменить везде","Системный, классика, свой TTF/OTF",this::showFontStudio);
-        sideMenuItem(items,dialog,pane,"ⓘ  Помощь и инструкция","Пошаговая инструкция внутри приложения",this::showHelp);
-        sideMenuItem(items,dialog,pane,"▶  Учебная переписка","Практика без изменений настоящих данных",
-            ()->startActivity(new Intent(this,DemoChatActivity.class)));
-        sideMenuItem(items,dialog,pane,"⌁  Диагностика","Создать обезличенный технический отчёт",this::shareDiagnostic);
+        sideMenuSection(items,"Помощь и диагностика",false,group->{
+            sideMenuItem(group,dialog,pane,"Помощь и инструкция","Как пользоваться приложением",this::showHelp);
+            sideMenuItem(group,dialog,pane,"Учебная переписка","Попробовать функции на примере",
+                ()->startActivity(new Intent(this,DemoChatActivity.class)));
+            sideMenuItem(group,dialog,pane,"Диагностика","Обезличенный технический отчёт",this::shareDiagnostic);
+        });
         TextView label=text("Telegram Archive · "+installedVersionName()+" QA\nЛокально · Без аккаунта · Без серверов",11,SUB);
         label.setPadding(px(5),px(12),0,px(5));pane.addView(label);
         overlay.setOnClickListener(v->closeDrawer(dialog,pane,null));pane.setOnClickListener(v->{});
@@ -1191,7 +1089,7 @@ public class MainActivity extends Activity {
         item.addView(symbol,symbolSize);
         LinearLayout info=column();item.addView(info,new LinearLayout.LayoutParams(0,-2,1));
         TextView name=text(label,14,FG);name.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));info.addView(name);
-        TextView summary=text(detail,11,SUB);summary.setSingleLine(true);
+        TextView summary=text(detail,12,SUB);summary.setMaxLines(2);
         summary.setEllipsize(TextUtils.TruncateAt.END);
         summary.setPadding(0,px(2),0,0);info.addView(summary);
         item.setContentDescription(label+". "+detail);
@@ -2733,6 +2631,7 @@ public class MainActivity extends Activity {
         // The app bar already explains tapping the chat title for media.
         // Omit the duplicate instruction inside the action sheet.
         String[] labels={"Найти сообщение","Перейти к дате","Анализ диалога","Хронология","Управление чатом","Все инструменты"};
+        String[] descriptions={"Поиск по тексту, автору и вложениям","Открыть сообщения выбранного дня","Количество сообщений, активность и участники","События, этапы, воспоминания и сравнения","Название, аватар, закрепление и корзина","Общие настройки, поиск по всем чатам и резервные копии"};
         Runnable[] actions={
             ()->{screen="search";showPage();},
             this::chooseDate,
@@ -2741,8 +2640,9 @@ public class MainActivity extends Activity {
             ()->showChatActions(activeKey,activeName),
             this::showSideMenu
         };
+        ScrollView actionScroll=new ScrollView(this);actionScroll.addView(content);
         final AlertDialog dialog=new FontDialog.Builder(this).setTitle("Действия с чатом")
-            .setView(content).setNegativeButton("Закрыть",null).create();
+            .setView(actionScroll).setNegativeButton("Закрыть",null).create();
         for(int i=0;i<labels.length;i++){
             final int index=i;
             LinearLayout item=row();item.setPadding(px(12),px(6),px(8),px(6));
@@ -2750,8 +2650,11 @@ public class MainActivity extends Activity {
             ImageView symbol=new ImageView(this);
             symbol.setImageDrawable(new MenuOutlineIcon(labels[i],ACCENT));
             LinearLayout.LayoutParams iconSize=p(22,22);iconSize.rightMargin=px(13);item.addView(symbol,iconSize);
-            TextView label=text(labels[i],15,FG);item.addView(label,new LinearLayout.LayoutParams(0,-2,1));
-            LinearLayout.LayoutParams itemSize=p(-1,43);itemSize.bottomMargin=px(3);content.addView(item,itemSize);
+            LinearLayout info=column();item.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+            TextView label=text(labels[i],15,FG);info.addView(label);
+            TextView detail=text(descriptions[i],12,SUB);detail.setMaxLines(2);info.addView(detail);
+            item.setMinimumHeight(px(56));
+            LinearLayout.LayoutParams itemSize=p(-1,-2);itemSize.bottomMargin=px(3);content.addView(item,itemSize);
             item.setContentDescription(labels[i]);
             // Handle taps on the text itself, not only on the surrounding row.
             // UIAutomator/accessibility may dispatch a click directly to the label.
@@ -3035,6 +2938,14 @@ public class MainActivity extends Activity {
                 shape(Color.TRANSPARENT,11),null));
             filterBar.addView(backToMedia,p(-1,42));
             backToMedia.setOnClickListener(v->{screen="media";mediaOffset=0;showPage();});
+            LinearLayout favoriteTools=row();
+            Button byYear=btn("За год");byYear.setContentDescription("Избранные сообщения за выбранный год");
+            favoriteTools.addView(byYear,new LinearLayout.LayoutParams(0,px(48),1));
+            byYear.setOnClickListener(v->showFavoritesByYear());
+            Button encrypted=btn("Зашифрованная копия");encrypted.setContentDescription("Сохранить избранные тексты с паролем");
+            favoriteTools.addView(encrypted,new LinearLayout.LayoutParams(0,px(48),2));
+            encrypted.setOnClickListener(v->askCapsulePassword());
+            filterBar.addView(favoriteTools,p(-1,-2));
             return;
         }
         if("media".equals(screen)){
@@ -3080,17 +2991,19 @@ public class MainActivity extends Activity {
                 hint.setSingleLine(true);hint.setEllipsize(TextUtils.TruncateAt.END);
                 mediaTools.addView(hint,new LinearLayout.LayoutParams(0,42,1));
             }
-            Button more=btn("⋯");more.setContentDescription("Выбор, коллекции и поиск повторов");
+            Button more=btn("⋯");more.setContentDescription("Инструменты медиатеки");
             mediaTools.addView(more,p(46,42));
             more.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Действия с медиа")
                 .setItems(new String[]{multiSelectMedia?"Снять выделение":"Выбрать несколько",
-                    "Мои коллекции","Найти одинаковые файлы"},(d,index)->{
+                    "Мои коллекции","Найти одинаковые файлы","Медиа по годам и месяцам","Проверить доступность оригиналов"},(d,index)->{
                     if(index==0){
                         if(multiSelectMedia)clearMediaSelection();
                         else{multiSelectMedia=true;selectedMediaArchive=activeKey;}
                         showPage();
                     }else if(index==1)showCollectionPicker();
-                    else inspectDuplicateMedia();
+                    else if(index==2)inspectDuplicateMedia();
+                    else if(index==3){cinemaReturnScreen="media";screen="cinema";showPage();}
+                    else showMediaHealth();
                 }).setNegativeButton("Закрыть",null).show());
             filterBar.addView(mediaTools,p(-1,46));
 
@@ -4890,8 +4803,8 @@ public class MainActivity extends Activity {
         calendar.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="calendar";screen="chronology";showPage();});
         TextView charts=secondaryDisclosure("04 · Сравнение этапов  ›");list.addView(charts,p(-1,44));
         charts.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="chart";screen="chronology";showPage();});
-        TextView cinemaShortcut=secondaryDisclosure("05 · Кинолента медиа по годам  ›");list.addView(cinemaShortcut,p(-1,44));
-        cinemaShortcut.setOnClickListener(v->{historyEventsExpanded=false;cinemaReturnScreen=screen;screen="cinema";showPage();});
+        TextView memories=secondaryDisclosure("05 · В этот день  ›");list.addView(memories,p(-1,48));
+        memories.setOnClickListener(v->{LocalDate today=LocalDate.now();showOnThisDay(today.getMonthValue(),today.getDayOfMonth());});
         Button backToChat=btn("+ Отметить событие в переписке");list.addView(backToChat,p(-1,46));
         backToChat.setOnClickListener(v->{screen="chat";showPage();
             toast("Удерживай важное сообщение и выбери «Добавить событие истории»");});
@@ -4912,8 +4825,8 @@ public class MainActivity extends Activity {
         sharedMemories.setOnClickListener(v->chooseDualChat("dual_memories"));
         Button comparison=btn("Календари двух переписок");advanced.addView(comparison,p(-1,48));
         comparison.setOnClickListener(v->chooseParallelCalendar());
-        Button health=btn("Проверить сохранность медиа");advanced.addView(health,p(-1,48));
-        health.setOnClickListener(v->showMediaHealth());
+        Button gaps=btn("Паузы между сообщениями");advanced.addView(gaps,p(-1,48));
+        gaps.setOnClickListener(v->showConversationPauses());
         LinearLayout eventsHolder=column();list.addView(eventsHolder,p(-1,-2));
         if(!historyEventsExpanded){
             status.setText("");status.setVisibility(View.GONE);
@@ -7643,10 +7556,12 @@ public class MainActivity extends Activity {
         });
     }
     private void settingsMenu(){new FontDialog.Builder(this).setTitle("Настройки переписки")
-        .setItems(new String[]{"Скругление пузырьков","Моё имя (сообщения справа)",
-            "Цвета участников","Объединить цвета нескольких имён"},(d,i)->{
-            if(i==0)bubbleStyleDialog();else if(i==1)identityDialog();
-            else if(i==2)participantSettings();else if(i==3)groupedParticipantColors();
+        .setItems(new String[]{"Скругление сообщений","Плотность сообщений","Моё имя (сообщения справа)",
+            "Цвет одного участника","Один цвет нескольким участникам"},(d,i)->{
+            if(i==0){bubbleStyleDialog();return;}
+            if(i==1){densityDialog();return;}
+            if(home){toast("Открой нужную переписку и вернись в настройки");return;}
+            if(i==2)identityDialog();else if(i==3)participantSettings();else if(i==4)groupedParticipantColors();
         }).setPositiveButton("Закрыть",null).show();}
     private String displayDocumentName(Uri uri){
         try(android.database.Cursor c=getContentResolver().query(uri,new String[]{android.provider.OpenableColumns.DISPLAY_NAME},null,null,null)){
