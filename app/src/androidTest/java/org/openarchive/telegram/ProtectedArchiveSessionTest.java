@@ -297,4 +297,48 @@ public final class ProtectedArchiveSessionTest {
         }
         return null;
     }
+    // Synthetic one-second, 32x32 red H.264 MP4; generated with FFmpeg,
+    // not taken from a user archive. Validated by ffprobe and a full decode.
+    private static final String VIDEO_FIXTURE="AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAM2bW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAA+gAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAmF0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAA+gAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAACAAAAAgAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAPoAAAAAAABAAAAAAHZbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAAoAAAAKABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABhG1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAURzdGJsAAAAuHN0c2QAAAAAAAAAAQAAAKhhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAACAAIABIAAAASAAAAAAAAAABFUxhdmM2MS4xOS4xMDEgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAALmF2Y0MBQsAK/+EAFmdCwArZCWwEQAAAAwBAAAADAoPEiZIBAAVoy4PLIAAAABBwYXNwAAAAAQAAAAEAAAAUYnRydAAAAAAAABWoAAACCAAAABhzdHRzAAAAAAAAAAEAAAAFAAAIAAAAABRzdHNzAAAAAAAAAAEAAAABAAAAHHN0c2MAAAAAAAAAAQAAAAEAAAAFAAAAAQAAAChzdHN6AAAAAAAAAAAAAAAFAAAAGgAAAAoAAAAKAAAACgAAAAkAAAAUc3RjbwAAAAAAAAABAAADZgAAAGF1ZHRhAAAAWW1ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAG1kaXJhcHBsAAAAAAAAAAAAAAAALGlsc3QAAAAkqXRvbwAAABxkYXRhAAAAAQAAAABMYXZmNjEuNy4xMDMAAAAIZnJlZQAAAEltZGF0AAAAFmWIhAR8RigACknHAAEjmOAALa0nXXgAAAAGQZo4CPlgAAAABkGaVAI+WAAAAAZBmmAQ8sAAAAAFQZqAP8s=";
+    @Test public void protectedVideoDecodesFromEncryptedArchiveAndEncryptedCache()throws Exception{
+        byte[] mp4=android.util.Base64.decode(VIDEO_FIXTURE,android.util.Base64.DEFAULT);
+        assertEquals(935,mp4.length);
+        File input=File.createTempFile("synthetic-protected-video-",".mp4",context.getCacheDir());
+        File zip=File.createTempFile("synthetic-protected-video-",".zip",context.getCacheDir());
+        assertTrue(zip.delete());
+        char[] secret="synthetic-video-password".toCharArray();
+        try{
+            Files.write(input.toPath(),mp4);
+            try(ZipFile writer=new ZipFile(zip,secret)){
+                ZipParameters p=new ZipParameters();p.setFileNameInZip("Chat/video_files/test.mp4");
+                p.setEncryptFiles(true);p.setEncryptionMethod(EncryptionMethod.AES);
+                p.setAesKeyStrength(AesKeyStrength.KEY_STRENGTH_256);writer.addFile(input,p);
+            }
+            assertTrue(input.delete()); // no plaintext fixture remains during decode
+            try(ProtectedArchiveSession session=ProtectedArchiveSession.open(context,Uri.fromFile(zip),"zip",secret)){
+                try(ProtectedMediaSource ram=ProtectedMediaSource.load(session,"Chat/video_files/test.mp4",1024)){
+                    verifyDecodedFrame(ram);
+                }
+                try(ProtectedEncryptedMediaSource encrypted=ProtectedEncryptedMediaSource.load(context,session,"Chat/video_files/test.mp4",1024)){
+                    verifyDecodedFrame(encrypted);
+                }
+            }
+        }finally{input.delete();zip.delete();Arrays.fill(secret,'\0');Arrays.fill(mp4,(byte)0);}
+    }
+    private static void verifyDecodedFrame(android.media.MediaDataSource source)throws Exception{
+        android.media.MediaMetadataRetriever retriever=new android.media.MediaMetadataRetriever();
+        try{
+            retriever.setDataSource(source);
+            assertEquals("32",retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH));
+            assertEquals("32",retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT));
+            android.graphics.Bitmap frame=retriever.getFrameAtTime(400000,
+                android.media.MediaMetadataRetriever.OPTION_CLOSEST);
+            assertNotNull("H.264 decoder must return an actual frame",frame);
+            try{
+                int color=frame.getPixel(frame.getWidth()/2,frame.getHeight()/2);
+                assertTrue("Expected red synthetic frame",android.graphics.Color.red(color)>180
+                    &&android.graphics.Color.green(color)<80&&android.graphics.Color.blue(color)<80);
+            }finally{frame.recycle();}
+        }finally{retriever.release();}
+    }
 }
