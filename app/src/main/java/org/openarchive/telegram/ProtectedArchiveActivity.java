@@ -150,7 +150,7 @@ public final class ProtectedArchiveActivity extends Activity {
     private void ask(Uri uri,String name){
         EditText field=new EditText(this);field.setSingleLine(true);
         field.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        if(android.os.Build.VERSION.SDK_INT>=26)field.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO);
+        field.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO);
         field.setSaveEnabled(false);field.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);field.setHint("Пароль архива");
         prompt=new AlertDialog.Builder(this).setTitle(name).setView(field)
             .setNegativeButton("Отмена",(d,w)->field.getText().clear())
