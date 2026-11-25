@@ -113,6 +113,7 @@ public class MainActivity extends Activity {
     private static final int WRAPPED_PNG_REQUEST=73,CAPSULE_EXPORT_REQUEST=84;
     private WrappedSummary wrappedForExport;
     private char[] pendingCapsulePassword;
+    private String pendingCapsuleKey;
     private AlertDialog archivePasswordDialog;
     private DocumentFolder pendingMediaSaveRoot;
     private String pendingMediaSavePath;
@@ -582,26 +583,30 @@ public class MainActivity extends Activity {
     private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_SHORT).show();}
 
     private void askCapsulePassword(){
-        EditText pass=new EditText(this);pass.setSingleLine(true);pass.setInputType(129);
-        pass.setHint("Пароль от 8 символов");
-        new FontDialog.Builder(this).setTitle("Зашифрованная капсула избранного")
+        if(home||db==null)return;
+        final String key=activeKey;
+        EditText pass=privatePasswordField("Пароль от 8 символов");
+        showPasswordDialog(new FontDialog.Builder(this).setTitle("Зашифрованная капсула избранного")
             .setMessage("Сохраняются только тексты избранных сообщений и даты. Фото, видео, голосовые, заметки и настройки НЕ включаются. Это НЕ резервная копия приложения. Для полного сохранения используй полную копию Telegram Archive.")
             .setView(pass).setNegativeButton("Отмена",null)
             .setPositiveButton("Создать файл",(d,which)->{
-                char[] password=pass.getText().toString().toCharArray();
+                char[] password=takePassword(pass);
                 if(password.length<8){java.util.Arrays.fill(password,(char)0);
                     toast("Минимум 8 символов — повтори создание");return;}
                 if(pendingCapsulePassword!=null)java.util.Arrays.fill(pendingCapsulePassword,(char)0);
-                pendingCapsulePassword=password;
+                pendingCapsulePassword=password;pendingCapsuleKey=key;
                 Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);
                 intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("application/octet-stream");
                 intent.putExtra(Intent.EXTRA_TITLE,"TelegramArchive_Favorites_Capsule.tcap");
-                startActivityForResult(intent,CAPSULE_EXPORT_REQUEST);
-            }).show();
+                try{startActivityForResult(intent,CAPSULE_EXPORT_REQUEST);}catch(RuntimeException failure){
+                    java.util.Arrays.fill(password,(char)0);pendingCapsulePassword=null;pendingCapsuleKey=null;
+                    toast("Не удалось открыть выбор файла");
+                }
+            }),pass);
     }
     private void exportCapsule(Uri file,char[] password){
         final MessageDb source=db;final String chatKey=activeKey;
-        if(source==null||password==null)return;
+        if(source==null||password==null){if(password!=null)java.util.Arrays.fill(password,(char)0);return;}
         status.setText("Создаю зашифрованную текстовую капсулу…");
         worker.execute(()->{
             try{
@@ -617,14 +622,14 @@ public class MainActivity extends Activity {
     /** Read-only memories; matches month/day across different years, without exporting data. */
     private void showOnThisDay(int month,int day){
         final String chatKey=activeKey;
-        final MessageDb source=db;
+        final MessageDb source=db;final int token=loadToken;
         if(source==null){toast("Переписка не открыта");return;}
         status.setText("Ищу воспоминания…");
         worker.execute(()->{
             try{
                 List<OnThisDay.Entry> found=source.onThisDay(month,day,60);
                 runOnUiThread(()->{
-                    if(home||!chatKey.equals(activeKey))return;
+                    if(!sameScreenRequest(source,chatKey,token))return;
                     status.setText("Найдено за этот день: "+found.size());
                     String[] labels=new String[found.size()];
                     for(int i=0;i<found.size();i++){
@@ -645,7 +650,7 @@ public class MainActivity extends Activity {
                     dialog.show();
                 });
             }catch(Exception e){runOnUiThread(()->{
-                if(chatKey.equals(activeKey))status.setText("Не удалось открыть воспоминания: "+e.getMessage());
+                if(sameScreenRequest(source,chatKey,token))status.setText("Не удалось открыть воспоминания: "+e.getMessage());
             });}
         });
     }
@@ -653,7 +658,7 @@ public class MainActivity extends Activity {
     /** No media bytes are modified or read. A SAF resolution failure isn't necessarily a lost file. */
     private void showMediaHealth(){
         final String chatKey=activeKey;
-        final MessageDb source=db;
+        final MessageDb source=db;final int token=loadToken;
         final DocumentFolder rootFolder=folder;
         if(source==null){toast("Переписка не открыта");return;}
         status.setText("Проверяю пути медиатеки (до 2000 файлов)…");
@@ -661,7 +666,7 @@ public class MainActivity extends Activity {
             try{
                 ChatMediaHealth.Report r=source.mediaHealth(rootFolder,ChatMediaHealth.DEFAULT_SCAN_LIMIT);
                 runOnUiThread(()->{
-                    if(home||!chatKey.equals(activeKey))return;
+                    if(!sameScreenRequest(source,chatKey,token))return;
                     StringBuilder text=new StringBuilder();
                     text.append("Проверено путей: ").append(r.scanned).append(" из ").append(r.totalDistinct)
                         .append("\nДоступно: ").append(r.accessible)
@@ -678,7 +683,7 @@ public class MainActivity extends Activity {
                     status.setText("Проверка медиатеки завершена");
                 });
             }catch(Exception e){runOnUiThread(()->{
-                if(chatKey.equals(activeKey))status.setText("Ошибка проверки медиатеки: "+e.getMessage());
+                if(sameScreenRequest(source,chatKey,token))status.setText("Ошибка проверки медиатеки: "+e.getMessage());
             });}
         });
     }
@@ -686,7 +691,7 @@ public class MainActivity extends Activity {
     /** Local-only scan of calendar pauses. A quiet period does not imply data loss. */
     private void showConversationPauses(){
         final String chatKey=activeKey;
-        final MessageDb source=db;
+        final MessageDb source=db;final int token=loadToken;
         if(source==null){toast("Сначала открой переписку");return;}
         status.setText("Ищу паузы в истории переписки…");
         worker.execute(()->{
@@ -702,7 +707,7 @@ public class MainActivity extends Activity {
             }catch(Exception e){error=e.getClass().getSimpleName();}
             final String failure=error;
             runOnUiThread(()->{
-                if(isFinishing()||home||!chatKey.equals(activeKey))return;
+                if(!sameScreenRequest(source,chatKey,token))return;
                 if(failure!=null){status.setText("Ошибка просмотра пауз: "+failure);return;}
                 final java.util.List<ConversationGapNavigator.Gap> gaps=scan.gaps();
                 final String[] items=new String[gaps.size()];
@@ -2676,11 +2681,12 @@ public class MainActivity extends Activity {
     private void renderPinnedBar(){
         pinnedBar.removeAllViews();
         if(!screen.equals("chat")||home)return;
-        final String key=activeKey;
+        final String key=activeKey;final MessageDb source=db;final int token=loadToken;
+        if(source==null)return;
         worker.execute(()->{
-            List<MessageDb.Item> pins=db.pinned();
+            List<MessageDb.Item> pins=source.pinned();
             runOnUiThread(()->{
-                if(!screen.equals("chat")||home||!key.equals(activeKey))return;
+                if(!screen.equals("chat")||!sameScreenRequest(source,key,token))return;
                 pinnedBar.animate().cancel();pinnedBar.setAlpha(1f);pinnedBar.removeAllViews();if(pins.isEmpty()){pinnedFocus=-1;return;}
                 int selected=0;
                 for(int i=0;i<pins.size();i++)if(pins.get(i).id==pinnedFocus){selected=i;break;}
@@ -2714,9 +2720,11 @@ public class MainActivity extends Activity {
         new FontDialog.Builder(this).setTitle("Открепить сообщение?").setMessage("Сообщение останется в переписке, но исчезнет из закреплённых.").setNegativeButton("Отмена",null).setPositiveButton("Открепить",(d,w)->unpinConfirmed(id)).show();
     }
     private void unpinConfirmed(long id){
+        final MessageDb source=db;final String key=activeKey;
+        if(source==null||home)return;
         worker.execute(()->{
-            if(db.isPinned(id))db.togglePinned(id);
-            runOnUiThread(()->{if(pinnedFocus==id)pinnedFocus=-1;toast("Сообщение откреплено");renderPinnedBar();});
+            if(source.isPinned(id))source.togglePinned(id);
+            runOnUiThread(()->{if(isDestroyed()||home||source!=db||!key.equals(activeKey))return;if(pinnedFocus==id)pinnedFocus=-1;toast("Сообщение откреплено");renderPinnedBar();});
         });
     }
     private void pinnedItemMenu(MessageDb.Item message){
@@ -2727,9 +2735,12 @@ public class MainActivity extends Activity {
             }).show();
     }
     private void showPinList(){
+        final MessageDb source=db;final String key=activeKey;final int token=loadToken;
+        if(source==null||home)return;
         worker.execute(()->{
-            List<MessageDb.Item> pins=db.pinned();
+            List<MessageDb.Item> pins=source.pinned();
             runOnUiThread(()->{
+                if(!sameScreenRequest(source,key,token))return;
                 if(pins.isEmpty()){toast("Нет закреплённых сообщений");return;}
                 String[] labels=new String[pins.size()];
                 for(int i=0;i<pins.size();i++)
@@ -3114,14 +3125,22 @@ public class MainActivity extends Activity {
                     mine=input.getText().toString().trim();getPreferences(MODE_PRIVATE).edit().putString("mine",mine).apply();showPage();
                 }).show();
     }
+    private boolean sameScreenRequest(MessageDb source,String key,int token){
+        return !isFinishing()&&!isDestroyed()&&!home&&source==db&&key.equals(activeKey)&&token==loadToken;
+    }
     private void chooseDate(){
+        if(home||db==null)return;
+        final MessageDb source=db;final String key=activeKey;final int token=loadToken;
         Calendar c=Calendar.getInstance();
         new DatePickerDialog(this,(view,y,m,d)->{
+            if(!sameScreenRequest(source,key,token))return;
             final String requested=String.format(Locale.ROOT,"%04d-%02d-%02d",y,m+1,d);
             status.setText("Ищу переписку по дате "+requested+"…");
             worker.execute(()->{
-                MessageDb.DateMatch found=db.nearestDate(y,m+1,d);
+                MessageDb.DateMatch found;
+                try{found=source.nearestDate(y,m+1,d);}catch(Exception error){runOnUiThread(()->{if(sameScreenRequest(source,key,token))toast("Не удалось найти дату");});return;}
                 runOnUiThread(()->{
+                    if(!sameScreenRequest(source,key,token))return;
                     if(found.position<0){toast("В переписке нет сообщений с распознанной датой");return;}
                     screen="chat";chatOffset=Math.max(0,found.position-5);highlightId=-1;returnScreen="";searchReturnsToAnalytics=false;
                     showPage();
@@ -3273,8 +3292,9 @@ public class MainActivity extends Activity {
         }
         if(request==CAPSULE_EXPORT_REQUEST){
             char[] password=pendingCapsulePassword;pendingCapsulePassword=null;
-            if(result==RESULT_OK&&data!=null&&data.getData()!=null)exportCapsule(data.getData(),password);
-            else if(password!=null)java.util.Arrays.fill(password,(char)0);
+            String key=pendingCapsuleKey;pendingCapsuleKey=null;
+            if(result==RESULT_OK&&data!=null&&data.getData()!=null&&key!=null&&key.equals(activeKey)&&!home)exportCapsule(data.getData(),password);
+            else if(password!=null){java.util.Arrays.fill(password,(char)0);if(result==RESULT_OK)toast("Переписка изменилась. Повтори экспорт.");}
             return;
         }
         if(request==WRAPPED_PNG_REQUEST&&result==RESULT_OK&&data!=null&&data.getData()!=null){exportWrappedTo(data.getData());return;}
@@ -5628,11 +5648,14 @@ public class MainActivity extends Activity {
         return QuoteFormatter.excerpt(sequence.toString(),start,end);
     }
     private void chooseMessageAttachment(long messageId){
+        final MessageDb source=db;final String key=activeKey;final int token=loadToken;
+        if(source==null||home)return;
         worker.execute(()->{
             MessageDb.Item selected=new MessageDb.Item();selected.id=messageId;
-            Map<Long,List<MessageDb.Attachment>> result=db.attachmentsForMessages(java.util.Collections.singletonList(selected));
+            Map<Long,List<MessageDb.Attachment>> result=source.attachmentsForMessages(java.util.Collections.singletonList(selected));
             List<MessageDb.Attachment> media=result.get(messageId);
             runOnUiThread(()->{
+                if(!sameScreenRequest(source,key,token))return;
                 if(media==null||media.isEmpty()){toast("У этого сообщения нет вложений");return;}
                 if(media.size()==1){mediaActions(media.get(0));return;}
                 String[] items=new String[media.size()];
@@ -6609,7 +6632,7 @@ public class MainActivity extends Activity {
             Uri uri=result;runOnUiThread(()->{
                 // A slow SAF provider must never open media from a previously
                 // selected chat after navigation or player closure.
-                if(isFinishing()||!MediaRequestGuard.isCurrent(requestedArchive,activeKey,
+                if(isFinishing()||isDestroyed()||!MediaRequestGuard.isCurrent(requestedArchive,activeKey,
                         requestedLoad,loadToken,requestedPlayback,playbackGeneration))return;
                 if(uri==null){
                     status.setText("Файл не найден: "+path);
