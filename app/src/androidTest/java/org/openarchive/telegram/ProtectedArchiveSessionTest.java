@@ -178,4 +178,41 @@ public final class ProtectedArchiveSessionTest {
             player.seekTo(500);player.start();player.pause();
         }finally{player.release();source.close();}
     }
+    // Independent upstream synthetic fixtures from junrar/junrar v8.1.2:
+    // src/test/resources/com/github/junrar/password/rar{4,5}-password-junrar.rar
+    // The fixture password is "junrar"; no user archive or credential is used.
+    private static final String RAR4="UmFyIRoHAM+QcwAADQAAAAAAAADqWnQklDMAIAAAAAYAAAADBPcp4veq81AdMwkApIEAAGZpbGUxLnR4dFioM3YCpGjgAMAsmDgcSsnwnUn6kzM4BlpBbF+uQO0D7ORxNIz3Z4nsScQ9ewBABwA=";
+    private static final String RAR5="UmFyIRoHAQAzkrXlCgEFBgAFAQGAgABfIc6zUQIDMaAABoYApIMCY0kUXxnn0+uAAwEJZmlsZTEudHh0MAEAAw+rgP7jvy7bm3QlOdS3YZwFYG45NDcQ1tsYPE/SbYZEVJmc4Qhprj8yi5S4gj56t2Cqe0X/M28NnKG0ccGCC/yKLzwOLmAr44eAnrJUHXdWUQMFBAA=";
+    private static final String RAR5_HEADERS="UmFyIRoHAQAYOJrPIQQAAAEPprqRs1Vs70VeAnJr65GiUWzJnBs88EB6pEDZCDMNebpM1FRWRidOoP8NEKunwvQXSE6qyWZSmFdTmJz5B4PRrGmc/9wgf07nAr0VnT/SUD7KGRm04mC2+uJap3bok3fPNwjtWnVbqxga+30ke8uVJYZkiuuGhz7dmPmsjcbbifv8JRtif4lMcFsoiFclxaKGgHWEAQ5iUr3A418NqLr87fq2lB4LpFyCVjVgrfNS3Ou5IdI1MBz0SPemsbqYy9mjOR0uTISWgDqgl9qBApSZxzov0pm4HbMDGpR2jEAzLnvZFtWMyUYPoVpguDM=";
+    private byte[] verifyRar(String fixture)throws Exception{
+        File rar=File.createTempFile("protected-independent-",".rar",context.getCacheDir());
+        byte[] original=android.util.Base64.decode(fixture,android.util.Base64.DEFAULT);
+        Files.write(rar.toPath(),original);char[] secret="junrar".toCharArray();
+        try{
+            byte[] decoded;
+            try(ProtectedArchiveSession session=ProtectedArchiveSession.open(context,Uri.fromFile(rar),"rar",secret)){
+                assertFalse(session.usesContainerCopy());
+                assertFalse(session.list().isEmpty());
+                ProtectedArchiveSession.Entry target=null;
+                for(ProtectedArchiveSession.Entry e:session.list())if(e.name.endsWith("file1.txt")){target=e;break;}
+                assertNotNull("Known fixture member file1.txt",target);
+                assertTrue(target.encrypted);
+                decoded=session.read(target.name,1024);
+                assertTrue(decoded.length>0);
+            }
+            boolean rejected=false;
+            try(ProtectedArchiveSession wrong=ProtectedArchiveSession.open(context,Uri.fromFile(rar),"rar","wrong-fixture-key".toCharArray())){
+                for(ProtectedArchiveSession.Entry e:wrong.list())if(e.name.endsWith("file1.txt"))wrong.read(e.name,1024);
+            }catch(Exception expected){rejected=true;}
+            assertTrue("Wrong RAR password must fail",rejected);
+            assertArrayEquals(original,Files.readAllBytes(rar.toPath()));
+            return decoded;
+        }finally{rar.delete();Arrays.fill(secret,'\0');}
+    }
+    @Test public void independentRar4AndRar5PasswordFixturesDecodeSameContent()throws Exception{
+        assertArrayEquals(verifyRar(RAR4),verifyRar(RAR5));
+    }
+    @Test public void independentRar5EncryptedHeadersRequireCorrectPassword()throws Exception{
+        assertArrayEquals(verifyRar(RAR5),verifyRar(RAR5_HEADERS));
+    }
 }
