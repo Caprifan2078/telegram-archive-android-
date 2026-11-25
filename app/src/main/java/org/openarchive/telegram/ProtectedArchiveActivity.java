@@ -292,7 +292,7 @@ public final class ProtectedArchiveActivity extends Activity {
                 final android.media.MediaDataSource ready=source;
                 source=null;
                 runOnUiThread(()->{
-                    if(token!=generation||previewToken!=previewGeneration||isFinishing()||isDestroyed()){ready.close();return;}
+                    if(token!=generation||previewToken!=previewGeneration||isFinishing()||isDestroyed()){closeMediaSource(ready);return;}
                     try{mediaPlayer=new ProtectedMediaPlayer(this,ready,video);}
                     catch(RuntimeException e){closeMediaSource(ready);Toast.makeText(this,"Плеер не открылся",Toast.LENGTH_SHORT).show();}
                 });
