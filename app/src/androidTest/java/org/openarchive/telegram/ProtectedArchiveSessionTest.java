@@ -300,6 +300,18 @@ public final class ProtectedArchiveSessionTest {
             assertNotNull("Filtered photo is visible",awaitText(screen,"example.jpg",5000));
             instrumentation.runOnMainSync(()->assertNull("Round excluded from photos",
                 findText(screen.getWindow().getDecorView(),"example.mp4")));
+            androidx.test.espresso.Espresso.onView(
+                androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom(android.widget.EditText.class))
+                .perform(androidx.test.espresso.action.ViewActions.replaceText("no-match-fixture"),
+                    androidx.test.espresso.action.ViewActions.closeSoftKeyboard());
+            assertNotNull("Filename search reports no results",awaitText(screen,"Ничего не найдено",5000));
+            instrumentation.runOnMainSync(()->assertNull("Nonmatching photo must disappear",
+                findText(screen.getWindow().getDecorView(),"example.jpg")));
+            androidx.test.espresso.Espresso.onView(
+                androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom(android.widget.EditText.class))
+                .perform(androidx.test.espresso.action.ViewActions.replaceText("EXAMPLE.JPG"),
+                    androidx.test.espresso.action.ViewActions.closeSoftKeyboard());
+            assertNotNull("Case-insensitive filename search",awaitText(screen,"example.jpg",5000));
             instrumentation.runOnMainSync(screen::onBackPressed);
             assertNotNull("Back returns to chat",awaitText(screen,marker,5000));
             androidx.test.espresso.Espresso.onView(
@@ -504,6 +516,22 @@ public final class ProtectedArchiveSessionTest {
         }finally{
             inst.runOnMainSync(()->{if(ref.get()!=null)ref.get().close();activity.finish();});
             source.close();
+        }
+    }
+    @Test public void protectedTextPreviewDecodesOnlyBoundedValidText()throws Exception{
+        String content="Пример текста, без сохранения на диск";
+        assertEquals(content,ProtectedTextPreview.decode(content.getBytes(StandardCharsets.UTF_8)));
+        byte[] utf16=content.getBytes(StandardCharsets.UTF_16LE);
+        byte[] bom=new byte[utf16.length+2];bom[0]=(byte)255;bom[1]=(byte)254;
+        System.arraycopy(utf16,0,bom,2,utf16.length);
+        assertEquals(content,ProtectedTextPreview.decode(bom));
+        byte[] utf8=content.getBytes(StandardCharsets.UTF_8);
+        byte[] bom8=new byte[utf8.length+3];bom8[0]=(byte)239;bom8[1]=(byte)187;bom8[2]=(byte)191;
+        System.arraycopy(utf8,0,bom8,3,utf8.length);
+        assertEquals(content,ProtectedTextPreview.decode(bom8));
+        for(byte[] invalid:new byte[][]{new byte[]{(byte)0xc0,(byte)0xaf},new byte[]{65,0,66},new byte[256*1024+1]}){
+            try{ProtectedTextPreview.decode(invalid);fail("Invalid or oversized text must fail");}
+            catch(IOException expected){}
         }
     }
 }
