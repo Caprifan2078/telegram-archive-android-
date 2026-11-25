@@ -2,6 +2,7 @@ package org.openarchive.telegram;
 
 import android.content.Context;
 import android.net.Uri;
+import android.os.ParcelFileDescriptor;
 import com.github.junrar.Archive;
 import com.github.junrar.ArchiveOptions;
 import com.github.junrar.rarfile.FileHeader;
@@ -25,6 +26,7 @@ final class ProtectedArchiveSession implements AutoCloseable {
     }
     private final File file;
     private final boolean temporary;
+    private final ParcelFileDescriptor retainedDescriptor;
     private final char[] password;
     private final String format;
     private final Map<String,Entry> entries=new LinkedHashMap<>();
@@ -38,6 +40,22 @@ final class ProtectedArchiveSession implements AutoCloseable {
             File candidate=new File(uri.getPath());
             if(candidate.isFile()&&candidate.canRead())source=candidate;
         }
+        // Most local SAF providers hand out a seekable descriptor. Reopen its
+        // proc-fd alias only when Android permits read access and seeking.
+        // No path guessing or broad storage permission.
+        ParcelFileDescriptor retained=null;
+        if(source==null&&"content".equals(uri.getScheme())){
+            try{
+                retained=context.getContentResolver().openFileDescriptor(uri,"r");
+                if(retained!=null){
+                    File alias=new File("/proc/self/fd/"+retained.getFd());
+                    try(RandomAccessFile probe=new RandomAccessFile(alias,"r")){
+                        if(probe.length()>0){probe.seek(0);source=alias;}
+                    }
+                }
+            }catch(IOException|SecurityException ignored){}
+            if(source==null&&retained!=null){try{retained.close();}catch(IOException ignored){}retained=null;}
+        }
         boolean temporary=source==null;
         if(temporary){
             source=File.createTempFile("protected-container-","."+format,context.getCacheDir());
@@ -48,12 +66,12 @@ final class ProtectedArchiveSession implements AutoCloseable {
                 transfer(in,out,limit);
             }catch(Exception ex){source.delete();throw ex;}
         }
-        ProtectedArchiveSession result=new ProtectedArchiveSession(source,temporary,format,secret);
+        ProtectedArchiveSession result=new ProtectedArchiveSession(source,temporary,retained,format,secret);
         try{result.index();return result;}
         catch(Exception ex){result.close();throw ex;}
     }
-    private ProtectedArchiveSession(File file,boolean temporary,String format,char[] secret){
-        this.file=file;this.temporary=temporary;this.format=format;
+    private ProtectedArchiveSession(File file,boolean temporary,ParcelFileDescriptor retained,String format,char[] secret){
+        this.file=file;this.temporary=temporary;this.retainedDescriptor=retained;this.format=format;
         password=secret==null?new char[0]:secret.clone();
     }
     private static void checkCancelled()throws InterruptedIOException{
@@ -164,6 +182,7 @@ final class ProtectedArchiveSession implements AutoCloseable {
     @Override public synchronized void close(){
         if(closed)return;
         closed=true;Arrays.fill(password,'\0');entries.clear();
+        if(retainedDescriptor!=null)try{retainedDescriptor.close();}catch(IOException ignored){}
         if(temporary)file.delete();
     }
 }
