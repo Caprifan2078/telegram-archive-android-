@@ -247,8 +247,16 @@ public class UiMenuTourRegressionTest {
         String[] styles={"Обычные карточки","Стеклянный стиль"};
         for(int n=0;n<styles.length;n++){
             openDialog("glassDialog");
+            expect(styles[n]);
+            final boolean expected=n==1;
             tap(styles[n]);
-            assertEquals("Glass option not saved",n==1,prefs.getBoolean("appearance_glass",n==0));
+            long deadline=android.os.SystemClock.uptimeMillis()+4000;
+            while(prefs.getBoolean("appearance_glass",!expected)!=expected&&android.os.SystemClock.uptimeMillis()<deadline){
+                inst.waitForIdleSync();
+                android.os.SystemClock.sleep(100);
+            }
+            if(prefs.getBoolean("appearance_glass",!expected)!=expected)screenshot("glass-option-not-saved");
+            assertEquals("Glass option not saved",expected,prefs.getBoolean("appearance_glass",!expected));
         }
         openDialog("performanceDialog");
         boolean old=prefs.getBoolean("appearance_less_motion",false);
