@@ -3861,7 +3861,7 @@ public class MainActivity extends Activity {
             return;
         }
         if("content".equals(analyticsSection)){
-            analyticsSectionHeading("О чём переписка","Фотографии, видео, голосовые, частые слова и активные даты.");
+            analyticsSectionHeading("Слова и вложения","Частота слов и количество вложений по типам.");
         LinearLayout media=analyticsCard("Медиатека по типам");
         String[] kinds={"image","video","round","voice","audio","gif","sticker","file"};
         String[] titles={"Фото","Обычные видео","Видеосообщения","Голосовые","Музыка/аудио","GIF","Стикеры","Файлы"};
@@ -3909,12 +3909,6 @@ public class MainActivity extends Activity {
                 });
             }
         }
-        if(!r.days.isEmpty()){
-            LinearLayout days=analyticsCard("Самые активные дни");
-            ArrayList<Map.Entry<String,Long>> ranked=new ArrayList<>(r.days.entrySet());
-            ranked.sort((a,b)->{int diff=Long.compare(b.getValue(),a.getValue());return diff!=0?diff:a.getKey().compareTo(b.getKey());});
-            for(int i=0;i<Math.min(8,ranked.size());i++)analyticsLine(days,ranked.get(i).getKey(),ranked.get(i).getValue());
-        }
             return;
         }
         analyticsSectionHeading("Главное о переписке","Короткая сводка без длинных таблиц и графиков.");
@@ -3929,7 +3923,7 @@ public class MainActivity extends Activity {
         analyticsLine(snapshot,"Активных дней",r.days.size());
         if(!r.firstDay.isEmpty())
             analyticsText(snapshot,"Период: "+friendlyAnalyticsDate(r.firstDay)+" — "+friendlyAnalyticsDate(r.lastDay),SUB,12);
-        TextView expandOverview=secondaryDisclosure("Все показатели  ▾");
+        TextView expandOverview=secondaryDisclosure("Дополнительные показатели  ▾");
         LinearLayout.LayoutParams expandParams=p(-1,42);
         expandParams.setMargins(px(5),px(2),px(5),px(3));
         list.addView(expandOverview,expandParams);
@@ -3938,15 +3932,10 @@ public class MainActivity extends Activity {
         expandOverview.setOnClickListener(v->{
             boolean show=overview.getVisibility()!=View.VISIBLE;
             overview.setVisibility(show?View.VISIBLE:View.GONE);
-            expandOverview.setText(show?"Скрыть показатели  ▴":"Все показатели  ▾");
+            expandOverview.setText(show?"Скрыть показатели  ▴":"Дополнительные показатели  ▾");
         });
-        analyticsLine(overview,"Сообщений",r.totalMessages);
-        analyticsLine(overview,"Участников / отправителей",r.people.size());
-        analyticsLine(overview,"Слов",r.totalWords);
         analyticsLine(overview,"Символов (Unicode)",r.totalCharacters);
-        analyticsLine(overview,"Медиа и файлов",r.totalMedia);
-        if(!r.firstDay.isEmpty())
-            analyticsText(overview,"Активных дней: "+r.days.size(),SUB,12);
+        analyticsText(overview,"Символы включают пробелы и знаки, если они входят в текст сообщения.",SUB,12);
 
         if(r.trends!=null&&!r.trends.all.days.isEmpty()){
             TextView openYear=secondaryDisclosure("✦ Итоги выбранного года  ▾");
@@ -4081,7 +4070,7 @@ public class MainActivity extends Activity {
         });
         ChatTrends.Activity activity=report.trends.forPerson(analyticsSelectedAuthor);
         if(graphs){
-        ChatTrends.Series values=ChatTrends.series(activity,analyticsUnit);
+        ChatTrends.Series values="year".equals(analyticsUnit)?ChatTrends.allTimeYears(activity):ChatTrends.series(activity,analyticsUnit);
         if(values.values.length==0){analyticsText(controls,"Нет сообщений с распознанной датой.",SUB,13);}
         else {
             analyticsBarChart(controls,values.labels,values.details,values.values,
@@ -4089,12 +4078,14 @@ public class MainActivity extends Activity {
             if(values.clipped)analyticsText(controls,"Показаны последние "+values.values.length+" периодов; более ранняя история скрыта только на графике.",SUB,11);
             analyticsText(controls,"Сообщений на показанном участке: "+values.visibleCount+" · точные значения указаны рядом с периодами.",SUB,11);
         }
+        if(!"year".equals(analyticsUnit)){
         LinearLayout entire=analyticsCard("Вся история переписки · по годам");
         analyticsText(entire,"От самого первого до последнего года экспорта. Это все годы, а не только последние 30. Точное количество указано рядом с каждым годом.",SUB,12);
         ChatTrends.Series fullHistory=ChatTrends.allTimeYears(activity);
         if(fullHistory.values.length>0){
             analyticsBarChart(entire,fullHistory.labels,fullHistory.details,fullHistory.values,38,120);
             analyticsText(entire,"Всего сообщений с распознанной датой: "+fullHistory.visibleCount,SUB,12);
+        }
         }
         LinearLayout singleYear=analyticsCard("Все 12 месяцев одного года");
         int earliestYear=ChatTrends.earliestYear(activity),latestYear=ChatTrends.latestYear(activity);
@@ -4111,6 +4102,12 @@ public class MainActivity extends Activity {
             analyticsText(singleYear,"Перечислены все месяцы с января по декабрь; длина полосы показывает количество сообщений.",SUB,11);
         }
             return;
+        }
+        if(!report.days.isEmpty()){
+            LinearLayout days=analyticsCard("Самые активные дни");
+            ArrayList<Map.Entry<String,Long>> ranked=new ArrayList<>(r.days.entrySet());
+            ranked.sort((a,b)->{int diff=Long.compare(b.getValue(),a.getValue());return diff!=0?diff:a.getKey().compareTo(b.getKey());});
+            for(int i=0;i<Math.min(8,ranked.size());i++)analyticsLine(days,ranked.get(i).getKey(),ranked.get(i).getValue());
         }
         LinearLayout hours=analyticsCard("Когда пишут · 00:00–24:00");
         analyticsText(hours,"Час отправки сообщения по исходной отметке времени, 00:00–23:59.",SUB,11);
@@ -6489,30 +6486,31 @@ public class MainActivity extends Activity {
     private void mediaActions(MessageDb.Attachment a){
         boolean round="round".equals(a.kind);
         MediaSavePolicy.Spec spec=MediaSavePolicy.plan(a.path,a.kind,false);
-        String saveLabel=(spec.destination==MediaSavePolicy.Destination.PICTURES||spec.destination==MediaSavePolicy.Destination.MOVIES)
-            ?"↓ Сохранить в галерею":(spec.destination==MediaSavePolicy.Destination.MUSIC?"↓ Сохранить в музыку":"↓ Сохранить на устройство");
-        String[] names=round?
-            new String[]{"▶ Плавающее видеосообщение","⛶ Полный экран / PiP","↗ Перейти к сообщению","☆ В избранное","Открыть внешним плеером",saveLabel,"↓ Сохранить в Загрузки","☑ Выбрать несколько","+ Добавить в коллекцию"}:
-            new String[]{"▶ Воспроизвести / открыть","↗ Перейти к сообщению","☆ Отметить сообщение","⛶ Открыть полностью",saveLabel,"↓ Сохранить в Загрузки","☑ Выбрать несколько","+ Добавить в коллекцию"};
-        new FontDialog.Builder(this).setTitle(mediaLabel(a.kind)+" · "+day(a.date)).setItems(names,(dlg,which)->{
-            if(round){
-                if(which==0)showFloatingRound(a);
-                else if(which==1)openRoundPlayer(a);
-                else if(which==2)jump(a.messageId,screen.equals("media")?"media":"");
-                else if(which==3)toggleStar(a.messageId);
-                else if(which==4)resolveMedia(a.path,uri->external(uri,a.path));
-                else if(which==7){multiSelectMedia=true;selectedMediaArchive=activeKey;toggleMediaSelection(a);screen="media";showPage();}
-                else if(which==8)addMediaToCollection(java.util.Collections.singletonList(a));
-                else saveAttachment(a,which==6);
-            }else{
-                if(which==0||which==3)openMedia(a);
-                else if(which==1)jump(a.messageId,"media");
-                else if(which==2)toggleStar(a.messageId);
-                else if(which==6){multiSelectMedia=true;selectedMediaArchive=activeKey;toggleMediaSelection(a);screen="media";showPage();}
-                else if(which==7)addMediaToCollection(java.util.Collections.singletonList(a));
-                else saveAttachment(a,which==5);
-            }
-        }).show();
+        ArrayList<String> names=new ArrayList<>();ArrayList<Runnable> actions=new ArrayList<>();
+        if(round){
+            names.add("Плавающий кружок");actions.add(()->showFloatingRound(a));
+            names.add("Полный экран / PiP");actions.add(()->openRoundPlayer(a));
+            names.add("Внешний плеер");actions.add(()->resolveMedia(a.path,uri->external(uri,a.path)));
+        }else{
+            names.add("Открыть вложение");actions.add(()->openMedia(a));
+        }
+        names.add("Перейти к сообщению");actions.add(()->jump(a.messageId,"media".equals(screen)?"media":""));
+        names.add("Изменить отметку «Избранное»");actions.add(()->toggleStar(a.messageId));
+        String saveLabel=spec.destination==MediaSavePolicy.Destination.PICTURES||spec.destination==MediaSavePolicy.Destination.MOVIES
+            ?"Сохранить в галерею":spec.destination==MediaSavePolicy.Destination.MUSIC?"Сохранить в музыку":"Сохранить в Загрузки";
+        names.add(saveLabel);actions.add(()->saveAttachment(a,false));
+        if(spec.destination!=MediaSavePolicy.Destination.DOWNLOADS){
+            names.add("Сохранить в Загрузки");actions.add(()->saveAttachment(a,true));
+        }
+        names.add("Выбрать несколько файлов");actions.add(()->{
+            if(!activeKey.equals(selectedMediaArchive))clearMediaSelection();
+            multiSelectMedia=true;selectedMediaArchive=activeKey;
+            toggleMediaSelection(a);screen="media";showPage();
+        });
+        names.add("Добавить в коллекцию");actions.add(()->addMediaToCollection(java.util.Collections.singletonList(a)));
+        new FontDialog.Builder(this).setTitle(mediaLabel(a.kind)+" · "+day(a.date))
+            .setItems(names.toArray(new String[0]),(dlg,which)->actions.get(which).run())
+            .setNegativeButton("Закрыть",null).show();
     }
     private void saveAttachment(MessageDb.Attachment a,boolean downloads){
         MediaSavePolicy.Spec spec=MediaSavePolicy.plan(a.path,a.kind,downloads);
