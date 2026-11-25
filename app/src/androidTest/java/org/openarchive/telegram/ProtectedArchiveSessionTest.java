@@ -215,4 +215,53 @@ public final class ProtectedArchiveSessionTest {
     @Test public void independentRar5EncryptedHeadersRequireCorrectPassword()throws Exception{
         assertArrayEquals(verifyRar(RAR5),verifyRar(RAR5_HEADERS));
     }
+    @Test public void protectedUiOpensChatAndLocksWithoutCreatingPlaintextDatabase()throws Exception{
+        File html=File.createTempFile("protected-ui-synthetic-",".html",context.getCacheDir());
+        File zip=File.createTempFile("protected-ui-synthetic-",".zip",context.getCacheDir());
+        assertTrue(zip.delete());char[] password="protected-ui-test".toCharArray();
+        String marker="SyntheticProtectedChatMarker";
+        android.content.SharedPreferences prefs=context.getSharedPreferences("protected_archive_pins",Context.MODE_PRIVATE);
+        String old=prefs.getString("items",null);
+        android.app.Activity activity=null;
+        try{
+            Files.write(html.toPath(),("<html><body><div class=\"history\"><div class=\"message default\" id=\"message7\"><div class=\"body\"><div class=\"from_name\">Test</div><div class=\"text\">"+marker+"</div></div></div></div></body></html>").getBytes(StandardCharsets.UTF_8));
+            try(ZipFile writer=new ZipFile(zip,password)){
+                ZipParameters p=new ZipParameters();p.setFileNameInZip("messages.html");
+                p.setEncryptFiles(true);p.setEncryptionMethod(EncryptionMethod.AES);
+                p.setAesKeyStrength(AesKeyStrength.KEY_STRENGTH_256);writer.addFile(html,p);
+            }
+            org.json.JSONObject pinned=new org.json.JSONObject();
+            pinned.put("uri",Uri.fromFile(zip).toString());pinned.put("name","Synthetic secure fixture");
+            assertTrue(prefs.edit().putString("items",new org.json.JSONArray().put(pinned).toString()).commit());
+            java.util.Set<String> databases=new java.util.HashSet<>(Arrays.asList(context.databaseList()));
+            android.app.Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();
+            activity=instrumentation.startActivitySync(new android.content.Intent(context,ProtectedArchiveActivity.class)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+            androidx.test.uiautomator.UiDevice device=androidx.test.uiautomator.UiDevice.getInstance(instrumentation);
+            androidx.test.uiautomator.UiObject2 pin=device.wait(androidx.test.uiautomator.Until.findObject(
+                androidx.test.uiautomator.By.textContains("Synthetic secure fixture")),10000);
+            assertNotNull("Pinned archive visible",pin);pin.click();
+            androidx.test.uiautomator.UiObject2 field=device.wait(androidx.test.uiautomator.Until.findObject(
+                androidx.test.uiautomator.By.clazz("android.widget.EditText")),5000);
+            assertNotNull("Password prompt",field);field.setText("protected-ui-test");
+            androidx.test.uiautomator.UiObject2 open=device.wait(androidx.test.uiautomator.Until.findObject(
+                androidx.test.uiautomator.By.text("Открыть")),5000);
+            assertNotNull(open);open.click();
+            assertTrue("Message appears after password",device.wait(androidx.test.uiautomator.Until.hasObject(
+                androidx.test.uiautomator.By.textContains(marker)),15000));
+            androidx.test.uiautomator.UiObject2 lock=device.wait(androidx.test.uiautomator.Until.findObject(
+                androidx.test.uiautomator.By.textContains("Заблокировать")),5000);
+            assertNotNull(lock);lock.click();
+            assertTrue("Message removed on lock",device.wait(androidx.test.uiautomator.Until.gone(
+                androidx.test.uiautomator.By.textContains(marker)),5000));
+            assertTrue("Archive remains pinned",device.wait(androidx.test.uiautomator.Until.hasObject(
+                androidx.test.uiautomator.By.textContains("Synthetic secure fixture")),5000));
+            assertEquals(databases,new java.util.HashSet<>(Arrays.asList(context.databaseList())));
+        }finally{
+            if(activity!=null){final android.app.Activity close=activity;
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(close::finish);}
+            if(old==null)prefs.edit().remove("items").commit();else prefs.edit().putString("items",old).commit();
+            html.delete();zip.delete();Arrays.fill(password,'\0');
+        }
+    }
 }
