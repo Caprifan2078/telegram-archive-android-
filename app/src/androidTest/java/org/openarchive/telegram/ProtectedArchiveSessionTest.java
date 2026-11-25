@@ -237,25 +237,32 @@ public final class ProtectedArchiveSessionTest {
             android.app.Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();
             activity=instrumentation.startActivitySync(new android.content.Intent(context,ProtectedArchiveActivity.class)
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
-            androidx.test.uiautomator.UiDevice device=androidx.test.uiautomator.UiDevice.getInstance(instrumentation);
-            androidx.test.uiautomator.UiObject2 pin=device.wait(androidx.test.uiautomator.Until.findObject(
-                androidx.test.uiautomator.By.textContains("Synthetic secure fixture")),10000);
-            assertNotNull("Pinned archive visible",pin);pin.click();
-            androidx.test.uiautomator.UiObject2 field=device.wait(androidx.test.uiautomator.Until.findObject(
-                androidx.test.uiautomator.By.clazz("android.widget.EditText")),5000);
-            assertNotNull("Password prompt",field);field.setText("protected-ui-test");
-            androidx.test.uiautomator.UiObject2 open=device.wait(androidx.test.uiautomator.Until.findObject(
-                androidx.test.uiautomator.By.text("Открыть")),5000);
-            assertNotNull(open);open.click();
-            assertTrue("Message appears after password",device.wait(androidx.test.uiautomator.Until.hasObject(
-                androidx.test.uiautomator.By.textContains(marker)),15000));
-            androidx.test.uiautomator.UiObject2 lock=device.wait(androidx.test.uiautomator.Until.findObject(
-                androidx.test.uiautomator.By.textContains("Заблокировать")),5000);
-            assertNotNull(lock);lock.click();
-            assertTrue("Message removed on lock",device.wait(androidx.test.uiautomator.Until.gone(
-                androidx.test.uiautomator.By.textContains(marker)),5000));
-            assertTrue("Archive remains pinned",device.wait(androidx.test.uiautomator.Until.hasObject(
-                androidx.test.uiautomator.By.textContains("Synthetic secure fixture")),5000));
+            // Inspect actual Android widgets in the target process. FLAG_SECURE
+            // stays enabled; accessibility text may be transformed to all caps.
+            final android.app.Activity screen=activity;
+            instrumentation.runOnMainSync(()->assertTrue(
+                (screen.getWindow().getAttributes().flags&
+                    android.view.WindowManager.LayoutParams.FLAG_SECURE)!=0));
+            androidx.test.espresso.Espresso.onView(
+                androidx.test.espresso.matcher.ViewMatchers.withText(org.hamcrest.Matchers.containsString("Synthetic secure fixture")))
+                .perform(androidx.test.espresso.action.ViewActions.click());
+            androidx.test.espresso.Espresso.onView(
+                androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom(android.widget.EditText.class))
+                .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                .perform(androidx.test.espresso.action.ViewActions.replaceText("protected-ui-test"),
+                    androidx.test.espresso.action.ViewActions.closeSoftKeyboard());
+            androidx.test.espresso.Espresso.onView(
+                androidx.test.espresso.matcher.ViewMatchers.withText("Открыть"))
+                .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                .perform(androidx.test.espresso.action.ViewActions.click());
+            android.view.View message=awaitText(screen,marker,15000);
+            assertNotNull("Message appears after correct password",message);
+            android.view.View lock=awaitText(screen,"Заблокировать",5000);
+            assertNotNull("Lock action available",lock);
+            instrumentation.runOnMainSync(lock::performClick);
+            assertNotNull("Archive remains pinned",awaitText(screen,"Synthetic secure fixture",5000));
+            instrumentation.runOnMainSync(()->assertNull(
+                "Message removed on lock",findText(screen.getWindow().getDecorView(),marker)));
             assertEquals(databases,new java.util.HashSet<>(Arrays.asList(context.databaseList())));
         }finally{
             if(activity!=null){final android.app.Activity close=activity;
@@ -263,5 +270,28 @@ public final class ProtectedArchiveSessionTest {
             if(old==null)prefs.edit().remove("items").commit();else prefs.edit().putString("items",old).commit();
             html.delete();zip.delete();Arrays.fill(password,'\0');
         }
+    }
+    private android.view.View awaitText(android.app.Activity activity,String text,long timeout)throws Exception{
+        long until=android.os.SystemClock.uptimeMillis()+timeout;
+        android.app.Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();
+        java.util.concurrent.atomic.AtomicReference<android.view.View> result=new java.util.concurrent.atomic.AtomicReference<>();
+        do{
+            instrumentation.runOnMainSync(()->result.set(findText(activity.getWindow().getDecorView(),text)));
+            if(result.get()!=null)return result.get();
+            android.os.SystemClock.sleep(100);
+        }while(android.os.SystemClock.uptimeMillis()<until);
+        return null;
+    }
+    private static android.view.View findText(android.view.View view,String text){
+        if(view.getVisibility()!=android.view.View.VISIBLE)return null;
+        if(view instanceof android.widget.TextView&&((android.widget.TextView)view).getText()
+            .toString().toLowerCase(java.util.Locale.ROOT).contains(text.toLowerCase(java.util.Locale.ROOT)))return view;
+        if(view instanceof android.view.ViewGroup){
+            android.view.ViewGroup group=(android.view.ViewGroup)view;
+            for(int j=0;j<group.getChildCount();j++){
+                android.view.View found=findText(group.getChildAt(j),text);if(found!=null)return found;
+            }
+        }
+        return null;
     }
 }
