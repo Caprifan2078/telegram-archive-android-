@@ -1498,6 +1498,9 @@ public class MainActivity extends Activity {
         homeHeading.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
         TextView countLabel=text(String.valueOf(archives.length())+(hiddenChats>0?" · скрыто "+hiddenChats:""),12,SUB);
         homeHeading.addView(countLabel);
+        Button protectedArchives=btn("Защищённые архивы · ZIP / RAR");
+        list.addView(protectedArchives,p(-1,45));
+        protectedArchives.setOnClickListener(v->startActivity(new Intent(this,ProtectedArchiveActivity.class)));
         JSONArray trash=chatTrash();
         if(trash==null||trash.length()>0){
             Button recycle=btn(trash==null?"Корзина · требуется проверка":"Корзина · "+trash.length());

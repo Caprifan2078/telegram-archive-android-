@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application android:allowBackup="false" android:label="Telegram Archive 0.51 QA" android:theme="@style/AppTheme" android:usesCleartextTraffic="false">
+        <activity android:name=".ProtectedArchiveActivity" android:exported="false" />
         <activity android:name=".AttachmentPreviewActivity" android:exported="false" />
         <activity android:name=".DemoChatActivity" android:exported="false" />
         <activity android:name=".MusicPlayerActivity" android:exported="false" />
