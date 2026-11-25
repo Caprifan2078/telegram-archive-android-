@@ -1573,20 +1573,10 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams ap=p(-1,60);ap.setMargins(px(2),px(9),px(2),px(8));list.addView(add,ap);
         add.setOnClickListener(v->chooseFolder());
         if(archives.length()>=2&&multiGroups.length()==0){
-            // When groups exist their timeline/comparison tools are already
-            // available from the person card and contextual tool drawer.
-            Button tools=btn("Инструменты для двух переписок  ▾");
-            LinearLayout.LayoutParams outer=p(-1,43);outer.topMargin=px(10);list.addView(tools,outer);
-            LinearLayout advanced=column();advanced.setVisibility(View.GONE);list.addView(advanced,p(-1,-2));
-            Button compare=btn("Сравнение диалогов");advanced.addView(compare,p(-1,45));
+            Button compare=btn("Сравнить две переписки");
+            compare.setContentDescription("Сравнить статистику и общую историю двух переписок");
+            LinearLayout.LayoutParams outer=p(-1,48);outer.topMargin=px(10);list.addView(compare,outer);
             compare.setOnClickListener(v->chooseFirstDualChat("dual_compare"));
-            Button memories=btn("Общие воспоминания");advanced.addView(memories,p(-1,45));
-            memories.setOnClickListener(v->chooseFirstDualChat("dual_memories"));
-            tools.setOnClickListener(v->{
-                boolean opened=advanced.getVisibility()!=View.VISIBLE;
-                advanced.setVisibility(opened?View.VISIBLE:View.GONE);
-                tools.setText(opened?"Скрыть инструменты  ▴":"Инструменты для двух переписок  ▾");
-            });
         }
         animateEntrance();scroll.post(()->scroll.scrollTo(0,0));
     }
@@ -3053,7 +3043,7 @@ public class MainActivity extends Activity {
             searchArea.addView(queryRow,p(-1,52));
             clear.setOnClickListener(v->{searchInput.setText("");applySearch();});
             submit.setOnClickListener(v->applySearch());
-            LinearLayout controls=row();quickButton=btn("⚡ Быстрый поиск");deepButton=btn("⌕ Глубокий поиск");
+            LinearLayout controls=row();quickButton=btn("По словам");deepButton=btn("По фразе и фильтрам");
             controls.addView(quickButton,new LinearLayout.LayoutParams(0,px(43),1));controls.addView(deepButton,new LinearLayout.LayoutParams(0,px(43),1));
             searchArea.addView(controls,p(-1,49));
             quickButton.setBackground(shape(!deep?HIGHLIGHT:PANEL,10));deepButton.setBackground(shape(deep?HIGHLIGHT:PANEL,10));
@@ -3068,7 +3058,7 @@ public class MainActivity extends Activity {
                 mediaOnly.setChecked(restoredMediaDraft!=null?restoredMediaDraft:onlyMedia);restoredMediaDraft=null;searchArea.addView(mediaOnly,p(-1,39));
                 Button resetFilters=btn("Сбросить фильтры");resetFilters.setContentDescription("Сбросить фильтры поиска");
                 searchArea.addView(resetFilters,p(-1,48));resetFilters.setOnClickListener(v->resetSearchFilters());
-                TextView hint=text("Глубокий поиск ищет точное сочетание букв, даже внутри слова; может работать медленнее.",11,SUB);
+                TextView hint=text("Ищет сочетание букв, даже внутри слова. Можно ограничить результаты автором и наличием вложений.",12,SUB);
                 hint.setPadding(px(7),0,0,px(6));searchArea.addView(hint,p(-1,-2));
             }else{
                 if(!byAuthor.isEmpty()||onlyMedia){
@@ -3080,7 +3070,7 @@ public class MainActivity extends Activity {
                     searchArea.addView(reset,p(-1,48));
                     reset.setOnClickListener(v->resetSearchFilters());
                 }
-                TextView hint=text("Быстрый поиск по словам и их началам. Нажми на результат, чтобы перейти в чат.",11,SUB);
+                TextView hint=text("Ищет слова и их начала по индексу. Нажми результат, чтобы открыть сообщение.",12,SUB);
                 hint.setPadding(px(7),0,0,px(4));searchArea.addView(hint,p(-1,-2));
             }
             searchInput.setOnEditorActionListener((v,action,event)->{applySearch();return true;});
@@ -3110,7 +3100,7 @@ public class MainActivity extends Activity {
         if(searchInput!=null)q=searchInput.getText().toString().trim();
         if(authorInput!=null&&deep)byAuthor=authorInput.getText().toString().trim();
         if(mediaOnly!=null&&deep)onlyMedia=mediaOnly.isChecked();
-        searchOffset=0;searchLoaded=PAGE;searchReturnScroll=-1;pendingSearchScroll=-1;configureBars();hideKeyboard();showPage();
+        searchOffset=0;searchLoaded=PAGE;searchReturnScroll=-1;pendingSearchScroll=-1;hideKeyboard();showPage();
     }
     private void hideKeyboard(){try{((InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(base.getWindowToken(),0);}catch(Exception ignored){}}
     private void identityDialog(){
@@ -4827,10 +4817,7 @@ public class MainActivity extends Activity {
         echoes.setOnClickListener(v->{screen="echo";showPage();});
         Button fullCompare=btn("Сравнить две переписки");advanced.addView(fullCompare,p(-1,48));
         fullCompare.setOnClickListener(v->chooseDualChat("dual_compare"));
-        Button sharedMemories=btn("Воспоминания двух переписок");advanced.addView(sharedMemories,p(-1,48));
-        sharedMemories.setOnClickListener(v->chooseDualChat("dual_memories"));
-        Button comparison=btn("Календари двух переписок");advanced.addView(comparison,p(-1,48));
-        comparison.setOnClickListener(v->chooseParallelCalendar());
+        fullCompare.setContentDescription("Сравнить статистику, календари и общую историю двух переписок");
         Button gaps=btn("Паузы между сообщениями");advanced.addView(gaps,p(-1,48));
         gaps.setOnClickListener(v->showConversationPauses());
         LinearLayout eventsHolder=column();list.addView(eventsHolder,p(-1,-2));
@@ -5000,94 +4987,6 @@ public class MainActivity extends Activity {
         });
     }
     /** Two separate per-chat SQLite databases; opt-in counts only, no participant mixing. */
-    private void chooseParallelCalendar(){
-        final String firstKey=activeKey;
-        if(!canOpenQuoteArchive(firstKey)){toast("Сначала открой переписку");return;}
-        ArrayList<String> keys=new ArrayList<>(),labels=new ArrayList<>();
-        for(int i=0;i<archives.length();i++){
-            JSONObject chat=archives.optJSONObject(i);
-            if(chat==null)continue;
-            String key=chat.optString("key");
-            if(!firstKey.equals(key)&&canOpenQuoteArchive(key)){
-                keys.add(key);labels.add(chat.optString("name","Переписка"));
-            }
-        }
-        if(keys.isEmpty()){
-            new FontDialog.Builder(this).setTitle("Параллельные календари")
-                .setMessage("Добавь вторую переписку. Сравнение работает только между двумя явно выбранными локальными архивами.")
-                .setPositiveButton("Понятно",null).show();return;
-        }
-        new FontDialog.Builder(this).setTitle("Второй чат для сравнения")
-            .setItems(labels.toArray(new String[0]),(dialog,index)->{
-                String secondKey=keys.get(index),secondName=labels.get(index);
-                EditText yearInput=new EditText(this);
-                yearInput.setSingleLine(true);yearInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-                yearInput.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(4)});
-                yearInput.setText(String.valueOf(java.time.LocalDate.now().getYear()));
-                new FontDialog.Builder(this).setTitle("Год для двух календарей")
-                    .setMessage("Отобразятся только числа сообщений за каждый месяц. Переписки и участники не объединяются.")
-                    .setView(yearInput).setNegativeButton("Отмена",null)
-                    .setPositiveButton("Сравнить",(d,i)->{
-                        try{
-                            int year=Integer.parseInt(yearInput.getText().toString().trim());
-                            if(year<1||year>9999)throw new NumberFormatException();
-                            showParallelCalendar(firstKey,secondKey,secondName,year);
-                        }catch(NumberFormatException ignored){toast("Укажи год от 1 до 9999");}
-                    }).show();
-            }).setNegativeButton("Отмена",null).show();
-    }
-    private void showParallelCalendar(String firstKey,String secondKey,String secondName,int year){
-        if(!canOpenQuoteArchive(firstKey)||!canOpenQuoteArchive(secondKey)){
-            toast("Архив больше не зарегистрирован");return;
-        }
-        final int token=loadToken;
-        final String firstName=activeName;
-        status.setText("Строю календари — только локальные счётчики…");
-        worker.execute(()->{
-            ParallelCalendars.Comparison report=null;
-            String failure=null;
-            try{
-                String filenameA="default".equals(firstKey)?"telegram_archive.db":"telegram_"+firstKey+".db";
-                String filenameB="default".equals(secondKey)?"telegram_archive.db":"telegram_"+secondKey+".db";
-                if(!getDatabasePath(filenameA).isFile()||!getDatabasePath(filenameB).isFile()){
-                    failure="Одна из баз данных ещё не импортирована";
-                }else{
-                    ParallelCalendars.YearData a,b;
-                    try(android.database.sqlite.SQLiteDatabase dbA=android.database.sqlite.SQLiteDatabase.openDatabase(
-                            getDatabasePath(filenameA).getAbsolutePath(),null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY)){
-                        a=MessageDb.calendarYear(dbA,year);
-                    }
-                    try(android.database.sqlite.SQLiteDatabase dbB=android.database.sqlite.SQLiteDatabase.openDatabase(
-                            getDatabasePath(filenameB).getAbsolutePath(),null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY)){
-                        b=MessageDb.calendarYear(dbB,year);
-                    }
-                    report=new ParallelCalendars.Comparison(a,b);
-                }
-            }catch(Exception e){failure="Ошибка чтения календаря: "+e.getClass().getSimpleName();}
-            final ParallelCalendars.Comparison view=report;
-            final String error=failure;
-            runOnUiThread(()->{
-                if(isFinishing()||token!=loadToken||!firstKey.equals(activeKey)||!"relationships".equals(screen))return;
-                if(error!=null){toast(error);status.setText("Календари: ошибка чтения");return;}
-                StringBuilder result=new StringBuilder("Год: ").append(year).append("\n")
-                    .append(firstName).append(" / ").append(secondName).append("\n\n");
-                for(int month=0;month<12;month++){
-                    result.append(String.format(Locale.ROOT,"%02d",month+1)).append(" · ")
-                        .append(view.first.months[month]).append(" / ")
-                        .append(view.second.months[month]).append('\n');
-                }
-                result.append("\nСуммы: ").append(view.first.total()).append(" / ")
-                    .append(view.second.total()).append("\n").append(view.summary());
-                if(view.first.rejected>0||view.second.rejected>0)
-                    result.append("\nПропущены некорректные даты: ").append(view.first.rejected)
-                        .append(" / ").append(view.second.rejected);
-                result.append("\n\nТолько подсчёт по датам из экспорта. Никакие сообщения или участники не объединяются.");
-                new FontDialog.Builder(this).setTitle("Параллельные календари")
-                    .setMessage(result.toString()).setPositiveButton("Закрыть",null).show();
-                status.setText("Сравнение календарей завершено"+(view.complete()?"":" · частично"));
-            });
-        });
-    }
     private void chooseFirstDualChat(String mode){
         if(archives.length()<2){toast("Для сравнения нужны две переписки");return;}
         ArrayList<String> keys=new ArrayList<>(),names=new ArrayList<>();
@@ -5177,6 +5076,13 @@ public class MainActivity extends Activity {
         back.setOnClickListener(v->{screen="relationships";showPage();});
         Button other=btn("⇄ Сменить вторую переписку");list.addView(other,p(-1,45));
         other.setOnClickListener(v->chooseDualChat(mode));
+        LinearLayout modes=row();list.addView(modes,p(-1,48));
+        Button metrics=btn("Статистика");Button timeline=btn("Общая история");
+        modes.addView(metrics,new LinearLayout.LayoutParams(0,-1,1));
+        modes.addView(timeline,new LinearLayout.LayoutParams(0,-1,1));
+        metrics.setEnabled(isTimeline);timeline.setEnabled(!isTimeline);
+        metrics.setOnClickListener(v->{screen="dual_compare";showPage();});
+        timeline.setOnClickListener(v->{screen="dual_memories";showPage();});
         Button yearButton=btn("Год: "+year+"  ▾");list.addView(yearButton,p(-1,45));
         yearButton.setOnClickListener(v->chooseDualYear());
         if(isTimeline){
@@ -5242,8 +5148,6 @@ public class MainActivity extends Activity {
         if(kinds.isEmpty())analyticsText(media,"В этих чатах вложения пока не индексированы.",SUB,12);
         for(String kind:kinds)analyticsText(media,kind+": "+a.mediaTypes.getOrDefault(kind,0L)+
             " / "+b.mediaTypes.getOrDefault(kind,0L),FG,12);
-        Button time=btn("◷ Открыть общие воспоминания за "+dualYear);
-        list.addView(time,p(-1,49));time.setOnClickListener(v->{dualMonth=0;screen="dual_memories";showPage();});
         status.setText("Сравнение двух диалогов · без изменения данных");
     }
     private void drawDualMonthlyBars(LinearLayout target,long[] a,long[] b){
@@ -5296,9 +5200,6 @@ public class MainActivity extends Activity {
             Button open=btn("↗ Перейти к оригиналу в «"+clip(entry.archiveName,26)+"»");
             card.addView(open,p(-1,40));open.setOnClickListener(v->openDualMemory(entry));
         }
-        Button comparison=btn("⇄ Сравнить активность и медиа двух чатов");
-        list.addView(comparison,p(-1,49));
-        comparison.setOnClickListener(v->{screen="dual_compare";showPage();});
         status.setText("Общая временная линия · "+rows.size()+" записей в обзоре");
     }
     private void renderEchoPage(){
