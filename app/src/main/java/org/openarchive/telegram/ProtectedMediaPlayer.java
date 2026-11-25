@@ -12,7 +12,7 @@ import android.widget.*;
 
 /** Internal player: no external intents, no cleartext cache, no persistent playback state. */
 final class ProtectedMediaPlayer implements AutoCloseable {
-    private final ProtectedMediaSource source;
+    private final android.media.MediaDataSource source;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private MediaPlayer player;
     private AlertDialog dialog;
@@ -30,7 +30,7 @@ final class ProtectedMediaPlayer implements AutoCloseable {
             }catch(IllegalStateException e){error();}
         }
     };
-    ProtectedMediaPlayer(Activity context,ProtectedMediaSource source,boolean video){
+    ProtectedMediaPlayer(Activity context,android.media.MediaDataSource source,boolean video){
         this.source=source;
         LinearLayout box=new LinearLayout(context);box.setOrientation(LinearLayout.VERTICAL);
         int p=(int)(12*context.getResources().getDisplayMetrics().density);
@@ -78,7 +78,7 @@ final class ProtectedMediaPlayer implements AutoCloseable {
             if(surface!=null)player.setDisplay(surface);
             player.setOnPreparedListener(p->{
                 if(closed)return;
-                ready=true;status.setText("Медиа открыто · без распаковки на диск");
+                ready=true;status.setText("Медиа открыто · защищённый режим");
                 seek.setMax(Math.max(0,p.getDuration()));seek.setEnabled(true);play.setEnabled(true);
                 try{p.start();handler.post(ticker);}catch(IllegalStateException e){error();}
             });
@@ -96,7 +96,7 @@ final class ProtectedMediaPlayer implements AutoCloseable {
         ready=false;handler.removeCallbacks(ticker);
         play.setEnabled(false);seek.setEnabled(false);
         if(player!=null){try{player.release();}catch(Exception ignored){}player=null;}
-        source.close();
+        try{source.close();}catch(java.io.IOException ignored){}
     }
     @Override public void close(){
         if(closed)return;
