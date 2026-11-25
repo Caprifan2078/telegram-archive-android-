@@ -24,6 +24,11 @@ public final class ProtectedArchiveActivity extends Activity {
     private static final int PICK=81, HTML_LIMIT=32*1024*1024, IMAGE_LIMIT=16*1024*1024;
     private static final java.util.concurrent.atomic.AtomicBoolean ORPHANS_SCANNED=new java.util.concurrent.atomic.AtomicBoolean();
     private final ExecutorService reader=Executors.newSingleThreadExecutor();
+    private final ExecutorService searchWorker=Executors.newSingleThreadExecutor();
+    private final android.os.Handler searchHandler=new android.os.Handler(android.os.Looper.getMainLooper());
+    private Future<?> searchTask;
+    private Runnable pendingSearch;
+    private int searchGeneration;
     private LinearLayout body;
     private ProtectedArchiveSession session;
     private Future<?> task;
@@ -236,9 +241,10 @@ public final class ProtectedArchiveActivity extends Activity {
                 runOnUiThread(()->{
                     if(token!=generation||isFinishing()||isDestroyed())return;
                     lock();library();
-                    new AlertDialog.Builder(this).setTitle("Не удалось открыть")
+                    prompt=new AlertDialog.Builder(this).setTitle("Не удалось открыть")
                         .setMessage("Проверь пароль, формат и свободное место. Поддерживается один зашифрованный HTML или JSON чат; многотомные и некоторые RAR архивы могут не открываться.")
-                        .setNegativeButton("Закрыть",null).setPositiveButton("Повторить",(d,w)->ask(uri,name)).show();
+                        .setNegativeButton("Закрыть",null).setPositiveButton("Повторить",(d,w)->ask(uri,name)).create();
+                    secureShow(prompt);
                 });
             }finally{Arrays.fill(password,'\0');if(opened!=null)opened.close();}
         });
@@ -283,15 +289,7 @@ public final class ProtectedArchiveActivity extends Activity {
             @Override public void beforeTextChanged(CharSequence s,int start,int count,int after){}
             @Override public void onTextChanged(CharSequence s,int start,int before,int count){
                 if(lines==null||activeSearch!=search||activeList!=list)return;
-                String q=s.toString().toLowerCase(Locale.ROOT);
-                adapter.setNotifyOnChange(false);adapter.clear();
-                for(int i=0;i<lines.size();i++){
-                    Line line=lines.get(i);
-                    if(q.isEmpty()||line.text.toLowerCase(Locale.ROOT).contains(q)){
-                        adapter.add(line);
-                    }
-                }
-                adapter.notifyDataSetChanged();
+                filterChat(s.toString(),list,adapter);
             }
             @Override public void afterTextChanged(android.text.Editable e){}
         });body.addView(search);
@@ -304,6 +302,41 @@ public final class ProtectedArchiveActivity extends Activity {
         });
         body.addView(list,new LinearLayout.LayoutParams(-1,0,1));
         list.setSelectionFromTop(Math.min(chatPosition,Math.max(0,lines.size()-1)),chatTop);
+    }
+    private void cancelSearch(){
+        searchGeneration++;
+        if(pendingSearch!=null){searchHandler.removeCallbacks(pendingSearch);pendingSearch=null;}
+        if(searchTask!=null){searchTask.cancel(true);searchTask=null;}
+    }
+    private void filterChat(String query,ListView list,ArrayAdapter<Line> adapter){
+        cancelSearch();
+        if(lines==null)return;
+        final int token=generation,searchToken=searchGeneration;
+        final String needle=query.toLowerCase(Locale.ROOT);
+        if(needle.isEmpty()){
+            adapter.setNotifyOnChange(false);adapter.clear();adapter.addAll(lines);adapter.notifyDataSetChanged();
+            return;
+        }
+        // Capture references, not a second copy of message strings. Never read
+        // the mutable activity list from the background thread after locking.
+        final ArrayList<Line> snapshot=new ArrayList<>(lines);
+        pendingSearch=()->{
+            pendingSearch=null;
+            if(token!=generation||searchToken!=searchGeneration||activeList!=list)return;
+            searchTask=searchWorker.submit(()->{
+                ArrayList<Line> matches=new ArrayList<>();
+                for(Line line:snapshot){
+                    if(Thread.currentThread().isInterrupted())return;
+                    if(line.text.toLowerCase(Locale.ROOT).contains(needle))matches.add(line);
+                }
+                runOnUiThread(()->{
+                    if(token!=generation||searchToken!=searchGeneration||activeList!=list||lines==null)return;
+                    adapter.setNotifyOnChange(false);adapter.clear();adapter.addAll(matches);
+                    adapter.notifyDataSetChanged();
+                });
+            });
+        };
+        searchHandler.postDelayed(pendingSearch,180);
     }
     private static final String[] MEDIA_KEYS={"all","image","video","round","voice","audio","gif","sticker","file"};
     private static final String[] MEDIA_NAMES={"Все","Фото","Видео","Кружки","Голосовые","Музыка","GIF","Стикеры","Файлы"};
@@ -438,6 +471,7 @@ public final class ProtectedArchiveActivity extends Activity {
         });
     }
     private void detachPrivateViews(){
+        cancelSearch();
         if(activeList!=null){
             android.widget.ListAdapter old=activeList.getAdapter();
             activeList.setOnItemClickListener(null);activeList.setOnItemLongClickListener(null);
@@ -459,5 +493,5 @@ public final class ProtectedArchiveActivity extends Activity {
         root="";body.removeAllViews();
     }
     @Override protected void onStop(){lock();library();super.onStop();}
-    @Override protected void onDestroy(){lock();reader.shutdown();super.onDestroy();}
+    @Override protected void onDestroy(){lock();reader.shutdown();searchWorker.shutdownNow();super.onDestroy();}
 }
