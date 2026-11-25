@@ -134,15 +134,46 @@ public final class ProtectedArchiveActivity extends Activity {
             Button b=actionButton("🔒 "+name);b.setMaxLines(2);b.setEllipsize(android.text.TextUtils.TruncateAt.END);
             b.setContentDescription("Открыть защищённую переписку "+name);pinList.addView(b);
             b.setOnClickListener(v->ask(uri,name));
-            b.setOnLongClickListener(v->{
-                new FontDialog.Builder(this).setTitle("Убрать из списка?")
-                    .setMessage("Исходный архив останется на телефоне.")
-                    .setNegativeButton("Отмена",null)
-                    .setPositiveButton("Убрать",(d,w)->{unpin(uri);library();}).show();
-                return true;
-            });
+            b.setOnLongClickListener(v->{archiveActions(uri,name);return true;});
         }
         button("Назад",this::finish);
+    }
+    private void archiveActions(Uri uri,String name){
+        prompt=new FontDialog.Builder(this).setTitle(name)
+            .setItems(new String[]{"Переименовать","Убрать из списка"},(d,choice)->{
+                if(choice==0){renamePin(uri,name);return;}
+                prompt=new FontDialog.Builder(this).setTitle("Убрать из списка?")
+                    .setMessage("Исходный архив останется на телефоне.")
+                    .setNegativeButton("Отмена",null)
+                    .setPositiveButton("Убрать",(dialog,w)->{unpin(uri);library();}).create();
+                secureShow(prompt);
+            }).setNegativeButton("Закрыть",null).create();
+        secureShow(prompt);
+    }
+    private void renamePin(Uri uri,String oldName){
+        EditText field=new EditText(this);field.setSingleLine(true);field.setText(oldName);
+        field.setSelectAllOnFocus(true);field.setSaveEnabled(false);
+        field.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO);
+        field.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
+        field.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(160)});
+        prompt=new FontDialog.Builder(this).setTitle("Название переписки").setView(field)
+            .setNegativeButton("Отмена",null).setPositiveButton("Сохранить",(d,w)->{
+                String name=field.getText().toString().trim();
+                if(name.isEmpty()){Toast.makeText(this,"Название не может быть пустым",Toast.LENGTH_SHORT).show();return;}
+                try{
+                    JSONArray list=entries();
+                    for(int i=0;i<list.length();i++){
+                        JSONObject item=list.optJSONObject(i);
+                        if(item!=null&&uri.toString().equals(item.optString("uri"))){
+                            item.put("name",name);
+                            pins().edit().putString("items",list.toString()).apply();break;
+                        }
+                    }
+                    library();
+                }catch(JSONException e){Toast.makeText(this,"Не удалось изменить название",Toast.LENGTH_SHORT).show();}
+            }).create();
+        prompt.setOnDismissListener(d->field.getText().clear());
+        secureShow(prompt);
     }
     private void unpin(Uri uri){
         JSONArray old=entries(),next=new JSONArray();
@@ -453,7 +484,7 @@ public final class ProtectedArchiveActivity extends Activity {
         if(!picture){
             boolean video="video".equals(media.kind)||"round".equals(media.kind)||("gif".equals(media.kind)||"sticker".equals(media.kind))&&extension.matches(".*\\.(mp4|webm|m4v)");
             if(video||"audio".equals(media.kind)||"voice".equals(media.kind)){playMedia(media,video);return;}
-            if(extension.matches(".*\\.(txt|csv|json|xml|log|md)")){previewText(media);return;}
+            if(extension.matches(".*\\.(txt|csv|json|xml)")){previewText(media);return;}
             Toast.makeText(this,"Этот тип вложения пока не поддерживается в защищённом режиме",Toast.LENGTH_SHORT).show();return;
         }
         cancelPreview();final ProtectedArchiveSession current=session;final int token=generation,previewToken=previewGeneration;
