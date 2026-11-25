@@ -3,9 +3,9 @@ on:
   push:
     branches: [qa/protected-archive-session-20261125, qa/protected-video-regression-20261125]
   pull_request:
-    branches: [qa/drawer-aes-zip-20261123]
+    branches: [qa/drawer-aes-zip-20261123, qa/protected-archive-session-20261125]
     paths:
-      - 'app/src/**/ProtectedArchive*.java'
+      - 'app/src/**/Protected*.java'
       - '.github/workflows/protected-archive-qa.yml'
 permissions:
   contents: read
