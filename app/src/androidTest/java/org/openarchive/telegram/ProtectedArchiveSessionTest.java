@@ -224,7 +224,10 @@ public final class ProtectedArchiveSessionTest {
         String old=prefs.getString("items",null);
         android.app.Activity activity=null;
         try{
-            Files.write(html.toPath(),("<html><body><div class=\"history\"><div class=\"message default\" id=\"message7\"><div class=\"body\"><div class=\"from_name\">Test</div><div class=\"text\">"+marker+"</div></div></div></div></body></html>").getBytes(StandardCharsets.UTF_8));
+            Files.write(html.toPath(),("<html><body><div class=\"history\">"+
+                "<div class=\"message default\" id=\"message7\"><div class=\"body\"><div class=\"from_name\">Test</div><div class=\"text\">"+marker+"</div><a href=\"photos/example.jpg\">Photo</a></div></div>"+
+                "<div class=\"message default\" id=\"message8\"><div class=\"body\"><div class=\"from_name\">Test</div><div class=\"text\">SecondarySyntheticMessage</div><a href=\"round_video/example.mp4\">Round</a></div></div>"+
+                "</div></body></html>").getBytes(StandardCharsets.UTF_8));
             try(ZipFile writer=new ZipFile(zip,password)){
                 ZipParameters p=new ZipParameters();p.setFileNameInZip("messages.html");
                 p.setEncryptFiles(true);p.setEncryptionMethod(EncryptionMethod.AES);
@@ -286,6 +289,45 @@ public final class ProtectedArchiveSessionTest {
                 .perform(androidx.test.espresso.action.ViewActions.click());
             android.view.View message=awaitText(screen,marker,15000);
             assertNotNull("Message appears after correct password",message);
+            assertNotNull("Second message is visible",awaitText(screen,"SecondarySyntheticMessage",5000));
+            android.view.View media=awaitText(screen,"Медиа · 2",5000);
+            assertNotNull("Indexed media count",media);
+            instrumentation.runOnMainSync(media::performClick);
+            android.view.View photos=awaitText(screen,"Фото 1",5000);
+            assertNotNull("Indexed photo category",photos);
+            assertNotNull("Indexed round-video category",awaitText(screen,"Кружки 1",5000));
+            instrumentation.runOnMainSync(photos::performClick);
+            assertNotNull("Filtered photo is visible",awaitText(screen,"example.jpg",5000));
+            instrumentation.runOnMainSync(()->assertNull("Round excluded from photos",
+                findText(screen.getWindow().getDecorView(),"example.mp4")));
+            androidx.test.espresso.Espresso.onView(
+                androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom(android.widget.EditText.class))
+                .perform(androidx.test.espresso.action.ViewActions.replaceText("no-match-fixture"),
+                    androidx.test.espresso.action.ViewActions.closeSoftKeyboard());
+            assertNotNull("Filename search reports no results",awaitText(screen,"Ничего не найдено",5000));
+            instrumentation.runOnMainSync(()->assertNull("Nonmatching photo must disappear",
+                findText(screen.getWindow().getDecorView(),"example.jpg")));
+            androidx.test.espresso.Espresso.onView(
+                androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom(android.widget.EditText.class))
+                .perform(androidx.test.espresso.action.ViewActions.replaceText("EXAMPLE.JPG"),
+                    androidx.test.espresso.action.ViewActions.closeSoftKeyboard());
+            assertNotNull("Case-insensitive filename search",awaitText(screen,"example.jpg",5000));
+            instrumentation.runOnMainSync(screen::onBackPressed);
+            assertNotNull("Back returns to chat",awaitText(screen,marker,5000));
+            androidx.test.espresso.Espresso.onView(
+                androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom(android.widget.EditText.class))
+                .perform(androidx.test.espresso.action.ViewActions.replaceText(marker),
+                    androidx.test.espresso.action.ViewActions.closeSoftKeyboard());
+            long searchDeadline=android.os.SystemClock.uptimeMillis()+5000;
+            java.util.concurrent.atomic.AtomicBoolean filtered=new java.util.concurrent.atomic.AtomicBoolean();
+            do{
+                instrumentation.runOnMainSync(()->filtered.set(
+                    findText(screen.getWindow().getDecorView(),"SecondarySyntheticMessage")==null));
+                if(filtered.get())break;
+                android.os.SystemClock.sleep(100);
+            }while(android.os.SystemClock.uptimeMillis()<searchDeadline);
+            assertTrue("Search removes nonmatching rows",filtered.get());
+            assertNotNull("Search retains matching message",awaitText(screen,marker,5000));
             android.view.View lock=awaitText(screen,"Заблокировать",5000);
             assertNotNull("Lock action available",lock);
             instrumentation.runOnMainSync(lock::performClick);
@@ -424,5 +466,72 @@ public final class ProtectedArchiveSessionTest {
                 assertNull("Unsafe or ambiguous relative path",folder.resolve(path));
             }
         }finally{photo.delete();nested.delete();dir.delete();}
+    }
+    @Test public void protectedPlayerDialogCanPauseAndCloseItsRealAudioSource()throws Exception{
+        int sampleRate=16000,seconds=5,bytes=sampleRate*seconds*2;
+        java.nio.ByteBuffer wav=java.nio.ByteBuffer.allocate(44+bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        wav.put("RIFF".getBytes(StandardCharsets.US_ASCII)).putInt(36+bytes);
+        wav.put("WAVEfmt ".getBytes(StandardCharsets.US_ASCII)).putInt(16);
+        wav.putShort((short)1).putShort((short)1).putInt(sampleRate).putInt(sampleRate*2);
+        wav.putShort((short)2).putShort((short)16);
+        wav.put("data".getBytes(StandardCharsets.US_ASCII)).putInt(bytes);
+        for(int n=0;n<sampleRate*seconds;n++)wav.putShort((short)0);
+        ProtectedMediaSource source=new ProtectedMediaSource(wav.capacity());
+        source.sink().write(wav.array());source.seal();
+        Arrays.fill(wav.array(),(byte)0);
+        android.app.Instrumentation inst=InstrumentationRegistry.getInstrumentation();
+        android.app.Activity activity=inst.startActivitySync(new android.content.Intent(context,ProtectedArchiveActivity.class)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+        java.util.concurrent.atomic.AtomicReference<ProtectedMediaPlayer> ref=new java.util.concurrent.atomic.AtomicReference<>();
+        try{
+            inst.runOnMainSync(()->ref.set(new ProtectedMediaPlayer(activity,source,false)));
+            ProtectedMediaPlayer panel=ref.get();
+            java.lang.reflect.Field playField=ProtectedMediaPlayer.class.getDeclaredField("play");
+            playField.setAccessible(true);
+            android.widget.Button button=(android.widget.Button)playField.get(panel);
+            java.lang.reflect.Field seekField=ProtectedMediaPlayer.class.getDeclaredField("seek");
+            seekField.setAccessible(true);
+            android.widget.SeekBar seek=(android.widget.SeekBar)seekField.get(panel);
+            java.lang.reflect.Field dialogField=ProtectedMediaPlayer.class.getDeclaredField("dialog");
+            dialogField.setAccessible(true);
+            android.app.AlertDialog dialog=(android.app.AlertDialog)dialogField.get(panel);
+            long until=android.os.SystemClock.uptimeMillis()+10000;
+            java.util.concurrent.atomic.AtomicBoolean ready=new java.util.concurrent.atomic.AtomicBoolean();
+            while(android.os.SystemClock.uptimeMillis()<until){
+                inst.runOnMainSync(()->ready.set(button.isEnabled()&&seek.isEnabled()));
+                if(ready.get())break;
+                android.os.SystemClock.sleep(100);
+            }
+            assertTrue("Real audio decoder enabled playback controls",ready.get());
+            inst.runOnMainSync(()->{
+                assertTrue((dialog.getWindow().getAttributes().flags&
+                    android.view.WindowManager.LayoutParams.FLAG_SECURE)!=0);
+                assertTrue(seek.getMax()>=4500);
+                assertTrue(button.performClick());
+                panel.close();
+                panel.close();
+                assertFalse(dialog.isShowing());
+            });
+            try{source.getSize();fail("Closed dialog must release its media source");}catch(IOException expected){}
+        }finally{
+            inst.runOnMainSync(()->{if(ref.get()!=null)ref.get().close();activity.finish();});
+            source.close();
+        }
+    }
+    @Test public void protectedTextPreviewDecodesOnlyBoundedValidText()throws Exception{
+        String content="Пример текста, без сохранения на диск";
+        assertEquals(content,ProtectedTextPreview.decode(content.getBytes(StandardCharsets.UTF_8)));
+        byte[] utf16=content.getBytes(StandardCharsets.UTF_16LE);
+        byte[] bom=new byte[utf16.length+2];bom[0]=(byte)255;bom[1]=(byte)254;
+        System.arraycopy(utf16,0,bom,2,utf16.length);
+        assertEquals(content,ProtectedTextPreview.decode(bom));
+        byte[] utf8=content.getBytes(StandardCharsets.UTF_8);
+        byte[] bom8=new byte[utf8.length+3];bom8[0]=(byte)239;bom8[1]=(byte)187;bom8[2]=(byte)191;
+        System.arraycopy(utf8,0,bom8,3,utf8.length);
+        assertEquals(content,ProtectedTextPreview.decode(bom8));
+        for(byte[] invalid:new byte[][]{new byte[]{(byte)0xc0,(byte)0xaf},new byte[]{65,0,66},new byte[256*1024+1]}){
+            try{ProtectedTextPreview.decode(invalid);fail("Invalid or oversized text must fail");}
+            catch(IOException expected){}
+        }
     }
 }
