@@ -3923,19 +3923,7 @@ public class MainActivity extends Activity {
         analyticsLine(snapshot,"Активных дней",r.days.size());
         if(!r.firstDay.isEmpty())
             analyticsText(snapshot,"Период: "+friendlyAnalyticsDate(r.firstDay)+" — "+friendlyAnalyticsDate(r.lastDay),SUB,12);
-        TextView expandOverview=secondaryDisclosure("Дополнительные показатели  ▾");
-        LinearLayout.LayoutParams expandParams=p(-1,42);
-        expandParams.setMargins(px(5),px(2),px(5),px(3));
-        list.addView(expandOverview,expandParams);
-        LinearLayout overview=analyticsCard("Подробные показатели");
-        overview.setVisibility(View.GONE);
-        expandOverview.setOnClickListener(v->{
-            boolean show=overview.getVisibility()!=View.VISIBLE;
-            overview.setVisibility(show?View.VISIBLE:View.GONE);
-            expandOverview.setText(show?"Скрыть показатели  ▴":"Дополнительные показатели  ▾");
-        });
-        analyticsLine(overview,"Символов (Unicode)",r.totalCharacters);
-        analyticsText(overview,"Символы включают пробелы и знаки, если они входят в текст сообщения.",SUB,12);
+        analyticsLine(snapshot,"Символов (Unicode)",r.totalCharacters);
 
         if(r.trends!=null&&!r.trends.all.days.isEmpty()){
             TextView openYear=secondaryDisclosure("✦ Итоги выбранного года  ▾");
@@ -4103,11 +4091,15 @@ public class MainActivity extends Activity {
         }
             return;
         }
-        if(!report.days.isEmpty()){
+        if(!activity.days.isEmpty()){
             LinearLayout days=analyticsCard("Самые активные дни");
-            ArrayList<Map.Entry<String,Long>> ranked=new ArrayList<>(r.days.entrySet());
+            ArrayList<Map.Entry<LocalDate,Long>> ranked=new ArrayList<>(activity.days.entrySet());
             ranked.sort((a,b)->{int diff=Long.compare(b.getValue(),a.getValue());return diff!=0?diff:a.getKey().compareTo(b.getKey());});
-            for(int i=0;i<Math.min(8,ranked.size());i++)analyticsLine(days,ranked.get(i).getKey(),ranked.get(i).getValue());
+            for(int i=0;i<Math.min(8,ranked.size());i++){
+                Map.Entry<LocalDate,Long> day=ranked.get(i);
+                if(day.getValue()<=0)continue;
+                analyticsLine(days,day.getKey().toString(),day.getValue());
+            }
         }
         LinearLayout hours=analyticsCard("Когда пишут · 00:00–24:00");
         analyticsText(hours,"Час отправки сообщения по исходной отметке времени, 00:00–23:59.",SUB,11);
