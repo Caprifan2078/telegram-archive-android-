@@ -45,4 +45,35 @@ public class MediaUpgradeRegressionTest {
             assertTrue(migrated.isFavorite(1));
         } finally {migrated.close();context.deleteDatabase(filename);}
     }
+    @Test public void attachmentActionsHaveNoDuplicateOpenOrDownloadOptions()throws Exception{
+        try(androidx.test.core.app.ActivityScenario<MainActivity> scenario=androidx.test.core.app.ActivityScenario.launch(MainActivity.class)){
+            for(String[] fixture:new String[][]{{"file","files/test.pdf"},{"image","photos/test.jpg"},{"round","round_video/test.mp4"}}){
+                scenario.onActivity(activity->{
+                    MessageDb.Attachment attachment=new MessageDb.Attachment();
+                    attachment.path=fixture[1];attachment.kind=fixture[0];attachment.date="2026-01-01 12:00:00";
+                    try{
+                        java.lang.reflect.Method method=MainActivity.class.getDeclaredMethod("mediaActions",MessageDb.Attachment.class);
+                        method.setAccessible(true);method.invoke(activity,attachment);
+                    }catch(Exception e){throw new AssertionError(e);}
+                });
+                androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText("Сохранить в Загрузки"))
+                    .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                    .check(androidx.test.espresso.assertion.ViewAssertions.matches(androidx.test.espresso.matcher.ViewMatchers.isDisplayed()));
+                if("round".equals(fixture[0])){
+                    androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText("Полный экран / PiP"))
+                        .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                        .check(androidx.test.espresso.assertion.ViewAssertions.matches(androidx.test.espresso.matcher.ViewMatchers.isDisplayed()));
+                }else{
+                    androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText("Открыть вложение"))
+                        .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                        .check(androidx.test.espresso.assertion.ViewAssertions.matches(androidx.test.espresso.matcher.ViewMatchers.isDisplayed()));
+                }
+                androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText("Открыть полностью"))
+                    .check(androidx.test.espresso.assertion.ViewAssertions.doesNotExist());
+                androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText("Закрыть"))
+                    .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                    .perform(androidx.test.espresso.action.ViewActions.click());
+            }
+        }
+    }
 }
