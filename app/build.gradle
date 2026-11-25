@@ -214,7 +214,14 @@ android {
             signingConfig signingConfigs.debug
         }
     }
-    testBuildType (project.findProperty('qaDrawerZipInstrumentation') == 'true' ? 'drawerZipQa' :
+    buildTypes {
+        protectedArchiveQa {
+            initWith compactQa
+            applicationIdSuffix '.protectedarchive20261125'
+            signingConfig signingConfigs.debug
+        }
+    }
+    testBuildType (project.findProperty('qaProtectedArchiveInstrumentation') == 'true' ? 'protectedArchiveQa' : project.findProperty('qaDrawerZipInstrumentation') == 'true' ? 'drawerZipQa' :
         (project.findProperty('qaMediaScrubInstrumentation') == 'true' ? 'mediaScrubQa' : (project.findProperty('qaChronologyDirectInstrumentation') == 'true' ? 'chronologyDirectQa' : (project.findProperty('qaRoundReattachInstrumentation') == 'true' ? 'roundReattachQa' : (project.findProperty('qaContentClarityInstrumentation') == 'true' ? 'contentClarityQa' : (project.findProperty('qaUiDensityInstrumentation') == 'true' ? 'uiDensityQa' : (project.findProperty('qaVisualCoherenceInstrumentation') == 'true' ? 'visualCoherenceQa' : (project.findProperty('qaHistoryRoundInstrumentation') == 'true' ? 'historyRoundQa' : (project.findProperty('qaRoundChronologyInstrumentation') == 'true' ? 'roundChronologyQa' : (project.findProperty('qaRealExportInstrumentation') == 'true' ? 'realExportQa' : (project.findProperty('qaGalleryInstrumentation') == 'true' ? 'galleryQa' : (project.findProperty('qaPasswordInstrumentation') == 'true' ? 'passwordOnDemandQa' : (project.findProperty('qaCleanChatInstrumentation') == 'true' ? 'cleanChatQa' : (project.findProperty('qaUiStructureInstrumentation') == 'true' ? 'uiStructureQa' : (project.findProperty('qaUiPolishInstrumentation') == 'true' ? 'uiPolishQa' : (project.findProperty('qaUiReviewInstrumentation') == 'true' ? 'uiReviewQa' : (project.findProperty('qaHandoffInstrumentation') == 'true' ? 'handoffQa' : (project.findProperty('qaStableInstrumentation') == 'true' ? 'stableQa' : 'compactQa'))))))))))))))))))
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
