@@ -1504,7 +1504,7 @@ public class MainActivity extends Activity {
         try{
             protectedCount=new JSONArray(getSharedPreferences("protected_archive_pins",MODE_PRIVATE)
                 .getString("items","[]")).length();
-        }catch(JSONException ignored){}
+        }catch(org.json.JSONException ignored){}
         TextView protectedArchives=text("Защищённые переписки"+
             (protectedCount>0?" · "+protectedCount:"")+"   ›",14,ACCENT);
         protectedArchives.setGravity(Gravity.CENTER_VERTICAL);
