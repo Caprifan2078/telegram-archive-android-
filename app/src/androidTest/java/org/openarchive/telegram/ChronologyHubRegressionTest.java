@@ -70,7 +70,7 @@ public final class ChronologyHubRegressionTest {
                 assertNotNull(find(activity.getWindow().getDecorView(),"02 · Этапы переписки  ›"));
                 assertNotNull(find(activity.getWindow().getDecorView(),"03 · Периоды по датам  ›"));
                 assertNotNull(find(activity.getWindow().getDecorView(),"04 · Сравнение этапов  ›"));
-                assertNotNull(find(activity.getWindow().getDecorView(),"05 · Кинолента медиа по годам  ›"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"05 · В этот день  ›"));
                 find(activity.getWindow().getDecorView(),"01 · События переписки  ▾").performClick();
             }catch(Exception e){throw new AssertionError(e);}});
             idle(activity);
@@ -97,7 +97,7 @@ public final class ChronologyHubRegressionTest {
                 assertNotNull("Back must return to the direct chronology menu",
                     find(activity.getWindow().getDecorView(),"02 · Этапы переписки  ›"));
                 assertNotNull(find(activity.getWindow().getDecorView(),"04 · Сравнение этапов  ›"));
-                assertNotNull(find(activity.getWindow().getDecorView(),"05 · Кинолента медиа по годам  ›"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"05 · В этот день  ›"));
                 find(activity.getWindow().getDecorView(),"02 · Этапы переписки  ›").performClick();
                 assertNotNull(find(activity.getWindow().getDecorView(),"+ Отметить начало периода в переписке"));
                 assertNotNull(find(activity.getWindow().getDecorView(),"‹ К хронологии"));

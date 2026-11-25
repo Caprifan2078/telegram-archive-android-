@@ -98,6 +98,7 @@ public class MainActivity extends Activity {
     private String cinemaReturnScreen="chat";
     // Read-only side-by-side workspaces. The first archive is always the active chat.
     private String dualSecondKey="",dualSecondName="";
+    private boolean comparisonFromHome=false;
     private int dualYear=LocalDate.now().getYear(),dualMonth=0;
     // Read-only combined timeline state. Original chats retain their own databases and notes.
     private String multiTimelineGroupId="";
@@ -113,6 +114,8 @@ public class MainActivity extends Activity {
     private static final int WRAPPED_PNG_REQUEST=73,CAPSULE_EXPORT_REQUEST=84;
     private WrappedSummary wrappedForExport;
     private char[] pendingCapsulePassword;
+    private String pendingCapsuleKey;
+    private AlertDialog archivePasswordDialog;
     private DocumentFolder pendingMediaSaveRoot;
     private String pendingMediaSavePath;
     private MediaSavePolicy.Spec pendingMediaSaveSpec;
@@ -259,6 +262,7 @@ public class MainActivity extends Activity {
             analyticsCalendarYear=state.getInt("ta_analytics_year",0);
             analyticsCompareFirst=state.getString("ta_analytics_compare_first","");
             analyticsCompareSecond=state.getString("ta_analytics_compare_second","");
+            comparisonFromHome=state.getBoolean("ta_compare_from_home",false);
             dualSecondKey=state.getString("ta_dual_second_key","");
             dualSecondName=state.getString("ta_dual_second_name","");
             dualYear=Math.max(1,Math.min(9999,state.getInt("ta_dual_year",LocalDate.now().getYear())));
@@ -314,6 +318,7 @@ public class MainActivity extends Activity {
         state.putInt("ta_analytics_year",analyticsCalendarYear);
         state.putString("ta_analytics_compare_first",analyticsCompareFirst);
         state.putString("ta_analytics_compare_second",analyticsCompareSecond);
+        state.putBoolean("ta_compare_from_home",comparisonFromHome);
         state.putString("ta_dual_second_key",dualSecondKey);
         state.putString("ta_dual_second_name",dualSecondName);
         state.putInt("ta_dual_year",dualYear);
@@ -381,7 +386,6 @@ public class MainActivity extends Activity {
                 getPreferences(MODE_PRIVATE).edit().putInt("appearance_theme",index).apply();
                 dialog.dismiss();loadAppearance();recreate();
             })
-            .setNeutralButton("Плотность сообщений",(dialog,button)->densityDialog())
             .setPositiveButton("Готово",null).show();
     }
     private void wallpaperDialog(){
@@ -582,26 +586,30 @@ public class MainActivity extends Activity {
     private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_SHORT).show();}
 
     private void askCapsulePassword(){
-        EditText pass=new EditText(this);pass.setSingleLine(true);pass.setInputType(129);
-        pass.setHint("Пароль от 8 символов");
-        new FontDialog.Builder(this).setTitle("Зашифрованная капсула избранного")
+        if(home||db==null)return;
+        final String key=activeKey;
+        EditText pass=privatePasswordField("Пароль от 8 символов");
+        showPasswordDialog(new FontDialog.Builder(this).setTitle("Зашифрованная капсула избранного")
             .setMessage("Сохраняются только тексты избранных сообщений и даты. Фото, видео, голосовые, заметки и настройки НЕ включаются. Это НЕ резервная копия приложения. Для полного сохранения используй полную копию Telegram Archive.")
             .setView(pass).setNegativeButton("Отмена",null)
             .setPositiveButton("Создать файл",(d,which)->{
-                char[] password=pass.getText().toString().toCharArray();
+                char[] password=takePassword(pass);
                 if(password.length<8){java.util.Arrays.fill(password,(char)0);
                     toast("Минимум 8 символов — повтори создание");return;}
                 if(pendingCapsulePassword!=null)java.util.Arrays.fill(pendingCapsulePassword,(char)0);
-                pendingCapsulePassword=password;
+                pendingCapsulePassword=password;pendingCapsuleKey=key;
                 Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);
                 intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("application/octet-stream");
                 intent.putExtra(Intent.EXTRA_TITLE,"TelegramArchive_Favorites_Capsule.tcap");
-                startActivityForResult(intent,CAPSULE_EXPORT_REQUEST);
-            }).show();
+                try{startActivityForResult(intent,CAPSULE_EXPORT_REQUEST);}catch(RuntimeException failure){
+                    java.util.Arrays.fill(password,(char)0);pendingCapsulePassword=null;pendingCapsuleKey=null;
+                    toast("Не удалось открыть выбор файла");
+                }
+            }),pass);
     }
     private void exportCapsule(Uri file,char[] password){
         final MessageDb source=db;final String chatKey=activeKey;
-        if(source==null||password==null)return;
+        if(source==null||password==null){if(password!=null)java.util.Arrays.fill(password,(char)0);return;}
         status.setText("Создаю зашифрованную текстовую капсулу…");
         worker.execute(()->{
             try{
@@ -617,14 +625,14 @@ public class MainActivity extends Activity {
     /** Read-only memories; matches month/day across different years, without exporting data. */
     private void showOnThisDay(int month,int day){
         final String chatKey=activeKey;
-        final MessageDb source=db;
+        final MessageDb source=db;final int token=loadToken;
         if(source==null){toast("Переписка не открыта");return;}
         status.setText("Ищу воспоминания…");
         worker.execute(()->{
             try{
                 List<OnThisDay.Entry> found=source.onThisDay(month,day,60);
                 runOnUiThread(()->{
-                    if(home||!chatKey.equals(activeKey))return;
+                    if(!sameScreenRequest(source,chatKey,token))return;
                     status.setText("Найдено за этот день: "+found.size());
                     String[] labels=new String[found.size()];
                     for(int i=0;i<found.size();i++){
@@ -634,9 +642,9 @@ public class MainActivity extends Activity {
                     }
                     AlertDialog.Builder dialog=new FontDialog.Builder(this)
                         .setTitle(String.format(Locale.ROOT,"В этот день · %02d.%02d",day,month))
-                        .setMessage(found.isEmpty()?"В этой переписке на выбранную дату ничего не найдено.":null)
-                        .setItems(labels,(d,which)->jump(found.get(which).id,""))
-                        .setNegativeButton("Закрыть",(d,which)->{});
+                        .setNegativeButton("Закрыть",null);
+                    if(found.isEmpty())dialog.setMessage("На выбранную дату сообщений не найдено.");
+                    else dialog.setItems(labels,(d,which)->jump(found.get(which).id,"relationships"));
                     dialog.setNeutralButton("Другая дата",(d,which)->{
                         LocalDate today=LocalDate.now();
                         new DatePickerDialog(this,(picker,year,mo,dt)->showOnThisDay(mo+1,dt),
@@ -645,7 +653,7 @@ public class MainActivity extends Activity {
                     dialog.show();
                 });
             }catch(Exception e){runOnUiThread(()->{
-                if(chatKey.equals(activeKey))status.setText("Не удалось открыть воспоминания: "+e.getMessage());
+                if(sameScreenRequest(source,chatKey,token))status.setText("Не удалось открыть воспоминания: "+e.getMessage());
             });}
         });
     }
@@ -653,7 +661,7 @@ public class MainActivity extends Activity {
     /** No media bytes are modified or read. A SAF resolution failure isn't necessarily a lost file. */
     private void showMediaHealth(){
         final String chatKey=activeKey;
-        final MessageDb source=db;
+        final MessageDb source=db;final int token=loadToken;
         final DocumentFolder rootFolder=folder;
         if(source==null){toast("Переписка не открыта");return;}
         status.setText("Проверяю пути медиатеки (до 2000 файлов)…");
@@ -661,7 +669,7 @@ public class MainActivity extends Activity {
             try{
                 ChatMediaHealth.Report r=source.mediaHealth(rootFolder,ChatMediaHealth.DEFAULT_SCAN_LIMIT);
                 runOnUiThread(()->{
-                    if(home||!chatKey.equals(activeKey))return;
+                    if(!sameScreenRequest(source,chatKey,token))return;
                     StringBuilder text=new StringBuilder();
                     text.append("Проверено путей: ").append(r.scanned).append(" из ").append(r.totalDistinct)
                         .append("\nДоступно: ").append(r.accessible)
@@ -673,12 +681,12 @@ public class MainActivity extends Activity {
                     }
                     text.append("\nЭто только проверка доступности: файлы не читаются и не удаляются. ")
                         .append("Проблема доступа SAF может выглядеть как отсутствие файла.");
-                    new FontDialog.Builder(this).setTitle("Здоровье медиатеки")
+                    new FontDialog.Builder(this).setTitle("Доступность оригиналов")
                         .setMessage(text.toString()).setPositiveButton("Готово",null).show();
                     status.setText("Проверка медиатеки завершена");
                 });
             }catch(Exception e){runOnUiThread(()->{
-                if(chatKey.equals(activeKey))status.setText("Ошибка проверки медиатеки: "+e.getMessage());
+                if(sameScreenRequest(source,chatKey,token))status.setText("Ошибка проверки медиатеки: "+e.getMessage());
             });}
         });
     }
@@ -686,7 +694,7 @@ public class MainActivity extends Activity {
     /** Local-only scan of calendar pauses. A quiet period does not imply data loss. */
     private void showConversationPauses(){
         final String chatKey=activeKey;
-        final MessageDb source=db;
+        final MessageDb source=db;final int token=loadToken;
         if(source==null){toast("Сначала открой переписку");return;}
         status.setText("Ищу паузы в истории переписки…");
         worker.execute(()->{
@@ -702,7 +710,7 @@ public class MainActivity extends Activity {
             }catch(Exception e){error=e.getClass().getSimpleName();}
             final String failure=error;
             runOnUiThread(()->{
-                if(isFinishing()||home||!chatKey.equals(activeKey))return;
+                if(!sameScreenRequest(source,chatKey,token))return;
                 if(failure!=null){status.setText("Ошибка просмотра пауз: "+failure);return;}
                 final java.util.List<ConversationGapNavigator.Gap> gaps=scan.gaps();
                 final String[] items=new String[gaps.size()];
@@ -715,50 +723,26 @@ public class MainActivity extends Activity {
                     "; с обратным порядком: "+scan.outOfOrder()+"."+
                     (scan.scanned()>=ConversationGapNavigator.MAX_SCAN?
                         "\nПоказан лишь первый участок большого архива.":"");
-                new FontDialog.Builder(this).setTitle("Навигатор пауз")
-                    .setMessage(intro+(items.length==0?"\nПаузы от 7 дней не найдены.":""))
+                AlertDialog.Builder pauses=new FontDialog.Builder(this).setTitle("Паузы от 7 дней · "+items.length)
+                    .setPositiveButton("Закрыть",null);
+                if(items.length==0)pauses.setMessage(intro+"\nПаузы от 7 дней не найдены.");
+                else pauses.setNeutralButton("Как посчитано",(d,w)->new FontDialog.Builder(this)
+                        .setTitle("Как посчитаны паузы").setMessage(intro).setPositiveButton("Закрыть",null).show())
                     .setItems(items,(dialog,index)->{
                         ConversationGapNavigator.Gap g=gaps.get(index);
                         new FontDialog.Builder(this).setTitle("Границы паузы")
                             .setMessage(g.from+" → "+g.to+"\nПерейти к сообщению до или после паузы?")
-                            .setPositiveButton("После",(d,w)->jump(g.toId,""))
-                            .setNeutralButton("До",(d,w)->jump(g.fromId,""))
+                            .setPositiveButton("После",(d,w)->jump(g.toId,"relationships"))
+                            .setNeutralButton("До",(d,w)->jump(g.fromId,"relationships"))
                             .setNegativeButton("Отмена",null).show();
-                    }).setPositiveButton("Закрыть",null).show();
+                    });
+                pauses.show();
                 status.setText("Навигатор пауз: просмотр завершён");
             });
         });
     }
 
-    // The five discovery tools are strictly opt-in, local and bounded.
-    private void discoveryStudio(){
-        LinearLayout preview=column();preview.setPadding(px(18),px(18),px(18),px(10));
-        preview.setBackground(gradient(PANEL,CHIP,22));
-        TextView h=text("СТУДИЯ ОФОРМЛЕНИЯ 2.0",15,ACCENT);h.setTypeface(null,Typeface.BOLD);preview.addView(h);
-        TextView a=text("  Привет! Это пример входящего сообщения.  ",14,FG);
-        a.setPadding(px(12),px(13),px(12),px(13));a.setBackground(shape(INCOMING,bubbleRadius));
-        LinearLayout.LayoutParams al=p(-2,-2);al.setMargins(0,px(17),px(38),px(8));preview.addView(a,al);
-        TextView b=text("  А это твой ответ ✨  ",14,FG);
-        b.setPadding(px(12),px(13),px(12),px(13));b.setBackground(shape(OUTGOING,bubbleRadius));
-        LinearLayout.LayoutParams bl=p(-2,-2);bl.gravity=Gravity.END;preview.addView(b,bl);
-        String[] choices={"Цветовая тема", "Фон переписки", "Аватары чата и людей", "Форма пузырьков", "Плотность сообщений", "Плавность и производительность"};
-        new FontDialog.Builder(this).setTitle("Студия чата 2.0").setView(preview)
-            .setItems(choices,(d,which)->{
-                switch(which){case 0:appearanceDialog();break;case 1:wallpaperDialog();break;
-                    case 2:avatarSelection();break;case 3:bubbleStyleDialog();break;
-                    case 4:densityDialog();break;default:performanceDialog();}
-            }).setNegativeButton("Закрыть",null).show();
-    }
-    private void discoveryMediaPro(){
-        if(home){toast("Выбери переписку для её медиатеки");return;}
-        String[] entries={"Галерея медиа · по типам", "Кинолента · по годам и месяцам", "Мои коллекции", "Проверка недостающих оригиналов"};
-        new FontDialog.Builder(this).setTitle("Медиатека PRO")
-            .setItems(entries,(d,i)->{
-                if(i==0){screen="media";showPage();}
-                else if(i==1){cinemaReturnScreen=screen;screen="cinema";showPage();}
-                else if(i==2)showCollectionPicker();else showMediaHealth();
-            }).setNegativeButton("Закрыть",null).show();
-    }
+    // Local, bounded filters and cross-chat search.
     private void discoveryYearPicker(String title,java.util.function.IntConsumer action){
         EditText year=new EditText(this);year.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         year.setSingleLine(true);year.setText(String.valueOf(LocalDate.now().getYear()));
@@ -770,59 +754,10 @@ public class MainActivity extends Activity {
                 }catch(NumberFormatException e){toast("Нужен год от 1 до 9999");}
             }).show();
     }
-    private void discoveryHistoryMap(){
+    private void showFavoritesByYear(){
         if(home){toast("Открой переписку");return;}
-        discoveryYearPicker("Карта истории · год",year->{
-            final String key=activeKey;final MessageDb source=db;
-            status.setText("Строю локальную карту месяцев…");
-            worker.execute(()->{
-                try{
-                    ParallelCalendars.YearData stats=source.calendarYear(year);
-                    String[] months={"Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"};
-                    String[] labels=new String[12];for(int i=0;i<12;i++)labels[i]=months[i]+" · "+stats.months[i]+" сообщений";
-                    runOnUiThread(()->{
-                        if(isFinishing()||!key.equals(activeKey))return;
-                        status.setText("Карта истории · "+year);
-                        new FontDialog.Builder(this).setTitle("Карта истории · "+year)
-                            .setMessage("Сообщений: "+stats.total()+" · активных дней: "+stats.activeDays()+
-                                (stats.partial?"\nЧАСТИЧНО: достигнут лимит 300 000 сообщений.":""))
-                            .setItems(labels,(d,month)->discoveryHistoryMonth(key,year,month+1))
-                            .setNegativeButton("Закрыть",null).show();
-                    });
-                }catch(Exception e){runOnUiThread(()->toast("Карта истории: ошибка чтения"));}
-            });
-        });
-    }
-    private void discoveryHistoryMonth(String key,int year,int month){
-        if(!canOpenQuoteArchive(key)||!key.equals(activeKey))return;
-        final MessageDb source=db;
-        worker.execute(()->{
-            ArrayList<DiscoveryRules.Hit> hits=new ArrayList<>();
-            String yyyy=String.format(Locale.ROOT,"%04d",year),mm=String.format(Locale.ROOT,"%02d",month);
-            try(android.database.Cursor c=source.getReadableDatabase().rawQuery(
-                "SELECT id,author,date_text,body FROM messages WHERE " +
-                "substr(date_text,1,7)=? OR substr(date_text,4,7)=? ORDER BY id DESC LIMIT 45",
-                new String[]{yyyy+"-"+mm,mm+"."+yyyy})){
-                while(c.moveToNext()&&hits.size()<30){
-                    ChatTrends.Moment dt=ChatTrends.parse(c.getString(2));
-                    if(dt!=null&&dt.day.getYear()==year&&dt.day.getMonthValue()==month)
-                        hits.add(new DiscoveryRules.Hit(key,activeName,c.getLong(0),c.getString(1),c.getString(2),c.getString(3)));
-                }
-            }catch(Exception ignored){}
-            runOnUiThread(()->{
-                if(isFinishing()||!key.equals(activeKey))return;
-                if(hits.isEmpty()){toast("Сообщений за месяц не найдено");return;}
-                String[] labels=new String[hits.size()];for(int i=0;i<labels.length;i++)labels[i]=hits.get(i).label();
-                new FontDialog.Builder(this).setTitle("Сообщения · "+month+"/"+year)
-                    .setItems(labels,(d,i)->jump(hits.get(i).id,""))
-                    .setNegativeButton("Закрыть",null).show();
-            });
-        });
-    }
-    private void discoveryTimeCapsule(){
-        if(home){toast("Открой переписку");return;}
-        discoveryYearPicker("Капсула времени · избранное за год",year->{
-            final String key=activeKey;final MessageDb source=db;
+        discoveryYearPicker("Избранное за год",year->{
+            final String key=activeKey,name=activeName;final MessageDb source=db;final int token=loadToken;
             worker.execute(()->{
                 ArrayList<DiscoveryRules.Hit> hits=new ArrayList<>();
                 String yyyy=String.format(Locale.ROOT,"%04d",year);
@@ -833,16 +768,17 @@ public class MainActivity extends Activity {
                     while(c.moveToNext()&&hits.size()<80){
                         ChatTrends.Moment m=ChatTrends.parse(c.getString(2));
                         if(m!=null&&m.day.getYear()==year)
-                            hits.add(new DiscoveryRules.Hit(key,activeName,c.getLong(0),c.getString(1),c.getString(2),c.getString(3)));
+                            hits.add(new DiscoveryRules.Hit(key,name,c.getLong(0),c.getString(1),c.getString(2),c.getString(3)));
                     }
-                }catch(Exception ignored){}
+                }catch(Exception failure){
+                    runOnUiThread(()->{if(token==loadToken&&key.equals(activeKey))toast("Не удалось прочитать избранное");});return;
+                }
                 runOnUiThread(()->{
-                    if(isFinishing()||!key.equals(activeKey))return;
+                    if(isFinishing()||isDestroyed()||home||db!=source||token!=loadToken||!key.equals(activeKey)||!"favorites".equals(screen))return;
                     if(hits.isEmpty()){toast("Избранных сообщений за этот год не найдено");return;}
                     String[] labels=new String[hits.size()];for(int i=0;i<labels.length;i++)labels[i]=hits.get(i).label();
-                    new FontDialog.Builder(this).setTitle("Капсула времени · "+year)
-                        .setMessage("Это подборка уже отмеченных тобой сообщений. Оригиналы и медиа не копируются и не изменяются.")
-                        .setItems(labels,(d,i)->jump(hits.get(i).id,""))
+                    new FontDialog.Builder(this).setTitle("Избранное · "+year+" · до 80 сообщений")
+                        .setItems(labels,(d,i)->jump(hits.get(i).id,"favorites"))
                         .setNegativeButton("Закрыть",null).show();
                 });
             });
@@ -1047,49 +983,26 @@ public class MainActivity extends Activity {
             sideMenuItem(group,dialog,pane,"◈  Пробное восстановление","Тест без изменения переписок",this::dryRunPicker);
             sideMenuItem(group,dialog,pane,"▤  Квитанция переноса","Сверка последнего восстановления",this::showLastRestoreReceipt);
             sideMenuItem(group,dialog,pane,"⇩  Восстановить архив","Импорт резервной копии",this::restorePicker);
-            sideMenuItem(group,dialog,pane,"✧  Капсула избранного","Только зашифрованные тексты, не полный бэкап",()->{
-                if(home)toast("Сначала открой переписку");else askCapsulePassword();});
         });
-        sideMenuSection(items,"Инструменты переписки",false,group->{
-            sideMenuItem(group,dialog,pane,"▤  Кинолента медиа","По годам и месяцам, без сетевых запросов",()->{
-                if(home){toast("Сначала открой переписку");return;}cinemaReturnScreen=screen;screen="cinema";showPage();});
-            sideMenuItem(group,dialog,pane,"◷  Хронология","События, периоды и воспоминания",()->{
-                if(home){toast("Сначала открой переписку");return;}screen="relationships";showPage();});
-            sideMenuItem(group,dialog,pane,"⇄  Сравнение диалогов","Два чата · месяцы, медиа, участники",()->{
-                if(home){toast("Сначала открой переписку");return;}chooseDualChat("dual_compare");});
-            sideMenuItem(group,dialog,pane,"◷  Воспоминания двух чатов","Общая временная линия двух переписок",()->{
-                if(home){toast("Сначала открой переписку");return;}chooseDualChat("dual_memories");});
-            sideMenuItem(group,dialog,pane,"▥  Анализ диалога","Графики, активность и сравнения",()->{
-                if(home){toast("Сначала открой переписку");return;}analyticsSection="overview";screen="analytics";showPage();});
-            sideMenuItem(group,dialog,pane,"⌁  В этот день","Сообщения в эту дату разных лет",()->{
-                if(home){toast("Сначала открой переписку");return;}
-                LocalDate today=LocalDate.now();showOnThisDay(today.getMonthValue(),today.getDayOfMonth());});
-            sideMenuItem(group,dialog,pane,"◎  Здоровье медиатеки","Проверка отсутствующих файлов",()->{
-                if(home)toast("Сначала открой переписку");else showMediaHealth();});
-            sideMenuItem(group,dialog,pane,"◌  Навигатор пауз","Промежутки в истории · без изменения файлов",()->{
-                if(home)toast("Сначала открой переписку");else showConversationPauses();});
-        });
-        sideMenuSection(items,"Открытия · новые возможности",false,group->{
-            sideMenuItem(group,dialog,pane,"▤  Просмотреть отдельный файл","Office, архивы и документы · без импорта чата",this::chooseReadOnlyPreview);
-            sideMenuItem(group,dialog,pane,"⌕  Умный поиск по всем чатам","Текст, автор, год, медиа · только локально",this::discoverySmartSearch);
-            sideMenuItem(group,dialog,pane,"✦  Студия оформления 2.0","Предпросмотр, темы, обои и аватары",this::discoveryStudio);
-            sideMenuItem(group,dialog,pane,"▦  Медиатека PRO","Галерея, кинолента, коллекции, проверка файлов",this::discoveryMediaPro);
-            sideMenuItem(group,dialog,pane,"◷  Карта истории","Месяцы, активность и оригиналы сообщений",this::discoveryHistoryMap);
-            sideMenuItem(group,dialog,pane,"✧  Капсула времени","Избранное за выбранный год",this::discoveryTimeCapsule);
+        sideMenuSection(items,"Поиск и файлы",false,group->{
+            sideMenuItem(group,dialog,pane,"Умный поиск по всем чатам","Слова, авторы, год и вложения; офлайн",this::discoverySmartSearch);
+            sideMenuItem(group,dialog,pane,"Просмотреть отдельный файл","Текст Office, документы и архивы",this::chooseReadOnlyPreview);
         });
         sideMenuSection(items,"Оформление и персонализация",false,group->{
-            sideMenuItem(group,dialog,pane,"◐  Темы и оформление","Цвет, плотность и плавность",this::appearanceDialog);
-            sideMenuItem(group,dialog,pane,"✧  Стеклянные карточки","Лёгкая прозрачность без тяжёлого размытия",this::glassDialog);
-            sideMenuItem(group,dialog,pane,"⚡  Умная производительность","Автоматическая экономия памяти",this::performanceDialog);
-            sideMenuItem(group,dialog,pane,"▧  Обои переписки","Свой фон, узоры и прозрачность",this::wallpaperDialog);
-            sideMenuItem(group,dialog,pane,"◉  Аватары","Один аватар нескольким участникам",this::avatarSelection);
-            sideMenuItem(group,dialog,pane,"⚙  Настройки переписки","Имя, цвета и пузырьки",this::settingsMenu);
+            sideMenuItem(group,dialog,pane,"Темы и оформление","Светлая или тёмная цветовая схема",this::appearanceDialog);
+            sideMenuItem(group,dialog,pane,"Стеклянные карточки","Прозрачный или сплошной фон",this::glassDialog);
+            sideMenuItem(group,dialog,pane,"Шрифты","Системный шрифт или свой TTF/OTF",this::showFontStudio);
+            sideMenuItem(group,dialog,pane,"Обои переписки","Фото, узор и его интенсивность",this::wallpaperDialog);
+            sideMenuItem(group,dialog,pane,"Аватары","Изображения участников и чатов",this::avatarSelection);
+            sideMenuItem(group,dialog,pane,"Настройки переписки","Пузырьки, плотность, имя и цвета",this::settingsMenu);
+            sideMenuItem(group,dialog,pane,"Умная производительность","Скорость, память и анимации",this::performanceDialog);
         });
-        sideMenuItem(items,dialog,pane,"Aa  Шрифты · изменить везде","Системный, классика, свой TTF/OTF",this::showFontStudio);
-        sideMenuItem(items,dialog,pane,"ⓘ  Помощь и инструкция","Пошаговая инструкция внутри приложения",this::showHelp);
-        sideMenuItem(items,dialog,pane,"▶  Учебная переписка","Практика без изменений настоящих данных",
-            ()->startActivity(new Intent(this,DemoChatActivity.class)));
-        sideMenuItem(items,dialog,pane,"⌁  Диагностика","Создать обезличенный технический отчёт",this::shareDiagnostic);
+        sideMenuSection(items,"Помощь и диагностика",false,group->{
+            sideMenuItem(group,dialog,pane,"Помощь и инструкция","Как пользоваться приложением",this::showHelp);
+            sideMenuItem(group,dialog,pane,"Учебная переписка","Попробовать функции на примере",
+                ()->startActivity(new Intent(this,DemoChatActivity.class)));
+            sideMenuItem(group,dialog,pane,"Диагностика","Обезличенный технический отчёт",this::shareDiagnostic);
+        });
         TextView label=text("Telegram Archive · "+installedVersionName()+" QA\nЛокально · Без аккаунта · Без серверов",11,SUB);
         label.setPadding(px(5),px(12),0,px(5));pane.addView(label);
         overlay.setOnClickListener(v->closeDrawer(dialog,pane,null));pane.setOnClickListener(v->{});
@@ -1191,7 +1104,7 @@ public class MainActivity extends Activity {
         item.addView(symbol,symbolSize);
         LinearLayout info=column();item.addView(info,new LinearLayout.LayoutParams(0,-2,1));
         TextView name=text(label,14,FG);name.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));info.addView(name);
-        TextView summary=text(detail,11,SUB);summary.setSingleLine(true);
+        TextView summary=text(detail,12,SUB);summary.setMaxLines(2);
         summary.setEllipsize(TextUtils.TruncateAt.END);
         summary.setPadding(0,px(2),0,0);info.addView(summary);
         item.setContentDescription(label+". "+detail);
@@ -1669,20 +1582,10 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams ap=p(-1,60);ap.setMargins(px(2),px(9),px(2),px(8));list.addView(add,ap);
         add.setOnClickListener(v->chooseFolder());
         if(archives.length()>=2&&multiGroups.length()==0){
-            // When groups exist their timeline/comparison tools are already
-            // available from the person card and contextual tool drawer.
-            Button tools=btn("Инструменты для двух переписок  ▾");
-            LinearLayout.LayoutParams outer=p(-1,43);outer.topMargin=px(10);list.addView(tools,outer);
-            LinearLayout advanced=column();advanced.setVisibility(View.GONE);list.addView(advanced,p(-1,-2));
-            Button compare=btn("Сравнение диалогов");advanced.addView(compare,p(-1,45));
+            Button compare=btn("Сравнить две переписки");
+            compare.setContentDescription("Сравнить статистику и общую историю двух переписок");
+            LinearLayout.LayoutParams outer=p(-1,48);outer.topMargin=px(10);list.addView(compare,outer);
             compare.setOnClickListener(v->chooseFirstDualChat("dual_compare"));
-            Button memories=btn("Общие воспоминания");advanced.addView(memories,p(-1,45));
-            memories.setOnClickListener(v->chooseFirstDualChat("dual_memories"));
-            tools.setOnClickListener(v->{
-                boolean opened=advanced.getVisibility()!=View.VISIBLE;
-                advanced.setVisibility(opened?View.VISIBLE:View.GONE);
-                tools.setText(opened?"Скрыть инструменты  ▴":"Инструменты для двух переписок  ▾");
-            });
         }
         animateEntrance();scroll.post(()->scroll.scrollTo(0,0));
     }
@@ -2657,7 +2560,8 @@ public class MainActivity extends Activity {
         if(choice==null)return;closeFloatingRound();stopPlayback();++loadToken;clearMediaSelection();activeKey=key;activeName=choice.optString("name","Архив");analyticsSelectedAuthor="";analyticsCalendarYear=0;analyticsCompareFirst="";analyticsCompareSecond="";lastAnalytics=null;
         lastVisibleMessage=-1;lastVisibleTop=0;
         saveRegistry();
-        if(db!=null)db.close();db=new MessageDb(this,activeKey);
+        final MessageDb previous=db;db=new MessageDb(this,activeKey);
+        if(previous!=null)worker.execute(previous::close);
         String path=choice.optString("tree","");folder=path.isEmpty()?null:path.startsWith("local:")?new DocumentFolder(getContentResolver(),new java.io.File(path.substring(6))):new DocumentFolder(getContentResolver(),Uri.parse(path));
         chatOffset=searchOffset=mediaOffset=favOffset=0;autoLoaded=PAGE;home=false;screen="chat";returnScreen="";searchReturnsToAnalytics=false;chatOffset=getPreferences(MODE_PRIVATE).getInt("read_offset_"+activeKey,0);
         pendingRestoreId=getPreferences(MODE_PRIVATE).getLong("read_id_"+activeKey,-1);
@@ -2733,6 +2637,7 @@ public class MainActivity extends Activity {
         // The app bar already explains tapping the chat title for media.
         // Omit the duplicate instruction inside the action sheet.
         String[] labels={"Найти сообщение","Перейти к дате","Анализ диалога","Хронология","Управление чатом","Все инструменты"};
+        String[] descriptions={"Поиск по тексту, автору и вложениям","Открыть сообщения выбранного дня","Количество сообщений, активность и участники","События, этапы, воспоминания и сравнения","Название, аватар, закрепление и корзина","Общие настройки, поиск по всем чатам и резервные копии"};
         Runnable[] actions={
             ()->{screen="search";showPage();},
             this::chooseDate,
@@ -2741,8 +2646,9 @@ public class MainActivity extends Activity {
             ()->showChatActions(activeKey,activeName),
             this::showSideMenu
         };
+        ScrollView actionScroll=new ScrollView(this);actionScroll.addView(content);
         final AlertDialog dialog=new FontDialog.Builder(this).setTitle("Действия с чатом")
-            .setView(content).setNegativeButton("Закрыть",null).create();
+            .setView(actionScroll).setNegativeButton("Закрыть",null).create();
         for(int i=0;i<labels.length;i++){
             final int index=i;
             LinearLayout item=row();item.setPadding(px(12),px(6),px(8),px(6));
@@ -2750,8 +2656,11 @@ public class MainActivity extends Activity {
             ImageView symbol=new ImageView(this);
             symbol.setImageDrawable(new MenuOutlineIcon(labels[i],ACCENT));
             LinearLayout.LayoutParams iconSize=p(22,22);iconSize.rightMargin=px(13);item.addView(symbol,iconSize);
-            TextView label=text(labels[i],15,FG);item.addView(label,new LinearLayout.LayoutParams(0,-2,1));
-            LinearLayout.LayoutParams itemSize=p(-1,43);itemSize.bottomMargin=px(3);content.addView(item,itemSize);
+            LinearLayout info=column();item.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+            TextView label=text(labels[i],15,FG);info.addView(label);
+            TextView detail=text(descriptions[i],12,SUB);detail.setMaxLines(2);info.addView(detail);
+            item.setMinimumHeight(px(56));
+            LinearLayout.LayoutParams itemSize=p(-1,-2);itemSize.bottomMargin=px(3);content.addView(item,itemSize);
             item.setContentDescription(labels[i]);
             // Handle taps on the text itself, not only on the surrounding row.
             // UIAutomator/accessibility may dispatch a click directly to the label.
@@ -2776,11 +2685,12 @@ public class MainActivity extends Activity {
     private void renderPinnedBar(){
         pinnedBar.removeAllViews();
         if(!screen.equals("chat")||home)return;
-        final String key=activeKey;
+        final String key=activeKey;final MessageDb source=db;final int token=loadToken;
+        if(source==null)return;
         worker.execute(()->{
-            List<MessageDb.Item> pins=db.pinned();
+            List<MessageDb.Item> pins=source.pinned();
             runOnUiThread(()->{
-                if(!screen.equals("chat")||home||!key.equals(activeKey))return;
+                if(!screen.equals("chat")||!sameScreenRequest(source,key,token))return;
                 pinnedBar.animate().cancel();pinnedBar.setAlpha(1f);pinnedBar.removeAllViews();if(pins.isEmpty()){pinnedFocus=-1;return;}
                 int selected=0;
                 for(int i=0;i<pins.size();i++)if(pins.get(i).id==pinnedFocus){selected=i;break;}
@@ -2814,9 +2724,11 @@ public class MainActivity extends Activity {
         new FontDialog.Builder(this).setTitle("Открепить сообщение?").setMessage("Сообщение останется в переписке, но исчезнет из закреплённых.").setNegativeButton("Отмена",null).setPositiveButton("Открепить",(d,w)->unpinConfirmed(id)).show();
     }
     private void unpinConfirmed(long id){
+        final MessageDb source=db;final String key=activeKey;
+        if(source==null||home)return;
         worker.execute(()->{
-            if(db.isPinned(id))db.togglePinned(id);
-            runOnUiThread(()->{if(pinnedFocus==id)pinnedFocus=-1;toast("Сообщение откреплено");renderPinnedBar();});
+            if(source.isPinned(id))source.togglePinned(id);
+            runOnUiThread(()->{if(isDestroyed()||home||source!=db||!key.equals(activeKey))return;if(pinnedFocus==id)pinnedFocus=-1;toast("Сообщение откреплено");renderPinnedBar();});
         });
     }
     private void pinnedItemMenu(MessageDb.Item message){
@@ -2827,9 +2739,12 @@ public class MainActivity extends Activity {
             }).show();
     }
     private void showPinList(){
+        final MessageDb source=db;final String key=activeKey;final int token=loadToken;
+        if(source==null||home)return;
         worker.execute(()->{
-            List<MessageDb.Item> pins=db.pinned();
+            List<MessageDb.Item> pins=source.pinned();
             runOnUiThread(()->{
+                if(!sameScreenRequest(source,key,token))return;
                 if(pins.isEmpty()){toast("Нет закреплённых сообщений");return;}
                 String[] labels=new String[pins.size()];
                 for(int i=0;i<pins.size();i++)
@@ -3035,6 +2950,14 @@ public class MainActivity extends Activity {
                 shape(Color.TRANSPARENT,11),null));
             filterBar.addView(backToMedia,p(-1,42));
             backToMedia.setOnClickListener(v->{screen="media";mediaOffset=0;showPage();});
+            LinearLayout favoriteTools=row();
+            Button byYear=btn("За год");byYear.setContentDescription("Избранные сообщения за выбранный год");
+            favoriteTools.addView(byYear,new LinearLayout.LayoutParams(0,px(48),1));
+            byYear.setOnClickListener(v->showFavoritesByYear());
+            Button encrypted=btn("Зашифрованная копия");encrypted.setContentDescription("Сохранить избранные тексты с паролем");
+            favoriteTools.addView(encrypted,new LinearLayout.LayoutParams(0,px(48),2));
+            encrypted.setOnClickListener(v->askCapsulePassword());
+            filterBar.addView(favoriteTools,p(-1,-2));
             return;
         }
         if("media".equals(screen)){
@@ -3080,17 +3003,19 @@ public class MainActivity extends Activity {
                 hint.setSingleLine(true);hint.setEllipsize(TextUtils.TruncateAt.END);
                 mediaTools.addView(hint,new LinearLayout.LayoutParams(0,42,1));
             }
-            Button more=btn("⋯");more.setContentDescription("Выбор, коллекции и поиск повторов");
+            Button more=btn("⋯");more.setContentDescription("Инструменты медиатеки");
             mediaTools.addView(more,p(46,42));
             more.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Действия с медиа")
                 .setItems(new String[]{multiSelectMedia?"Снять выделение":"Выбрать несколько",
-                    "Мои коллекции","Найти одинаковые файлы"},(d,index)->{
+                    "Мои коллекции","Найти одинаковые файлы","Медиа по годам и месяцам","Проверить доступность оригиналов"},(d,index)->{
                     if(index==0){
                         if(multiSelectMedia)clearMediaSelection();
                         else{multiSelectMedia=true;selectedMediaArchive=activeKey;}
                         showPage();
                     }else if(index==1)showCollectionPicker();
-                    else inspectDuplicateMedia();
+                    else if(index==2)inspectDuplicateMedia();
+                    else if(index==3){cinemaReturnScreen="media";screen="cinema";showPage();}
+                    else showMediaHealth();
                 }).setNegativeButton("Закрыть",null).show());
             filterBar.addView(mediaTools,p(-1,46));
 
@@ -3108,7 +3033,7 @@ public class MainActivity extends Activity {
             // Date navigation remains available via the chat menu; no permanent
             // 46dp toolbar over every message.
             LinearLayout actions=row();
-            backButton=btn("‹ Назад к "+("media".equals(returnScreen)?"медиа":"relationships".equals(returnScreen)?"хронологии":"echo".equals(returnScreen)?"фразам":"analytics".equals(returnScreen)?"анализу":"поиску"));
+            backButton=btn("‹ Назад к "+("media".equals(returnScreen)?"медиа":"relationships".equals(returnScreen)?"хронологии":"favorites".equals(returnScreen)?"избранному":"echo".equals(returnScreen)?"фразам":"analytics".equals(returnScreen)?"анализу":"поиску"));
             actions.addView(backButton,p(-2,39));backButton.setOnClickListener(v->restoreReturn());
             filterBar.addView(actions,p(-1,41));
         }
@@ -3134,7 +3059,7 @@ public class MainActivity extends Activity {
             searchArea.addView(queryRow,p(-1,52));
             clear.setOnClickListener(v->{searchInput.setText("");applySearch();});
             submit.setOnClickListener(v->applySearch());
-            LinearLayout controls=row();quickButton=btn("⚡ Быстрый поиск");deepButton=btn("⌕ Глубокий поиск");
+            LinearLayout controls=row();quickButton=btn("По словам");deepButton=btn("По фразе и фильтрам");
             controls.addView(quickButton,new LinearLayout.LayoutParams(0,px(43),1));controls.addView(deepButton,new LinearLayout.LayoutParams(0,px(43),1));
             searchArea.addView(controls,p(-1,49));
             quickButton.setBackground(shape(!deep?HIGHLIGHT:PANEL,10));deepButton.setBackground(shape(deep?HIGHLIGHT:PANEL,10));
@@ -3149,7 +3074,7 @@ public class MainActivity extends Activity {
                 mediaOnly.setChecked(restoredMediaDraft!=null?restoredMediaDraft:onlyMedia);restoredMediaDraft=null;searchArea.addView(mediaOnly,p(-1,39));
                 Button resetFilters=btn("Сбросить фильтры");resetFilters.setContentDescription("Сбросить фильтры поиска");
                 searchArea.addView(resetFilters,p(-1,48));resetFilters.setOnClickListener(v->resetSearchFilters());
-                TextView hint=text("Глубокий поиск ищет точное сочетание букв, даже внутри слова; может работать медленнее.",11,SUB);
+                TextView hint=text("Ищет сочетание букв, даже внутри слова. Можно ограничить результаты автором и наличием вложений.",12,SUB);
                 hint.setPadding(px(7),0,0,px(6));searchArea.addView(hint,p(-1,-2));
             }else{
                 if(!byAuthor.isEmpty()||onlyMedia){
@@ -3161,7 +3086,7 @@ public class MainActivity extends Activity {
                     searchArea.addView(reset,p(-1,48));
                     reset.setOnClickListener(v->resetSearchFilters());
                 }
-                TextView hint=text("Быстрый поиск по словам и их началам. Нажми на результат, чтобы перейти в чат.",11,SUB);
+                TextView hint=text("Ищет слова и их начала по индексу. Нажми результат, чтобы открыть сообщение.",12,SUB);
                 hint.setPadding(px(7),0,0,px(4));searchArea.addView(hint,p(-1,-2));
             }
             searchInput.setOnEditorActionListener((v,action,event)->{applySearch();return true;});
@@ -3191,7 +3116,7 @@ public class MainActivity extends Activity {
         if(searchInput!=null)q=searchInput.getText().toString().trim();
         if(authorInput!=null&&deep)byAuthor=authorInput.getText().toString().trim();
         if(mediaOnly!=null&&deep)onlyMedia=mediaOnly.isChecked();
-        searchOffset=0;searchLoaded=PAGE;searchReturnScroll=-1;pendingSearchScroll=-1;configureBars();hideKeyboard();showPage();
+        searchOffset=0;searchLoaded=PAGE;searchReturnScroll=-1;pendingSearchScroll=-1;hideKeyboard();showPage();
     }
     private void hideKeyboard(){try{((InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(base.getWindowToken(),0);}catch(Exception ignored){}}
     private void identityDialog(){
@@ -3204,14 +3129,22 @@ public class MainActivity extends Activity {
                     mine=input.getText().toString().trim();getPreferences(MODE_PRIVATE).edit().putString("mine",mine).apply();showPage();
                 }).show();
     }
+    private boolean sameScreenRequest(MessageDb source,String key,int token){
+        return !isFinishing()&&!isDestroyed()&&!home&&source==db&&key.equals(activeKey)&&token==loadToken;
+    }
     private void chooseDate(){
+        if(home||db==null)return;
+        final MessageDb source=db;final String key=activeKey;final int token=loadToken;
         Calendar c=Calendar.getInstance();
         new DatePickerDialog(this,(view,y,m,d)->{
+            if(!sameScreenRequest(source,key,token))return;
             final String requested=String.format(Locale.ROOT,"%04d-%02d-%02d",y,m+1,d);
             status.setText("Ищу переписку по дате "+requested+"…");
             worker.execute(()->{
-                MessageDb.DateMatch found=db.nearestDate(y,m+1,d);
+                MessageDb.DateMatch found;
+                try{found=source.nearestDate(y,m+1,d);}catch(Exception error){runOnUiThread(()->{if(sameScreenRequest(source,key,token))toast("Не удалось найти дату");});return;}
                 runOnUiThread(()->{
+                    if(!sameScreenRequest(source,key,token))return;
                     if(found.position<0){toast("В переписке нет сообщений с распознанной датой");return;}
                     screen="chat";chatOffset=Math.max(0,found.position-5);highlightId=-1;returnScreen="";searchReturnsToAnalytics=false;
                     showPage();
@@ -3250,6 +3183,10 @@ public class MainActivity extends Activity {
     /** Android Back and header Back follow the same history hierarchy. */
     private boolean backWithinHistory(){
         if(home)return false;
+        if("dual_compare".equals(screen)||"dual_memories".equals(screen)){
+            home=comparisonFromHome;screen=home?"chat":"relationships";returnScreen="";
+            showPage();return true;
+        }
         if("analytics".equals(screen)&&!"overview".equals(analyticsSection)){
             selectAnalyticsSection("overview");return true;
         }
@@ -3363,8 +3300,9 @@ public class MainActivity extends Activity {
         }
         if(request==CAPSULE_EXPORT_REQUEST){
             char[] password=pendingCapsulePassword;pendingCapsulePassword=null;
-            if(result==RESULT_OK&&data!=null&&data.getData()!=null)exportCapsule(data.getData(),password);
-            else if(password!=null)java.util.Arrays.fill(password,(char)0);
+            String key=pendingCapsuleKey;pendingCapsuleKey=null;
+            if(result==RESULT_OK&&data!=null&&data.getData()!=null&&key!=null&&key.equals(activeKey)&&!home)exportCapsule(data.getData(),password);
+            else if(password!=null){java.util.Arrays.fill(password,(char)0);if(result==RESULT_OK)toast("Переписка изменилась. Повтори экспорт.");}
             return;
         }
         if(request==WRAPPED_PNG_REQUEST&&result==RESULT_OK&&data!=null&&data.getData()!=null){exportWrappedTo(data.getData());return;}
@@ -3452,13 +3390,18 @@ public class MainActivity extends Activity {
         if(status!=null){status.setVisibility(View.VISIBLE);status.setText(message);}
     }
     private void postImportProgress(String message){
-        runOnUiThread(()->{if(importing)updateImportProgress(message);});
+        runOnUiThread(()->{if(importing&&!isFinishing()&&!isDestroyed())updateImportProgress(message);});
     }
     private void endImportProgress(){
         if(importProgressPanel!=null)importProgressPanel.setVisibility(View.GONE);
     }
+    private void discardUnpublishedImport(String key){
+        // Only this operation\u0027s generated private directory/database, never the source URI.
+        ArchiveFileImport.deleteTree(new java.io.File(new java.io.File(getFilesDir(),"telegram_imports"),key));
+        deleteDatabase("telegram_"+key+".db");
+    }
     private void importSingleHtml(Uri source,String label){
-        if(importing)return;
+        if(importing||restoringBackup)return;
         importing=true;
         if(folderButton!=null)folderButton.setEnabled(false);
         beginImportProgress("Читаю HTML и создаю переписку…");
@@ -3487,6 +3430,7 @@ public class MainActivity extends Activity {
                     if(fresh.totalMessages()==0)throw new IOException("Не найдены сообщения Telegram в HTML");
                 }finally{fresh.close();}
                 runOnUiThread(()->{
+                    if(isFinishing()||isDestroyed()){discardUnpublishedImport(key);return;}
                     importing=false;
                     endImportProgress();
                     if(folderButton!=null)folderButton.setEnabled(true);
@@ -3497,16 +3441,15 @@ public class MainActivity extends Activity {
                         status.setText("Переписка открыта · медиа из одиночного HTML недоступны");
                     }catch(Exception error){toast("Не удалось зарегистрировать чат: "+error.getMessage());}
                 });
-            }catch(Exception error){
-                ArchiveFileImport.deleteTree(root);
-                deleteDatabase("telegram_"+key+".db");
+            }catch(Exception|OutOfMemoryError error){
+                discardUnpublishedImport(key);
                 runOnUiThread(()->{
                     importing=false;
                     endImportProgress();
                     if(folderButton!=null)folderButton.setEnabled(true);
                     status.setText("Импорт HTML не завершён");
                     new FontDialog.Builder(this).setTitle("HTML не импортирован")
-                        .setMessage(error.getMessage()).setPositiveButton("Закрыть",null).show();
+                        .setMessage(error instanceof OutOfMemoryError?"Не хватает памяти для импорта. Попробуй меньший экспорт.":error.getMessage()).setPositiveButton("Закрыть",null).show();
                 });
             }
         });
@@ -3537,7 +3480,8 @@ public class MainActivity extends Activity {
                 }
                 importCompressed(source,ext,displayName,password);
             }).create();
-        passwordDialog.setOnDismissListener(d->archivePassword.getText().clear());
+        archivePasswordDialog=passwordDialog;
+        passwordDialog.setOnDismissListener(d->{archivePassword.getText().clear();if(archivePasswordDialog==passwordDialog)archivePasswordDialog=null;});
         if(passwordDialog.getWindow()!=null)
             passwordDialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
         passwordDialog.show();
@@ -3545,7 +3489,7 @@ public class MainActivity extends Activity {
             passwordDialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
     }
     private void importCompressed(Uri source,String extension,String label,char[] password){
-        if(importing){if(password!=null)java.util.Arrays.fill(password,'\0');return;}
+        if(importing||restoringBackup){if(password!=null)java.util.Arrays.fill(password,'\0');return;}
         importing=true;folderButton.setEnabled(false);
         beginImportProgress("Распаковываю «"+label+"»…");
         String key=UUID.randomUUID().toString().replace("-","");
@@ -3562,6 +3506,7 @@ public class MainActivity extends Activity {
                         throw new IOException("В архиве не найдены сообщения Telegram.");
                 }finally{fresh.close();}
                 runOnUiThread(()->{
+                    if(isFinishing()||isDestroyed()){discardUnpublishedImport(key);return;}
                     importing=false;endImportProgress();folderButton.setEnabled(true);
                     try{
                         JSONObject o=new JSONObject();o.put("key",key);o.put("name",label);
@@ -3569,12 +3514,11 @@ public class MainActivity extends Activity {
                         activateArchive(key);status.setText("Импорт завершён");
                     }catch(Exception error){toast("Ошибка регистрации чата: "+error.getMessage());}
                 });
-            }catch(Exception error){
+            }catch(Exception|OutOfMemoryError error){
                 // A failed password or corrupt archive must not publish partially indexed
                 // messages or leave a failed import hidden in app-private storage.
-                ArchiveFileImport.deleteTree(new java.io.File(new java.io.File(getFilesDir(),"telegram_imports"),key));
-                deleteDatabase("telegram_"+key+".db");
-                String message=error.getMessage()==null?"Файл не удалось распаковать":error.getMessage();
+                discardUnpublishedImport(key);
+                String message=error instanceof OutOfMemoryError?"Не хватает памяти для импорта. Попробуй меньший экспорт.":error.getMessage()==null?"Файл не удалось распаковать":error.getMessage();
                 boolean missing=password==null||password.length==0;
                 // An entered wrong 7z key can surface as a generic CRC/decode
                 // failure. Allow another password without guessing corruption.
@@ -3584,10 +3528,11 @@ public class MainActivity extends Activity {
                     lowerMessage.contains("не поддерж");
                 // Unsupported compression and malformed files are not proof of
                 // an incorrect password. Still let users enter one manually.
-                boolean auth=!unsupported&&(ArchiveFileImport.isPasswordFailure(error)
+                boolean auth=!unsupported&&((error instanceof Exception&&ArchiveFileImport.isPasswordFailure((Exception)error))
                     ||(!missing&&"7z".equalsIgnoreCase(extension)&&
                         (lowerMessage.contains("crc")||lowerMessage.contains("checksum"))));
                 runOnUiThread(()->{
+                    if(isFinishing()||isDestroyed())return;
                     importing=false;endImportProgress();folderButton.setEnabled(true);
                     status.setVisibility(View.VISIBLE);
                     status.setText("Импорт не завершён");
@@ -3613,15 +3558,16 @@ public class MainActivity extends Activity {
         });
     }
     private void importArchive(){
-        if(folder==null||importing)return;closeFloatingRound();stopPlayback();importing=true;folderButton.setEnabled(false);
+        if(folder==null||importing||restoringBackup||db==null)return;closeFloatingRound();stopPlayback();importing=true;folderButton.setEnabled(false);
         beginImportProgress("Индексирую локальную переписку…");
-        list.removeAllViews();DocumentFolder current=folder;
+        list.removeAllViews();DocumentFolder current=folder;final MessageDb source=db;
         worker.execute(()->{
             String failure=null;
-            try{TelegramImporter.importFiles(getContentResolver(),current,db,this::postImportProgress);info="Импорт завершён";}
-            catch(Exception e){failure=e.getMessage();if(failure==null||failure.trim().isEmpty())failure="Не удалось импортировать архив. Проверь файлы и повтори попытку.";info="Ошибка импорта: "+failure;}
+            try{TelegramImporter.importFiles(getContentResolver(),current,source,this::postImportProgress);info="Импорт завершён";}
+            catch(Exception|OutOfMemoryError e){failure=e instanceof OutOfMemoryError?"Не хватает памяти для индексации":e.getMessage();if(failure==null||failure.trim().isEmpty())failure="Не удалось импортировать архив. Проверь файлы и повтори попытку.";info="Ошибка импорта: "+failure;}
             final String importFailure=failure;
             runOnUiThread(()->{
+                if(isFinishing()||isDestroyed()||source!=db)return;
                 importing=false;endImportProgress();folderButton.setEnabled(true);status.setText(info);
                 chatOffset=0;mediaOffset=0;searchOffset=0;favOffset=0;showPage();
                 // showPage replaces the transient status immediately. Keep failures
@@ -3664,7 +3610,7 @@ public class MainActivity extends Activity {
         if(scheduledPrefetch!=null){handler.removeCallbacks(scheduledPrefetch);scheduledPrefetch=null;}
         if(screen.equals("saved")){if(pdfButton!=null)pdfButton.setVisibility(View.GONE);renderSaved();return;}
         bottomNav.setVisibility(View.GONE);
-        if(importing)return;if(floatingPanel==null)stopPlayback();refreshTabs();configureBars();renderPinnedBar();int token=++loadToken;
+        if(importing)return;if(floatingPanel==null)stopPlayback();refreshTabs();configureBars();int token=++loadToken;renderPinnedBar();
         loadingMore=false; // A stale asynchronous page must not block the new tab.
         if(home){renderHome();return;}
         // Do not show the old chat-list contents under the new conversation header
@@ -3674,7 +3620,10 @@ public class MainActivity extends Activity {
             list.setTag(null);list.setBackgroundColor(BG);
             scroll.scrollTo(0,0);
         }
+        final MessageDb source=db;final String archive=activeKey;
+        if(source==null)return;
         final String tab=screen,kind=mediaKind,search=q,who=byAuthor;
+        final int chatLimit=Math.max(PAGE,autoLoaded),searchLimit=Math.max(PAGE,searchLoaded);
         final int requested=getOffset();final boolean deepMode=deep,hasMedia=onlyMedia;
         if("media".equals(tab)){
             // Never expose the previous category/chat beneath the new filter.
@@ -3690,9 +3639,9 @@ public class MainActivity extends Activity {
                 if("analytics".equals(tab)){
                     // Run SQLite scan off the UI thread. The load token drops stale results
                     // after switching chats/tabs, without ever writing to the database.
-                    ChatAnalytics.Snapshot report=db.analytics();
+                    ChatAnalytics.Snapshot report=source.analytics();
                     runOnUiThread(()->{
-                        if(isFinishing()||token!=loadToken)return;
+                        if(!sameScreenRequest(source,archive,token))return;
                         lastAnalytics=report;list.removeAllViews();list.setBackgroundColor(BG);
                         renderAnalytics(report);
                         if(pendingAnalyticsScroll>=0){
@@ -3713,19 +3662,19 @@ public class MainActivity extends Activity {
                     return;
                 }
                 boolean gallery="media".equals(tab),find="search".equals(tab),favs="favorites".equals(tab);
-                int count=gallery?db.mediaCount(kind):db.count(find?search:"",find&&deepMode,find&&deepMode?who:"",find&&deepMode&&hasMedia,favs);
+                int count=gallery?source.mediaCount(kind):source.count(find?search:"",find&&deepMode,find&&deepMode?who:"",find&&deepMode&&hasMedia,favs);
                 // Restore the actual source attachment position (including after
                 // rotation), not always attachment zero. Filter changes reset
                 // mediaOffset via their click handlers.
                 int pos=count==0?0:Math.max(0,Math.min(requested,count-1));
                 List<MessageDb.Attachment> attachments=gallery?
-                    db.mediaPage(kind,pos,MediaGalleryState.PAGE_SIZE):null;
-                List<MessageDb.Item> messages=gallery?null:db.page(pos,tab.equals("chat")?Math.max(PAGE,autoLoaded):tab.equals("search")?Math.max(PAGE,searchLoaded):PAGE,find?search:"",find&&deepMode,find&&deepMode?who:"",find&&deepMode&&hasMedia,favs);
-                Map<Long,List<MessageDb.Attachment>> links=messages==null?new HashMap<>():db.attachmentsForMessages(messages);
-                Map<Long,MessageDb.ReplyInfo> replies=messages==null?new HashMap<>():db.replyPreviews(messages);
-                MessageDb.SearchStats stats=find?db.searchStats(search,deepMode,deepMode?who:"",deepMode&&hasMedia):null;
+                    source.mediaPage(kind,pos,MediaGalleryState.PAGE_SIZE):null;
+                List<MessageDb.Item> messages=gallery?null:source.page(pos,tab.equals("chat")?chatLimit:tab.equals("search")?searchLimit:PAGE,find?search:"",find&&deepMode,find&&deepMode?who:"",find&&deepMode&&hasMedia,favs);
+                Map<Long,List<MessageDb.Attachment>> links=messages==null?new HashMap<>():source.attachmentsForMessages(messages);
+                Map<Long,MessageDb.ReplyInfo> replies=messages==null?new HashMap<>():source.replyPreviews(messages);
+                MessageDb.SearchStats stats=find?source.searchStats(search,deepMode,deepMode?who:"",deepMode&&hasMedia):null;
                 runOnUiThread(()->{
-                    if(isFinishing()||token!=loadToken)return;
+                    if(!sameScreenRequest(source,archive,token))return;
                     total=count;setOffset(pos);list.removeAllViews();
                     if("chat".equals(tab)){
                         android.graphics.drawable.Drawable custom=PersonalImages.wallpaper(this,getPreferences(MODE_PRIVATE),activeKey,BG);
@@ -3798,7 +3747,7 @@ public class MainActivity extends Activity {
                             "search".equals(tab)?(search.isEmpty()?"Введите слово или фразу":("Сообщений: "+count+"  ·  Точных вхождений «"+clip(search,28)+"»: "+stats.literalOccurrences+(deepMode?"":"  ·  Быстрый поиск учитывает начала слов"))):
                             "favorites".equals(tab)?"Твои избранные сообщения": "История · удерживай сообщение для действий");
                 });
-            }catch(Exception e){runOnUiThread(()->{if(token==loadToken)status.setText("Не удалось прочитать базу: "+e.getMessage());});}
+            }catch(Exception e){runOnUiThread(()->{if(sameScreenRequest(source,archive,token))status.setText("Не удалось прочитать базу: "+e.getMessage());});}
         });
     }
     /** Analytics is a read-only, anonymous-by-default view of the current chat DB. */
@@ -3952,7 +3901,7 @@ public class MainActivity extends Activity {
             return;
         }
         if("content".equals(analyticsSection)){
-            analyticsSectionHeading("О чём переписка","Фотографии, видео, голосовые, частые слова и активные даты.");
+            analyticsSectionHeading("Слова и вложения","Частота слов и количество вложений по типам.");
         LinearLayout media=analyticsCard("Медиатека по типам");
         String[] kinds={"image","video","round","voice","audio","gif","sticker","file"};
         String[] titles={"Фото","Обычные видео","Видеосообщения","Голосовые","Музыка/аудио","GIF","Стикеры","Файлы"};
@@ -4000,12 +3949,6 @@ public class MainActivity extends Activity {
                 });
             }
         }
-        if(!r.days.isEmpty()){
-            LinearLayout days=analyticsCard("Самые активные дни");
-            ArrayList<Map.Entry<String,Long>> ranked=new ArrayList<>(r.days.entrySet());
-            ranked.sort((a,b)->{int diff=Long.compare(b.getValue(),a.getValue());return diff!=0?diff:a.getKey().compareTo(b.getKey());});
-            for(int i=0;i<Math.min(8,ranked.size());i++)analyticsLine(days,ranked.get(i).getKey(),ranked.get(i).getValue());
-        }
             return;
         }
         analyticsSectionHeading("Главное о переписке","Короткая сводка без длинных таблиц и графиков.");
@@ -4020,24 +3963,7 @@ public class MainActivity extends Activity {
         analyticsLine(snapshot,"Активных дней",r.days.size());
         if(!r.firstDay.isEmpty())
             analyticsText(snapshot,"Период: "+friendlyAnalyticsDate(r.firstDay)+" — "+friendlyAnalyticsDate(r.lastDay),SUB,12);
-        TextView expandOverview=secondaryDisclosure("Все показатели  ▾");
-        LinearLayout.LayoutParams expandParams=p(-1,42);
-        expandParams.setMargins(px(5),px(2),px(5),px(3));
-        list.addView(expandOverview,expandParams);
-        LinearLayout overview=analyticsCard("Подробные показатели");
-        overview.setVisibility(View.GONE);
-        expandOverview.setOnClickListener(v->{
-            boolean show=overview.getVisibility()!=View.VISIBLE;
-            overview.setVisibility(show?View.VISIBLE:View.GONE);
-            expandOverview.setText(show?"Скрыть показатели  ▴":"Все показатели  ▾");
-        });
-        analyticsLine(overview,"Сообщений",r.totalMessages);
-        analyticsLine(overview,"Участников / отправителей",r.people.size());
-        analyticsLine(overview,"Слов",r.totalWords);
-        analyticsLine(overview,"Символов (Unicode)",r.totalCharacters);
-        analyticsLine(overview,"Медиа и файлов",r.totalMedia);
-        if(!r.firstDay.isEmpty())
-            analyticsText(overview,"Активных дней: "+r.days.size(),SUB,12);
+        analyticsLine(snapshot,"Символов (Unicode)",r.totalCharacters);
 
         if(r.trends!=null&&!r.trends.all.days.isEmpty()){
             TextView openYear=secondaryDisclosure("✦ Итоги выбранного года  ▾");
@@ -4172,7 +4098,7 @@ public class MainActivity extends Activity {
         });
         ChatTrends.Activity activity=report.trends.forPerson(analyticsSelectedAuthor);
         if(graphs){
-        ChatTrends.Series values=ChatTrends.series(activity,analyticsUnit);
+        ChatTrends.Series values="year".equals(analyticsUnit)?ChatTrends.allTimeYears(activity):ChatTrends.series(activity,analyticsUnit);
         if(values.values.length==0){analyticsText(controls,"Нет сообщений с распознанной датой.",SUB,13);}
         else {
             analyticsBarChart(controls,values.labels,values.details,values.values,
@@ -4180,12 +4106,14 @@ public class MainActivity extends Activity {
             if(values.clipped)analyticsText(controls,"Показаны последние "+values.values.length+" периодов; более ранняя история скрыта только на графике.",SUB,11);
             analyticsText(controls,"Сообщений на показанном участке: "+values.visibleCount+" · точные значения указаны рядом с периодами.",SUB,11);
         }
+        if(!"year".equals(analyticsUnit)){
         LinearLayout entire=analyticsCard("Вся история переписки · по годам");
         analyticsText(entire,"От самого первого до последнего года экспорта. Это все годы, а не только последние 30. Точное количество указано рядом с каждым годом.",SUB,12);
         ChatTrends.Series fullHistory=ChatTrends.allTimeYears(activity);
         if(fullHistory.values.length>0){
             analyticsBarChart(entire,fullHistory.labels,fullHistory.details,fullHistory.values,38,120);
             analyticsText(entire,"Всего сообщений с распознанной датой: "+fullHistory.visibleCount,SUB,12);
+        }
         }
         LinearLayout singleYear=analyticsCard("Все 12 месяцев одного года");
         int earliestYear=ChatTrends.earliestYear(activity),latestYear=ChatTrends.latestYear(activity);
@@ -4202,6 +4130,16 @@ public class MainActivity extends Activity {
             analyticsText(singleYear,"Перечислены все месяцы с января по декабрь; длина полосы показывает количество сообщений.",SUB,11);
         }
             return;
+        }
+        if(!activity.days.isEmpty()){
+            LinearLayout days=analyticsCard("Самые активные дни");
+            ArrayList<Map.Entry<LocalDate,Long>> ranked=new ArrayList<>(activity.days.entrySet());
+            ranked.sort((a,b)->{int diff=Long.compare(b.getValue(),a.getValue());return diff!=0?diff:a.getKey().compareTo(b.getKey());});
+            for(int i=0;i<Math.min(8,ranked.size());i++){
+                Map.Entry<LocalDate,Long> day=ranked.get(i);
+                if(day.getValue()<=0)continue;
+                analyticsLine(days,day.getKey().toString(),day.getValue());
+            }
         }
         LinearLayout hours=analyticsCard("Когда пишут · 00:00–24:00");
         analyticsText(hours,"Час отправки сообщения по исходной отметке времени, 00:00–23:59.",SUB,11);
@@ -4679,32 +4617,36 @@ public class MainActivity extends Activity {
     }
     private String initial(String s){if(s==null||s.isEmpty())return "?";return s.substring(0,1).toUpperCase(Locale.ROOT);}
     private void messageActions(MessageDb.Item m){
-        boolean outOfChat=!"chat".equals(screen);
-        ArrayList<String> actions=new ArrayList<>();
-        actions.add(m.favorite?"Убрать из избранного":"★ Добавить в избранное");
-        actions.add(db.isPinned(m.id)?"Открепить":"📌 Закрепить сообщение");
-        actions.add("◷ Отметить начало периода");
-        actions.add("◷ Отметить конец периода");
-        actions.add("♡ Добавить событие истории");
-        actions.add("❞ Цитировать фрагмент");
-        actions.add("Скопировать текст");
-        actions.add("↓ Сохранить сообщение в TXT");
-        actions.add("↓ Сохранить вложение…");
-        if(outOfChat)actions.add("↗ Перейти к сообщению");
+        final MessageDb source=db;final String key=activeKey;final int token=loadToken;
+        if(source==null||home)return;
+        boolean outOfChat=!"chat".equals(screen),hasText=m.body!=null&&!m.body.trim().isEmpty();
+        ArrayList<String> actions=new ArrayList<>();ArrayList<Runnable> handlers=new ArrayList<>();
+        actions.add(source.isFavorite(m.id)?"Убрать из избранного":"★ Добавить в избранное");handlers.add(()->toggleStar(m.id));
+        boolean pinned=source.isPinned(m.id);
+        actions.add(pinned?"Открепить":"📌 Закрепить сообщение");
+        handlers.add(()->worker.execute(()->{
+            boolean pin=source.togglePinned(m.id);
+            runOnUiThread(()->{if(sameScreenRequest(source,key,token)){toast(pin?"Закреплено":"Откреплено");renderPinnedBar();}});
+        }));
+        actions.add("◷ Отметить начало периода");handlers.add(()->selectPeriodBoundary(m,true));
+        actions.add("◷ Отметить конец периода");handlers.add(()->selectPeriodBoundary(m,false));
+        actions.add("♡ Добавить событие истории");handlers.add(()->createRelationshipEventDialog(m));
+        if(hasText){
+            actions.add("❞ Цитировать фрагмент");handlers.add(()->quoteMessage(m));
+            actions.add("Скопировать текст");handlers.add(()->{
+                android.content.ClipboardManager clipboard=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Telegram message",m.body));toast("Текст скопирован");
+            });
+            actions.add("↓ Сохранить сообщение в TXT");handlers.add(()->saveMessageText(m));
+        }
+        actions.add("↓ Сохранить вложение…");handlers.add(()->chooseMessageAttachment(m.id));
+        if(outOfChat){actions.add("↗ Перейти к сообщению");
+            handlers.add(()->jump(m.id,screen.equals("search")?"search":screen.equals("favorites")?"favorites":""));
+        }
         new FontDialog.Builder(this).setTitle("Сообщение · "+clock(m.date))
             .setItems(actions.toArray(new String[0]),(dialog,which)->{
-                if(which==0)toggleStar(m.id);
-                else if(which==1){worker.execute(()->{boolean pin=db.togglePinned(m.id);runOnUiThread(()->{toast(pin?"Закреплено":"Откреплено");renderPinnedBar();});});}
-                else if(which==2)selectPeriodBoundary(m,true);
-                else if(which==3)selectPeriodBoundary(m,false);
-                else if(which==4)createRelationshipEventDialog(m);
-                else if(which==5)quoteMessage(m);
-                else if(which==6){android.content.ClipboardManager clipboard=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
-                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Telegram message",m.body==null?"":m.body));toast("Текст скопирован");}
-                else if(which==7)saveMessageText(m);
-                else if(which==8)chooseMessageAttachment(m.id);
-                else jump(m.id,screen.equals("search")?"search":screen.equals("favorites")?"favorites":"");
-            }).show();
+                if(sameScreenRequest(source,key,token))handlers.get(which).run();
+            }).setNegativeButton("Закрыть",null).show();
     }
     /** Opt-in personal timeline. A user chooses every label and both message boundaries. */
     private void selectPeriodBoundary(MessageDb.Item message,boolean start){
@@ -4733,6 +4675,8 @@ public class MainActivity extends Activity {
             }).show();
     }
     private void createPeriodDialog(ConversationPeriods.Boundary start,ConversationPeriods.Boundary end){
+        if(home||db==null)return;
+        final MessageDb source=db;final String archive=activeKey;final int token=loadToken;
         LinearLayout form=column();form.setPadding(px(18),px(5),px(18),px(6));
         EditText name=new EditText(this);name.setSingleLine(true);name.setHint("Например: Знакомство");
         name.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(ConversationPeriods.MAX_NAME)});
@@ -4746,11 +4690,12 @@ public class MainActivity extends Activity {
         dialog.setOnShowListener(ignored->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
             final String label=name.getText().toString().trim(),comment=note.getText().toString().trim();
             try{ConversationPeriods.validate(label,comment,start,end);}catch(IllegalArgumentException e){name.setError(e.getMessage());return;}
-            final MessageDb source=db;final String archive=activeKey;
+            if(!sameScreenRequest(source,archive,token)){dialog.dismiss();toast("Переписка изменилась");return;}
+            Button save=dialog.getButton(AlertDialog.BUTTON_POSITIVE);save.setEnabled(false);
             worker.execute(()->{try{source.addPeriod(label,comment,start,end);
-                runOnUiThread(()->{if(!archive.equals(activeKey)||isFinishing())return;
-                    pendingPeriodStart=null;pendingPeriodArchive="";dialog.dismiss();chronologySection="stages";screen="chronology";showPage();});
-            }catch(Exception e){runOnUiThread(()->toast("Не сохранилось: "+e.getMessage()));}});
+                runOnUiThread(()->{if(isDestroyed()||isFinishing())return;dialog.dismiss();if(!sameScreenRequest(source,archive,token))return;
+                    pendingPeriodStart=null;pendingPeriodArchive="";chronologySection="stages";screen="chronology";showPage();});
+            }catch(Exception e){runOnUiThread(()->{if(dialog.isShowing()){save.setEnabled(true);name.setError("Не удалось сохранить этап");}});}});
         }));dialog.show();
     }
     /** Opt-in relationship workspace: no automatic categorization or upload. */
@@ -4759,7 +4704,7 @@ public class MainActivity extends Activity {
         // refreshing the header they still display stale "Мои переписки" and
         // its home subtitle while showing an unrelated workspace.
         refreshTabs();
-        title.setText("Хронология");
+        title.setText("dual_compare".equals(screen)||"dual_memories".equals(screen)?"Сравнение переписок":"Хронология");
         subtitle.setText("relationships".equals(screen)?"Личные события и инструменты":heading);
         if(scheduledPrefetch!=null){handler.removeCallbacks(scheduledPrefetch);scheduledPrefetch=null;}
         bottomNav.setVisibility(View.GONE);pinnedBar.removeAllViews();
@@ -4779,6 +4724,7 @@ public class MainActivity extends Activity {
     }
     private void createRelationshipEventDialog(MessageDb.Item m){
         if(home||db==null)return;
+        final MessageDb source=db;final String key=activeKey;final int token=loadToken;
         LinearLayout form=column();form.setPadding(px(16),px(4),px(16),px(8));
         EditText name=new EditText(this);name.setSingleLine(true);name.setHint("Например: Первая встреча");
         name.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(90)});
@@ -4789,18 +4735,29 @@ public class MainActivity extends Activity {
         form.addView(description,p(-1,-2));
         TextView explain=text("Событие привяжется к выбранному сообщению. Переписка не меняется. После сохранения можно прикрепить фото, видео, кружки, голосовые и файлы ИЗ ЭТОГО АРХИВА.",12,SUB);
         form.addView(explain);
-        new FontDialog.Builder(this).setTitle("♡ Событие в истории")
-            .setNeutralButton("Как это работает",(d,w)->openHelpChapter(24)).setView(form).setNegativeButton("Отмена",null).setPositiveButton("Сохранить",(dialog,which)->{
-                String label=name.getText().toString(),note=description.getText().toString();
-                if(label.trim().isEmpty()){toast("Название не может быть пустым");return;}
-                final MessageDb source=db;final String key=activeKey;
-                worker.execute(()->{
-                    try{source.addRelationshipEvent(label,note,m.id,0);
-                        runOnUiThread(()->{if(key.equals(activeKey))toast("Событие сохранено → меню ⋮ → Хронология");});
-                    }catch(Exception e){runOnUiThread(()->toast("Событие не сохранено: "+e.getMessage()));}
-                });
-            }).show();
+        AlertDialog eventDialog=new FontDialog.Builder(this).setTitle("Новое событие")
+            .setView(form).setNegativeButton("Отмена",null).setPositiveButton("Сохранить",null).create();
+        eventDialog.setOnShowListener(ignored->eventDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            String label=name.getText().toString().trim(),note=description.getText().toString().trim();
+            if(label.isEmpty()){name.setError("Введи название события");return;}
+            if(!sameScreenRequest(source,key,token)){eventDialog.dismiss();toast("Переписка изменилась");return;}
+            Button save=eventDialog.getButton(AlertDialog.BUTTON_POSITIVE);save.setEnabled(false);
+            worker.execute(()->{
+                try{
+                    if(!source.hasMessage(m.id))throw new IOException("Исходное сообщение не найдено");
+                    source.addRelationshipEvent(label,note,m.id,0);
+                    runOnUiThread(()->{
+                        if(isDestroyed()||isFinishing())return;
+                        eventDialog.dismiss();
+                        if(sameScreenRequest(source,key,token))toast("Событие сохранено в хронологии");
+                    });
+                }catch(Exception e){runOnUiThread(()->{
+                    if(!eventDialog.isShowing())return;save.setEnabled(true);name.setError("Не удалось сохранить событие");
+                });}
+            });
+        }));eventDialog.show();
     }
+
     private LinearLayout relationshipCard(LinearLayout parent,String title){
         LinearLayout card=column();card.setPadding(px(13),px(12),px(13),px(13));
         card.setBackground(glass(PANEL,17));
@@ -4854,7 +4811,7 @@ public class MainActivity extends Activity {
     private void renderRelationshipsPage(){
         int token=++loadToken;
         if(home){screen="chat";showPage();return;}
-        prepareRelationshipScreen("Хронология","События, периоды и воспоминания — по разделам.");
+        prepareRelationshipScreen("Хронология","События, периоды и воспоминания");
         // Find old user-authored events directly, regardless of the current 20-item page.
         // Searching never traverses the private message text or modifies annotations.
         LinearLayout eventSearch=row();eventSearch.setGravity(Gravity.CENTER_VERTICAL);
@@ -4878,24 +4835,29 @@ public class MainActivity extends Activity {
         });
         TextView events=secondaryDisclosure(historyEventsExpanded?
             "01 · События переписки  ▴":"01 · События переписки  ▾");
-        list.addView(events,p(-1,44));
-        events.setContentDescription("Раскрыть или свернуть ленту событий");
+        list.addView(events,p(-1,48));
+        events.setContentDescription("События: личные отметки, привязанные к сообщениям");
         events.setOnClickListener(v->{
             historyEventsExpanded=!historyEventsExpanded;
             renderRelationshipsPage();
         });
-        TextView stages=secondaryDisclosure("02 · Этапы переписки  ›");list.addView(stages,p(-1,44));
+        TextView stages=secondaryDisclosure("02 · Этапы переписки  ›");list.addView(stages,p(-1,48));
+        stages.setContentDescription("Этапы: от одного сообщения до другого");
         stages.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="stages";screen="chronology";showPage();});
-        TextView calendar=secondaryDisclosure("03 · Периоды по датам  ›");list.addView(calendar,p(-1,44));
+        TextView calendar=secondaryDisclosure("03 · Периоды по датам  ›");list.addView(calendar,p(-1,48));
+        calendar.setContentDescription("Периоды по датам: личные даты, даже за пределами переписки");
         calendar.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="calendar";screen="chronology";showPage();});
-        TextView charts=secondaryDisclosure("04 · Сравнение этапов  ›");list.addView(charts,p(-1,44));
+        TextView charts=secondaryDisclosure("04 · Сравнение этапов  ›");list.addView(charts,p(-1,48));
+        charts.setContentDescription("Сравнение этапов: число сообщений и вложений в отмеченных этапах");
         charts.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="chart";screen="chronology";showPage();});
-        TextView cinemaShortcut=secondaryDisclosure("05 · Кинолента медиа по годам  ›");list.addView(cinemaShortcut,p(-1,44));
-        cinemaShortcut.setOnClickListener(v->{historyEventsExpanded=false;cinemaReturnScreen=screen;screen="cinema";showPage();});
+        TextView memories=secondaryDisclosure("05 · В этот день  ›");list.addView(memories,p(-1,48));
+        memories.setContentDescription("В этот день: сообщения за одну дату в разных годах");
+        memories.setOnClickListener(v->{LocalDate today=LocalDate.now();showOnThisDay(today.getMonthValue(),today.getDayOfMonth());});
         Button backToChat=btn("+ Отметить событие в переписке");list.addView(backToChat,p(-1,46));
         backToChat.setOnClickListener(v->{screen="chat";showPage();
             toast("Удерживай важное сообщение и выбери «Добавить событие истории»");});
-        analyticsText(list,"Все отметки личные: оригинальные сообщения и файлы не изменяются.",SUB,12);
+        analyticsText(list,"Событие — одно сообщение. Этап — между двумя сообщениями. Период — любые даты.",SUB,12);
+        analyticsText(list,"Личные отметки не меняют оригиналы.",SUB,12);
         TextView more=secondaryDisclosure("Другие инструменты истории  ▾");
         list.addView(more,p(-1,44));
         LinearLayout advanced=column();advanced.setVisibility(View.GONE);list.addView(advanced,p(-1,-2));
@@ -4907,13 +4869,10 @@ public class MainActivity extends Activity {
         Button echoes=btn("Повторяющиеся фразы");advanced.addView(echoes,p(-1,48));
         echoes.setOnClickListener(v->{screen="echo";showPage();});
         Button fullCompare=btn("Сравнить две переписки");advanced.addView(fullCompare,p(-1,48));
-        fullCompare.setOnClickListener(v->chooseDualChat("dual_compare"));
-        Button sharedMemories=btn("Воспоминания двух переписок");advanced.addView(sharedMemories,p(-1,48));
-        sharedMemories.setOnClickListener(v->chooseDualChat("dual_memories"));
-        Button comparison=btn("Календари двух переписок");advanced.addView(comparison,p(-1,48));
-        comparison.setOnClickListener(v->chooseParallelCalendar());
-        Button health=btn("Проверить сохранность медиа");advanced.addView(health,p(-1,48));
-        health.setOnClickListener(v->showMediaHealth());
+        fullCompare.setOnClickListener(v->{comparisonFromHome=false;chooseDualChat("dual_compare");});
+        fullCompare.setContentDescription("Сравнить статистику, календари и общую историю двух переписок");
+        Button gaps=btn("Паузы между сообщениями");advanced.addView(gaps,p(-1,48));
+        gaps.setOnClickListener(v->showConversationPauses());
         LinearLayout eventsHolder=column();list.addView(eventsHolder,p(-1,-2));
         if(!historyEventsExpanded){
             status.setText("");status.setVisibility(View.GONE);
@@ -5081,94 +5040,6 @@ public class MainActivity extends Activity {
         });
     }
     /** Two separate per-chat SQLite databases; opt-in counts only, no participant mixing. */
-    private void chooseParallelCalendar(){
-        final String firstKey=activeKey;
-        if(!canOpenQuoteArchive(firstKey)){toast("Сначала открой переписку");return;}
-        ArrayList<String> keys=new ArrayList<>(),labels=new ArrayList<>();
-        for(int i=0;i<archives.length();i++){
-            JSONObject chat=archives.optJSONObject(i);
-            if(chat==null)continue;
-            String key=chat.optString("key");
-            if(!firstKey.equals(key)&&canOpenQuoteArchive(key)){
-                keys.add(key);labels.add(chat.optString("name","Переписка"));
-            }
-        }
-        if(keys.isEmpty()){
-            new FontDialog.Builder(this).setTitle("Параллельные календари")
-                .setMessage("Добавь вторую переписку. Сравнение работает только между двумя явно выбранными локальными архивами.")
-                .setPositiveButton("Понятно",null).show();return;
-        }
-        new FontDialog.Builder(this).setTitle("Второй чат для сравнения")
-            .setItems(labels.toArray(new String[0]),(dialog,index)->{
-                String secondKey=keys.get(index),secondName=labels.get(index);
-                EditText yearInput=new EditText(this);
-                yearInput.setSingleLine(true);yearInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-                yearInput.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(4)});
-                yearInput.setText(String.valueOf(java.time.LocalDate.now().getYear()));
-                new FontDialog.Builder(this).setTitle("Год для двух календарей")
-                    .setMessage("Отобразятся только числа сообщений за каждый месяц. Переписки и участники не объединяются.")
-                    .setView(yearInput).setNegativeButton("Отмена",null)
-                    .setPositiveButton("Сравнить",(d,i)->{
-                        try{
-                            int year=Integer.parseInt(yearInput.getText().toString().trim());
-                            if(year<1||year>9999)throw new NumberFormatException();
-                            showParallelCalendar(firstKey,secondKey,secondName,year);
-                        }catch(NumberFormatException ignored){toast("Укажи год от 1 до 9999");}
-                    }).show();
-            }).setNegativeButton("Отмена",null).show();
-    }
-    private void showParallelCalendar(String firstKey,String secondKey,String secondName,int year){
-        if(!canOpenQuoteArchive(firstKey)||!canOpenQuoteArchive(secondKey)){
-            toast("Архив больше не зарегистрирован");return;
-        }
-        final int token=loadToken;
-        final String firstName=activeName;
-        status.setText("Строю календари — только локальные счётчики…");
-        worker.execute(()->{
-            ParallelCalendars.Comparison report=null;
-            String failure=null;
-            try{
-                String filenameA="default".equals(firstKey)?"telegram_archive.db":"telegram_"+firstKey+".db";
-                String filenameB="default".equals(secondKey)?"telegram_archive.db":"telegram_"+secondKey+".db";
-                if(!getDatabasePath(filenameA).isFile()||!getDatabasePath(filenameB).isFile()){
-                    failure="Одна из баз данных ещё не импортирована";
-                }else{
-                    ParallelCalendars.YearData a,b;
-                    try(android.database.sqlite.SQLiteDatabase dbA=android.database.sqlite.SQLiteDatabase.openDatabase(
-                            getDatabasePath(filenameA).getAbsolutePath(),null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY)){
-                        a=MessageDb.calendarYear(dbA,year);
-                    }
-                    try(android.database.sqlite.SQLiteDatabase dbB=android.database.sqlite.SQLiteDatabase.openDatabase(
-                            getDatabasePath(filenameB).getAbsolutePath(),null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY)){
-                        b=MessageDb.calendarYear(dbB,year);
-                    }
-                    report=new ParallelCalendars.Comparison(a,b);
-                }
-            }catch(Exception e){failure="Ошибка чтения календаря: "+e.getClass().getSimpleName();}
-            final ParallelCalendars.Comparison view=report;
-            final String error=failure;
-            runOnUiThread(()->{
-                if(isFinishing()||token!=loadToken||!firstKey.equals(activeKey)||!"relationships".equals(screen))return;
-                if(error!=null){toast(error);status.setText("Календари: ошибка чтения");return;}
-                StringBuilder result=new StringBuilder("Год: ").append(year).append("\n")
-                    .append(firstName).append(" / ").append(secondName).append("\n\n");
-                for(int month=0;month<12;month++){
-                    result.append(String.format(Locale.ROOT,"%02d",month+1)).append(" · ")
-                        .append(view.first.months[month]).append(" / ")
-                        .append(view.second.months[month]).append('\n');
-                }
-                result.append("\nСуммы: ").append(view.first.total()).append(" / ")
-                    .append(view.second.total()).append("\n").append(view.summary());
-                if(view.first.rejected>0||view.second.rejected>0)
-                    result.append("\nПропущены некорректные даты: ").append(view.first.rejected)
-                        .append(" / ").append(view.second.rejected);
-                result.append("\n\nТолько подсчёт по датам из экспорта. Никакие сообщения или участники не объединяются.");
-                new FontDialog.Builder(this).setTitle("Параллельные календари")
-                    .setMessage(result.toString()).setPositiveButton("Закрыть",null).show();
-                status.setText("Сравнение календарей завершено"+(view.complete()?"":" · частично"));
-            });
-        });
-    }
     private void chooseFirstDualChat(String mode){
         if(archives.length()<2){toast("Для сравнения нужны две переписки");return;}
         ArrayList<String> keys=new ArrayList<>(),names=new ArrayList<>();
@@ -5181,6 +5052,7 @@ public class MainActivity extends Activity {
         if(keys.size()<2){toast("Добавь вторую переписку");return;}
         new FontDialog.Builder(this).setTitle("Первая переписка для сравнения")
             .setItems(names.toArray(new String[0]),(d,index)->{
+                comparisonFromHome=true;
                 activateArchive(keys.get(index));
                 if(!home)chooseDualChat(mode);
             }).setNegativeButton("Отмена",null).show();
@@ -5252,17 +5124,25 @@ public class MainActivity extends Activity {
         if(first.equals(second)||!canOpenQuoteArchive(first)||!canOpenQuoteArchive(second)){
             toast("Выбери две разные зарегистрированные переписки");screen="relationships";showPage();return;
         }
-        prepareRelationshipScreen(isTimeline?"◷ Воспоминания двух переписок":"⇄ Сравнение диалогов",
-            "Две локальные базы. Сообщения, личности и медиа не объединяются, в интернет ничего не отправляется.");
-        Button back=btn("‹ К разделу «Хронология»");list.addView(back,p(-1,45));
-        back.setOnClickListener(v->{screen="relationships";showPage();});
-        Button other=btn("⇄ Сменить вторую переписку");list.addView(other,p(-1,45));
+        prepareRelationshipScreen(isTimeline?"Общая история":"Статистика двух чатов",
+            "Сравнение локальных архивов без изменения сообщений.");
+        TextView pair=text(activeName+"  /  "+dualSecondName,15,FG);
+        pair.setPadding(px(8),px(9),px(8),px(9));pair.setMaxLines(3);list.addView(pair,p(-1,-2));
+        Button other=btn("Выбрать второй чат");list.addView(other,p(-1,48));
         other.setOnClickListener(v->chooseDualChat(mode));
-        Button yearButton=btn("Год: "+year+"  ▾");list.addView(yearButton,p(-1,45));
+        LinearLayout modes=row();list.addView(modes,p(-1,48));
+        Button metrics=btn("Статистика");Button timeline=btn("Общая история");
+        modes.addView(metrics,new LinearLayout.LayoutParams(0,-1,1));
+        modes.addView(timeline,new LinearLayout.LayoutParams(0,-1,1));
+        metrics.setEnabled(isTimeline);timeline.setEnabled(!isTimeline);
+        metrics.setOnClickListener(v->{screen="dual_compare";showPage();});
+        timeline.setOnClickListener(v->{screen="dual_memories";showPage();});
+        LinearLayout dates=row();list.addView(dates,p(-1,48));
+        Button yearButton=btn("Год: "+year+"  ▾");dates.addView(yearButton,new LinearLayout.LayoutParams(0,-1,1));
         yearButton.setOnClickListener(v->chooseDualYear());
         if(isTimeline){
-            Button monthButton=btn("Период: "+(month==0?"весь год":String.format(Locale.ROOT,"%02d",month))+"  ▾");
-            list.addView(monthButton,p(-1,45));monthButton.setOnClickListener(v->chooseDualMonth());
+            Button monthButton=btn(month==0?"Весь год  ▾":String.format(Locale.ROOT,"%02d · месяц ▾",month));
+            dates.addView(monthButton,new LinearLayout.LayoutParams(0,-1,1));monthButton.setOnClickListener(v->chooseDualMonth());
         }
         TextView progress=text("Сверяю локальные базы в режиме чтения…",13,SUB);list.addView(progress,p(-1,-2));
         final String firstName=activeName,secondName=dualSecondName;
@@ -5300,8 +5180,8 @@ public class MainActivity extends Activity {
     }
     private void renderDualComparison(DualChatRepository.Snapshot a,DualChatRepository.Snapshot b,
                                       String firstName,String secondName){
-        LinearLayout summary=relationshipCard(list,"Два диалога · общие показатели");
-        analyticsText(summary,"A: "+firstName+"    Б: "+secondName,FG,13);
+        LinearLayout summary=relationshipCard(list,"За всё время");
+        analyticsText(summary,"Первый чат / второй чат",SUB,12);
         analyticsText(summary,"Сообщения: "+a.messages+" / "+b.messages,FG,14);
         analyticsText(summary,"С текстом: "+a.withText+" / "+b.withText,FG,13);
         analyticsText(summary,"Участники (в каждом чате отдельно): "+a.participants+" / "+b.participants,FG,13);
@@ -5317,14 +5197,12 @@ public class MainActivity extends Activity {
                 " записей на чат). Полные счётчики выше не ограничены.",0xffffc377,12);
         analyticsText(yearCard,"График по месяцам · A синий, Б оранжевый. Шкала общая.",SUB,12);
         drawDualMonthlyBars(yearCard,a.calendar.counts(),b.calendar.counts());
-        LinearLayout media=relationshipCard(list,"Медиа по категориям");
+        LinearLayout media=relationshipCard(list,"Вложения за всё время");
         java.util.TreeSet<String> kinds=new java.util.TreeSet<>();
         kinds.addAll(a.mediaTypes.keySet());kinds.addAll(b.mediaTypes.keySet());
         if(kinds.isEmpty())analyticsText(media,"В этих чатах вложения пока не индексированы.",SUB,12);
-        for(String kind:kinds)analyticsText(media,kind+": "+a.mediaTypes.getOrDefault(kind,0L)+
+        for(String kind:kinds)analyticsText(media,mediaLabel(kind)+": "+a.mediaTypes.getOrDefault(kind,0L)+
             " / "+b.mediaTypes.getOrDefault(kind,0L),FG,12);
-        Button time=btn("◷ Открыть общие воспоминания за "+dualYear);
-        list.addView(time,p(-1,49));time.setOnClickListener(v->{dualMonth=0;screen="dual_memories";showPage();});
         status.setText("Сравнение двух диалогов · без изменения данных");
     }
     private void drawDualMonthlyBars(LinearLayout target,long[] a,long[] b){
@@ -5377,9 +5255,6 @@ public class MainActivity extends Activity {
             Button open=btn("↗ Перейти к оригиналу в «"+clip(entry.archiveName,26)+"»");
             card.addView(open,p(-1,40));open.setOnClickListener(v->openDualMemory(entry));
         }
-        Button comparison=btn("⇄ Сравнить активность и медиа двух чатов");
-        list.addView(comparison,p(-1,49));
-        comparison.setOnClickListener(v->{screen="dual_compare";showPage();});
         status.setText("Общая временная линия · "+rows.size()+" записей в обзоре");
     }
     private void renderEchoPage(){
@@ -5817,11 +5692,14 @@ public class MainActivity extends Activity {
         return QuoteFormatter.excerpt(sequence.toString(),start,end);
     }
     private void chooseMessageAttachment(long messageId){
+        final MessageDb source=db;final String key=activeKey;final int token=loadToken;
+        if(source==null||home)return;
         worker.execute(()->{
             MessageDb.Item selected=new MessageDb.Item();selected.id=messageId;
-            Map<Long,List<MessageDb.Attachment>> result=db.attachmentsForMessages(java.util.Collections.singletonList(selected));
+            Map<Long,List<MessageDb.Attachment>> result=source.attachmentsForMessages(java.util.Collections.singletonList(selected));
             List<MessageDb.Attachment> media=result.get(messageId);
             runOnUiThread(()->{
+                if(!sameScreenRequest(source,key,token))return;
                 if(media==null||media.isEmpty()){toast("У этого сообщения нет вложений");return;}
                 if(media.size()==1){mediaActions(media.get(0));return;}
                 String[] items=new String[media.size()];
@@ -5842,12 +5720,14 @@ public class MainActivity extends Activity {
     private void toggleStar(long id){
         final String archive=activeKey;
         final MessageDb source=db;
+        if(source==null||home)return;
         worker.execute(()->{
             boolean on=source.toggleFavorite(id);
             runOnUiThread(()->{
-                if(!archive.equals(activeKey)||isFinishing())return;
-                // Never call showPage(): it rebuilds ScrollView and teleports the reader.
+                if(!archive.equals(activeKey)||source!=db||isFinishing()||isDestroyed()||home)return;
                 toast(on?"★ Добавлено в избранное":"Убрано из избранного");
+                // Refresh the filtered collection only; do not teleport the chat reader.
+                if("favorites".equals(screen)&&!on){favOffset=Math.max(0,favOffset);showPage();}
             });
         });
     }
@@ -6666,33 +6546,34 @@ public class MainActivity extends Activity {
               });
           }).setNegativeButton("Отмена",null).show();
     }
-    private void mediaActions(MessageDb.Attachment a){
+    private AlertDialog mediaActions(MessageDb.Attachment a){
         boolean round="round".equals(a.kind);
         MediaSavePolicy.Spec spec=MediaSavePolicy.plan(a.path,a.kind,false);
-        String saveLabel=(spec.destination==MediaSavePolicy.Destination.PICTURES||spec.destination==MediaSavePolicy.Destination.MOVIES)
-            ?"↓ Сохранить в галерею":(spec.destination==MediaSavePolicy.Destination.MUSIC?"↓ Сохранить в музыку":"↓ Сохранить на устройство");
-        String[] names=round?
-            new String[]{"▶ Плавающее видеосообщение","⛶ Полный экран / PiP","↗ Перейти к сообщению","☆ В избранное","Открыть внешним плеером",saveLabel,"↓ Сохранить в Загрузки","☑ Выбрать несколько","+ Добавить в коллекцию"}:
-            new String[]{"▶ Воспроизвести / открыть","↗ Перейти к сообщению","☆ Отметить сообщение","⛶ Открыть полностью",saveLabel,"↓ Сохранить в Загрузки","☑ Выбрать несколько","+ Добавить в коллекцию"};
-        new FontDialog.Builder(this).setTitle(mediaLabel(a.kind)+" · "+day(a.date)).setItems(names,(dlg,which)->{
-            if(round){
-                if(which==0)showFloatingRound(a);
-                else if(which==1)openRoundPlayer(a);
-                else if(which==2)jump(a.messageId,screen.equals("media")?"media":"");
-                else if(which==3)toggleStar(a.messageId);
-                else if(which==4)resolveMedia(a.path,uri->external(uri,a.path));
-                else if(which==7){multiSelectMedia=true;selectedMediaArchive=activeKey;toggleMediaSelection(a);screen="media";showPage();}
-                else if(which==8)addMediaToCollection(java.util.Collections.singletonList(a));
-                else saveAttachment(a,which==6);
-            }else{
-                if(which==0||which==3)openMedia(a);
-                else if(which==1)jump(a.messageId,"media");
-                else if(which==2)toggleStar(a.messageId);
-                else if(which==6){multiSelectMedia=true;selectedMediaArchive=activeKey;toggleMediaSelection(a);screen="media";showPage();}
-                else if(which==7)addMediaToCollection(java.util.Collections.singletonList(a));
-                else saveAttachment(a,which==5);
-            }
-        }).show();
+        ArrayList<String> names=new ArrayList<>();ArrayList<Runnable> actions=new ArrayList<>();
+        if(round){
+            names.add("Плавающий кружок");actions.add(()->showFloatingRound(a));
+            names.add("Полный экран / PiP");actions.add(()->openRoundPlayer(a));
+            names.add("Внешний плеер");actions.add(()->resolveMedia(a.path,uri->external(uri,a.path)));
+        }else{
+            names.add("Открыть вложение");actions.add(()->openMedia(a));
+        }
+        names.add("Перейти к сообщению");actions.add(()->jump(a.messageId,"media".equals(screen)?"media":""));
+        names.add("Изменить отметку «Избранное»");actions.add(()->toggleStar(a.messageId));
+        String saveLabel=spec.destination==MediaSavePolicy.Destination.PICTURES||spec.destination==MediaSavePolicy.Destination.MOVIES
+            ?"Сохранить в галерею":spec.destination==MediaSavePolicy.Destination.MUSIC?"Сохранить в музыку":"Сохранить в Загрузки";
+        names.add(saveLabel);actions.add(()->saveAttachment(a,false));
+        if(spec.destination!=MediaSavePolicy.Destination.DOWNLOADS){
+            names.add("Сохранить в Загрузки");actions.add(()->saveAttachment(a,true));
+        }
+        names.add("Выбрать несколько файлов");actions.add(()->{
+            if(!activeKey.equals(selectedMediaArchive))clearMediaSelection();
+            multiSelectMedia=true;selectedMediaArchive=activeKey;
+            toggleMediaSelection(a);screen="media";showPage();
+        });
+        names.add("Добавить в коллекцию");actions.add(()->addMediaToCollection(java.util.Collections.singletonList(a)));
+        return new FontDialog.Builder(this).setTitle(mediaLabel(a.kind)+" · "+day(a.date))
+            .setItems(names.toArray(new String[0]),(dlg,which)->actions.get(which).run())
+            .setNegativeButton("Закрыть",null).show();
     }
     private void saveAttachment(MessageDb.Attachment a,boolean downloads){
         MediaSavePolicy.Spec spec=MediaSavePolicy.plan(a.path,a.kind,downloads);
@@ -6797,7 +6678,7 @@ public class MainActivity extends Activity {
             Uri uri=result;runOnUiThread(()->{
                 // A slow SAF provider must never open media from a previously
                 // selected chat after navigation or player closure.
-                if(isFinishing()||!MediaRequestGuard.isCurrent(requestedArchive,activeKey,
+                if(isFinishing()||isDestroyed()||!MediaRequestGuard.isCurrent(requestedArchive,activeKey,
                         requestedLoad,loadToken,requestedPlayback,playbackGeneration))return;
                 if(uri==null){
                     status.setText("Файл не найден: "+path);
@@ -7643,10 +7524,12 @@ public class MainActivity extends Activity {
         });
     }
     private void settingsMenu(){new FontDialog.Builder(this).setTitle("Настройки переписки")
-        .setItems(new String[]{"Скругление пузырьков","Моё имя (сообщения справа)",
-            "Цвета участников","Объединить цвета нескольких имён"},(d,i)->{
-            if(i==0)bubbleStyleDialog();else if(i==1)identityDialog();
-            else if(i==2)participantSettings();else if(i==3)groupedParticipantColors();
+        .setItems(new String[]{"Скругление сообщений","Плотность сообщений","Моё имя (сообщения справа)",
+            "Цвет одного участника","Один цвет нескольким участникам"},(d,i)->{
+            if(i==0){bubbleStyleDialog();return;}
+            if(i==1){densityDialog();return;}
+            if(home){toast("Открой нужную переписку и вернись в настройки");return;}
+            if(i==2)identityDialog();else if(i==3)participantSettings();else if(i==4)groupedParticipantColors();
         }).setPositiveButton("Закрыть",null).show();}
     private String displayDocumentName(Uri uri){
         try(android.database.Cursor c=getContentResolver().query(uri,new String[]{android.provider.OpenableColumns.DISPLAY_NAME},null,null,null)){
@@ -7674,25 +7557,46 @@ public class MainActivity extends Activity {
                 });
             }).setNegativeButton("Отмена",null).show();
     }
+    private EditText privatePasswordField(String hint){
+        EditText field=new EditText(this);field.setSingleLine(true);
+        field.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        field.setSaveEnabled(false);field.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        field.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
+        field.setHint(hint);return field;
+    }
+    private static char[] takePassword(EditText field){
+        char[] value=new char[field.length()];field.getText().getChars(0,field.length(),value,0);
+        field.getText().clear();return value;
+    }
+    private void showPasswordDialog(AlertDialog.Builder builder,EditText field){
+        AlertDialog dialog=builder.create();
+        dialog.setOnDismissListener(d->field.getText().clear());
+        if(dialog.getWindow()!=null)dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        dialog.show();
+        if(dialog.getWindow()!=null)dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+    }
+    private void clearBackupPassword(){
+        if(backupPassword!=null)java.util.Arrays.fill(backupPassword,(char)0);
+        backupPassword=null;
+    }
     private void askBackupPassword(){
         LinearLayout layout=column();layout.setPadding(px(23),px(5),px(23),px(3));
-        EditText pass=new EditText(this);pass.setHint("Пароль, не меньше 8 символов");pass.setSingleLine(true);
-        pass.setInputType(129);layout.addView(pass,p(-1,53));
-        TextView note=text("Можно оставить пустым, чтобы создать обычный ZIP без шифрования. Забытый пароль восстановить невозможно.",12,SUB);layout.addView(note);
-        new FontDialog.Builder(this).setTitle("Защитить копию паролем").setView(layout)
+        EditText pass=privatePasswordField("Пароль, не меньше 8 символов");layout.addView(pass,p(-1,53));
+        TextView note=text("Без пароля создаётся обычный ZIP. Забытый пароль восстановить невозможно.",12,SUB);layout.addView(note);
+        showPasswordDialog(new FontDialog.Builder(this).setTitle("Защитить копию паролем").setView(layout)
             .setNegativeButton("Отмена",null)
-            .setNeutralButton("Без пароля",(d,w)->{backupPassword=null;pickBackupFile();})
+            .setNeutralButton("Без пароля",(d,w)->{clearBackupPassword();pickBackupFile();})
             .setPositiveButton("С паролем",(d,w)->{
-                String value=pass.getText().toString();
-                if(value.length()<8){toast("Пароль должен содержать минимум 8 символов");return;}
-                backupPassword=value.toCharArray();pickBackupFile();
-            }).show();
+                char[] value=takePassword(pass);
+                if(value.length<8){java.util.Arrays.fill(value,(char)0);toast("Пароль должен содержать минимум 8 символов");return;}
+                clearBackupPassword();backupPassword=value;pickBackupFile();
+            }),pass);
     }
     private void pickBackupFile(){
         Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);
         i.setType("application/octet-stream");i.addCategory(Intent.CATEGORY_OPENABLE);
         i.putExtra(Intent.EXTRA_TITLE,"TelegramArchive-"+(fullBackupMode?"FULL":"COMPACT")+(backupPassword==null?".zip":".tgar"));
-        startActivityForResult(i,41);
+        try{startActivityForResult(i,41);}catch(RuntimeException error){clearBackupPassword();toast("Не удалось выбрать файл копии");}
     }
     private void dryRunPicker(){
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("*/*");
@@ -7702,15 +7606,15 @@ public class MainActivity extends Activity {
     private void dryRunSelected(Uri uri){
         try{
             if(SecureArchive.isEncrypted(this,uri)){
-                EditText input=new EditText(this);input.setInputType(129);input.setHint("Пароль резервной копии");
-                new FontDialog.Builder(this).setTitle("Пробное восстановление").setView(input)
+                EditText input=privatePasswordField("Пароль резервной копии");
+                showPasswordDialog(new FontDialog.Builder(this).setTitle("Пробное восстановление").setView(input)
                     .setNegativeButton("Отмена",null)
-                    .setPositiveButton("Проверить",(d,w)->runDryRestore(uri,input.getText().toString().toCharArray())).show();
+                    .setPositiveButton("Проверить",(d,w)->runDryRestore(uri,takePassword(input))),input);
             }else runDryRestore(uri,null);
         }catch(Exception e){status.setText("Ошибка чтения: "+e.getMessage());}
     }
     private void runDryRestore(Uri uri,char[] pass){
-        if(importing||restoringBackup)return;
+        if(importing||restoringBackup){if(pass!=null)java.util.Arrays.fill(pass,(char)0);return;}
         restoringBackup=true;status.setText("Проверяю временные базы, чаты не изменяются…");
         worker.execute(()->{
             try{
@@ -7733,16 +7637,15 @@ public class MainActivity extends Activity {
     private void verifyBackup(Uri uri){
         try{
             if(SecureArchive.isEncrypted(this,uri)){
-                EditText entry=new EditText(this);entry.setInputType(129);entry.setSingleLine(true);
-                entry.setHint("Пароль для проверки архива");
-                new FontDialog.Builder(this).setTitle("Проверка защищённой копии")
+                EditText entry=privatePasswordField("Пароль для проверки архива");
+                showPasswordDialog(new FontDialog.Builder(this).setTitle("Проверка защищённой копии")
                     .setView(entry).setNegativeButton("Отмена",null)
-                    .setPositiveButton("Проверить",(d,w)->runBackupVerify(uri,entry.getText().toString().toCharArray())).show();
+                    .setPositiveButton("Проверить",(d,w)->runBackupVerify(uri,takePassword(entry))),entry);
             }else runBackupVerify(uri,null);
         }catch(Exception problem){status.setText("Невозможно открыть копию: "+problem.getMessage());}
     }
     private void runBackupVerify(Uri uri,char[] password){
-        if(importing||restoringBackup)return;restoringBackup=true;
+        if(importing||restoringBackup){if(password!=null)java.util.Arrays.fill(password,(char)0);return;}restoringBackup=true;
         status.setText("Проверяю резервную копию, чаты не изменяются…");
         worker.execute(()->{
             try{
@@ -7778,23 +7681,20 @@ public class MainActivity extends Activity {
     }
     private void askRestorePassword(Uri uri){
         try{
-            if(!SecureArchive.isEncrypted(this,uri)){backupAction(uri,true);return;}
-            EditText entry=new EditText(this);entry.setHint("Пароль резервной копии");
-            entry.setInputType(129);entry.setSingleLine(true);
-            new FontDialog.Builder(this).setTitle("Зашифрованная копия")
+            if(!SecureArchive.isEncrypted(this,uri)){clearBackupPassword();backupAction(uri,true);return;}
+            EditText entry=privatePasswordField("Пароль резервной копии");
+            showPasswordDialog(new FontDialog.Builder(this).setTitle("Зашифрованная копия")
                 .setMessage("Введите пароль, чтобы проверить и восстановить данные")
                 .setView(entry).setNegativeButton("Отмена",null)
                 .setPositiveButton("Продолжить",(d,w)->{
-                    backupPassword=entry.getText().toString().toCharArray();
+                    clearBackupPassword();backupPassword=takePassword(entry);
                     backupAction(uri,true);
-                }).show();
+                }),entry);
         }catch(Exception error){status.setText("Не удалось прочитать архив: "+error.getMessage());}
     }
     private void backupAction(Uri uri,boolean restore){
         if(restoringBackup||importing){
-            if(!restore&&backupPassword!=null){
-                java.util.Arrays.fill(backupPassword,(char)0);backupPassword=null;
-            }
+            clearBackupPassword();
             return;
         }
         final char[] password=backupPassword;
@@ -7936,9 +7836,11 @@ public class MainActivity extends Activity {
     }
     @Override protected void onDestroy(){
         batchCancelled.set(true);
+        clearBackupPassword();
+        if(archivePasswordDialog!=null){archivePasswordDialog.dismiss();archivePasswordDialog=null;}
         if(pendingCapsulePassword!=null){java.util.Arrays.fill(pendingCapsulePassword,(char)0);pendingCapsulePassword=null;}
         if(scheduledPrefetch!=null)handler.removeCallbacks(scheduledPrefetch);
         handler.removeCallbacks(deferredReadingSave);
         handler.removeCallbacks(deferredFloatingCheck);
-        stopPlayback();worker.execute(()->db.close());worker.shutdown();mediaWorker.shutdown();super.onDestroy();}
+        stopPlayback();final MessageDb closing=db;if(closing!=null)worker.execute(closing::close);worker.shutdown();mediaWorker.shutdown();super.onDestroy();}
 }

@@ -45,4 +45,32 @@ public class MediaUpgradeRegressionTest {
             assertTrue(migrated.isFavorite(1));
         } finally {migrated.close();context.deleteDatabase(filename);}
     }
+    @Test public void attachmentActionsHaveNoDuplicateOpenOrDownloadOptions()throws Exception{
+        try(androidx.test.core.app.ActivityScenario<MainActivity> scenario=androidx.test.core.app.ActivityScenario.launch(MainActivity.class)){
+            for(String[] fixture:new String[][]{{"file","files/test.pdf"},{"image","photos/test.jpg"},{"round","round_video/test.mp4"}}){
+                scenario.onActivity(activity->{
+                    android.app.AlertDialog dialog=null;
+                    try{
+                        MessageDb.Attachment attachment=new MessageDb.Attachment();
+                        attachment.path=fixture[1];attachment.kind=fixture[0];attachment.date="2026-01-01 12:00:00";
+                        java.lang.reflect.Method method=MainActivity.class.getDeclaredMethod("mediaActions",MessageDb.Attachment.class);
+                        method.setAccessible(true);dialog=(android.app.AlertDialog)method.invoke(activity,attachment);
+                        assertTrue(dialog.isShowing());
+                        android.widget.ListAdapter adapter=dialog.getListView().getAdapter();
+                        java.util.List<String> labels=new java.util.ArrayList<>();
+                        for(int n=0;n<adapter.getCount();n++)labels.add(String.valueOf(adapter.getItem(n)));
+                        assertEquals("Exactly one Downloads action",1,java.util.Collections.frequency(labels,"Сохранить в Загрузки"));
+                        assertEquals("No repeated labels",labels.size(),new java.util.HashSet<>(labels).size());
+                        assertFalse(labels.contains("Открыть полностью"));
+                        if("round".equals(fixture[0]))assertTrue(labels.contains("Полный экран / PiP"));
+                        else assertTrue(labels.contains("Открыть вложение"));
+                        assertTrue(labels.contains("Перейти к сообщению"));
+                        assertTrue(labels.contains("Добавить в коллекцию"));
+                        if("file".equals(fixture[0]))assertEquals(6,labels.size());
+                    }catch(Exception e){throw new AssertionError(e);}
+                    finally{if(dialog!=null)dialog.dismiss();}
+                });
+            }
+        }
+    }
 }

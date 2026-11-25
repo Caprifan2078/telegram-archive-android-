@@ -74,7 +74,7 @@ public final class MultiConversationHomeRegressionTest {
                     assertNotNull("Compact reveal action",find(root,"Показать чаты"));
                     assertNotNull("Create action shares the same row",find(root,"＋ Группа"));
                     assertNull("No duplicate legacy comparison tools when a group is visible",
-                        find(root,"Инструменты для двух переписок  ▾"));
+                        find(root,"Сравнить две переписки"));
                 }catch(Exception e){throw new AssertionError(e);}
             });
         }finally{
