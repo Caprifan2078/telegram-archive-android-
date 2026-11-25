@@ -232,10 +232,10 @@ public final class ProtectedArchiveActivity extends Activity {
                         for(TelegramImporter.Media attachment:lines.get(index).media)mediaRows.add(new MediaRow(attachment,index));
                     showChat(name);
                 });
-            }catch(Exception e){
+            }catch(Exception|OutOfMemoryError e){
                 runOnUiThread(()->{
                     if(token!=generation||isFinishing()||isDestroyed())return;
-                    library();
+                    lock();library();
                     new AlertDialog.Builder(this).setTitle("Не удалось открыть")
                         .setMessage("Проверь пароль, формат и свободное место. Поддерживается один зашифрованный HTML или JSON чат; многотомные и некоторые RAR архивы могут не открываться.")
                         .setNegativeButton("Закрыть",null).setPositiveButton("Повторить",(d,w)->ask(uri,name)).show();
@@ -255,7 +255,10 @@ public final class ProtectedArchiveActivity extends Activity {
     }
     private void rememberPosition(){
         if(chatList==null)return;
-        chatPosition=chatList.getFirstVisiblePosition();
+        int visiblePosition=chatList.getFirstVisiblePosition();
+        Object first=chatList.getItemAtPosition(visiblePosition);
+        int originalPosition=lines==null?-1:lines.indexOf(first);
+        chatPosition=originalPosition>=0?originalPosition:0;
         chatTop=chatList.getChildCount()==0?0:chatList.getChildAt(0).getTop();
     }
     private void configureList(ListView list){
@@ -411,10 +414,8 @@ public final class ProtectedArchiveActivity extends Activity {
         task=reader.submit(()->{
             android.media.MediaDataSource source=null;
             try{
-                long size=-1;
-                String wanted=path.replace('\\','/');
-                for(ProtectedArchiveSession.Entry e:current.list())if(e.name.equals(wanted)){size=e.size;break;}
-                if(size<0)throw new FileNotFoundException("Вложение отсутствует");
+                long size=current.entrySize(path);
+                if(size<0)throw new IOException("Некорректный размер вложения");
                 if(size<=limit&&limit>0)source=ProtectedMediaSource.load(current,path,limit);
                 else{
                     long free=ArchiveFileImport.maxTemporaryCopyForFreeBytes(getCacheDir().getUsableSpace());
