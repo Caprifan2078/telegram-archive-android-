@@ -633,9 +633,9 @@ public class MainActivity extends Activity {
                     }
                     AlertDialog.Builder dialog=new FontDialog.Builder(this)
                         .setTitle(String.format(Locale.ROOT,"В этот день · %02d.%02d",day,month))
-                        .setMessage(found.isEmpty()?"В этой переписке на выбранную дату ничего не найдено.":null)
-                        .setItems(labels,(d,which)->jump(found.get(which).id,""))
-                        .setNegativeButton("Закрыть",(d,which)->{});
+                        .setNegativeButton("Закрыть",null);
+                    if(found.isEmpty())dialog.setMessage("На выбранную дату сообщений не найдено.");
+                    else dialog.setItems(labels,(d,which)->jump(found.get(which).id,"relationships"));
                     dialog.setNeutralButton("Другая дата",(d,which)->{
                         LocalDate today=LocalDate.now();
                         new DatePickerDialog(this,(picker,year,mo,dt)->showOnThisDay(mo+1,dt),
@@ -714,22 +714,26 @@ public class MainActivity extends Activity {
                     "; с обратным порядком: "+scan.outOfOrder()+"."+
                     (scan.scanned()>=ConversationGapNavigator.MAX_SCAN?
                         "\nПоказан лишь первый участок большого архива.":"");
-                new FontDialog.Builder(this).setTitle("Навигатор пауз")
-                    .setMessage(intro+(items.length==0?"\nПаузы от 7 дней не найдены.":""))
+                AlertDialog.Builder pauses=new FontDialog.Builder(this).setTitle("Паузы от 7 дней · "+items.length)
+                    .setPositiveButton("Закрыть",null);
+                if(items.length==0)pauses.setMessage(intro+"\nПаузы от 7 дней не найдены.");
+                else pauses.setNeutralButton("Как посчитано",(d,w)->new FontDialog.Builder(this)
+                        .setTitle("Как посчитаны паузы").setMessage(intro).setPositiveButton("Закрыть",null).show())
                     .setItems(items,(dialog,index)->{
                         ConversationGapNavigator.Gap g=gaps.get(index);
                         new FontDialog.Builder(this).setTitle("Границы паузы")
                             .setMessage(g.from+" → "+g.to+"\nПерейти к сообщению до или после паузы?")
-                            .setPositiveButton("После",(d,w)->jump(g.toId,""))
-                            .setNeutralButton("До",(d,w)->jump(g.fromId,""))
+                            .setPositiveButton("После",(d,w)->jump(g.toId,"relationships"))
+                            .setNeutralButton("До",(d,w)->jump(g.fromId,"relationships"))
                             .setNegativeButton("Отмена",null).show();
-                    }).setPositiveButton("Закрыть",null).show();
+                    });
+                pauses.show();
                 status.setText("Навигатор пауз: просмотр завершён");
             });
         });
     }
 
-    // The five discovery tools are strictly opt-in, local and bounded.
+    // Local, bounded filters and cross-chat search.
     private void discoveryYearPicker(String title,java.util.function.IntConsumer action){
         EditText year=new EditText(this);year.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         year.setSingleLine(true);year.setText(String.valueOf(LocalDate.now().getYear()));
@@ -744,7 +748,7 @@ public class MainActivity extends Activity {
     private void showFavoritesByYear(){
         if(home){toast("Открой переписку");return;}
         discoveryYearPicker("Избранное за год",year->{
-            final String key=activeKey;final MessageDb source=db;
+            final String key=activeKey,name=activeName;final MessageDb source=db;final int token=loadToken;
             worker.execute(()->{
                 ArrayList<DiscoveryRules.Hit> hits=new ArrayList<>();
                 String yyyy=String.format(Locale.ROOT,"%04d",year);
@@ -755,11 +759,13 @@ public class MainActivity extends Activity {
                     while(c.moveToNext()&&hits.size()<80){
                         ChatTrends.Moment m=ChatTrends.parse(c.getString(2));
                         if(m!=null&&m.day.getYear()==year)
-                            hits.add(new DiscoveryRules.Hit(key,activeName,c.getLong(0),c.getString(1),c.getString(2),c.getString(3)));
+                            hits.add(new DiscoveryRules.Hit(key,name,c.getLong(0),c.getString(1),c.getString(2),c.getString(3)));
                     }
-                }catch(Exception ignored){}
+                }catch(Exception failure){
+                    runOnUiThread(()->{if(token==loadToken&&key.equals(activeKey))toast("Не удалось прочитать избранное");});return;
+                }
                 runOnUiThread(()->{
-                    if(isFinishing()||!key.equals(activeKey))return;
+                    if(isFinishing()||isDestroyed()||home||db!=source||token!=loadToken||!key.equals(activeKey)||!"favorites".equals(screen))return;
                     if(hits.isEmpty()){toast("Избранных сообщений за этот год не найдено");return;}
                     String[] labels=new String[hits.size()];for(int i=0;i<labels.length;i++)labels[i]=hits.get(i).label();
                     new FontDialog.Builder(this).setTitle("Избранное · "+year+" · до 80 сообщений")
@@ -3021,7 +3027,7 @@ public class MainActivity extends Activity {
             // Date navigation remains available via the chat menu; no permanent
             // 46dp toolbar over every message.
             LinearLayout actions=row();
-            backButton=btn("‹ Назад к "+("media".equals(returnScreen)?"медиа":"relationships".equals(returnScreen)?"хронологии":"echo".equals(returnScreen)?"фразам":"analytics".equals(returnScreen)?"анализу":"поиску"));
+            backButton=btn("‹ Назад к "+("media".equals(returnScreen)?"медиа":"relationships".equals(returnScreen)?"хронологии":"favorites".equals(returnScreen)?"избранному":"echo".equals(returnScreen)?"фразам":"analytics".equals(returnScreen)?"анализу":"поиску"));
             actions.addView(backButton,p(-2,39));backButton.setOnClickListener(v->restoreReturn());
             filterBar.addView(actions,p(-1,41));
         }
