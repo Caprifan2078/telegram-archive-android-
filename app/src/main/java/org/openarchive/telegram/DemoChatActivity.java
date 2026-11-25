@@ -63,7 +63,7 @@ public final class DemoChatActivity extends Activity {
     private TextView text(String s,int size,int color){
         TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);return t;
     }
-    private LinearLayout column(){LinearLayout l=new LinearLayout(this);l.setOrientation(1);return l;}
+    private LinearLayout column(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);return l;}
     private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_SHORT).show();}
     private Button button(String s){
         Button b=new Button(this);b.setText(s);b.setTextColor(FG);b.setAllCaps(false);
