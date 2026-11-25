@@ -16,7 +16,7 @@ final class ProtectedMediaPlayer implements AutoCloseable {
     private final Handler handler=new Handler(Looper.getMainLooper());
     private MediaPlayer player;
     private AlertDialog dialog;
-    private boolean ready,closed,dragging;
+    private boolean ready,closed,dragging,failed;
     private final TextView status;
     private final Button play;
     private final SeekBar seek;
@@ -78,7 +78,7 @@ final class ProtectedMediaPlayer implements AutoCloseable {
         }catch(RuntimeException e){close();throw e;}
     }
     private void start(SurfaceHolder surface){
-        if(closed||player!=null)return;
+        if(closed||failed||player!=null)return;
         try{
             player=new MediaPlayer();
             player.setDataSource(source);
@@ -98,7 +98,8 @@ final class ProtectedMediaPlayer implements AutoCloseable {
     private static String clock(int ms){int seconds=Math.max(0,ms)/1000;return String.format(java.util.Locale.ROOT,"%02d:%02d",seconds/60,seconds%60);}
     private void error(){error("Не удалось воспроизвести: формат или кодек не поддерживается");}
     private void error(String message){
-        if(closed)return;
+        if(closed||failed)return;
+        failed=true;
         status.setText(message);
         release();
     }
