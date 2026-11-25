@@ -2560,7 +2560,8 @@ public class MainActivity extends Activity {
         if(choice==null)return;closeFloatingRound();stopPlayback();++loadToken;clearMediaSelection();activeKey=key;activeName=choice.optString("name","Архив");analyticsSelectedAuthor="";analyticsCalendarYear=0;analyticsCompareFirst="";analyticsCompareSecond="";lastAnalytics=null;
         lastVisibleMessage=-1;lastVisibleTop=0;
         saveRegistry();
-        if(db!=null)db.close();db=new MessageDb(this,activeKey);
+        final MessageDb previous=db;db=new MessageDb(this,activeKey);
+        if(previous!=null)worker.execute(previous::close);
         String path=choice.optString("tree","");folder=path.isEmpty()?null:path.startsWith("local:")?new DocumentFolder(getContentResolver(),new java.io.File(path.substring(6))):new DocumentFolder(getContentResolver(),Uri.parse(path));
         chatOffset=searchOffset=mediaOffset=favOffset=0;autoLoaded=PAGE;home=false;screen="chat";returnScreen="";searchReturnsToAnalytics=false;chatOffset=getPreferences(MODE_PRIVATE).getInt("read_offset_"+activeKey,0);
         pendingRestoreId=getPreferences(MODE_PRIVATE).getLong("read_id_"+activeKey,-1);
@@ -3389,13 +3390,18 @@ public class MainActivity extends Activity {
         if(status!=null){status.setVisibility(View.VISIBLE);status.setText(message);}
     }
     private void postImportProgress(String message){
-        runOnUiThread(()->{if(importing)updateImportProgress(message);});
+        runOnUiThread(()->{if(importing&&!isFinishing()&&!isDestroyed())updateImportProgress(message);});
     }
     private void endImportProgress(){
         if(importProgressPanel!=null)importProgressPanel.setVisibility(View.GONE);
     }
+    private void discardUnpublishedImport(String key){
+        // Only this operation\u0027s generated private directory/database, never the source URI.
+        ArchiveFileImport.deleteTree(new java.io.File(new java.io.File(getFilesDir(),"telegram_imports"),key));
+        deleteDatabase("telegram_"+key+".db");
+    }
     private void importSingleHtml(Uri source,String label){
-        if(importing)return;
+        if(importing||restoringBackup)return;
         importing=true;
         if(folderButton!=null)folderButton.setEnabled(false);
         beginImportProgress("Читаю HTML и создаю переписку…");
@@ -3424,6 +3430,7 @@ public class MainActivity extends Activity {
                     if(fresh.totalMessages()==0)throw new IOException("Не найдены сообщения Telegram в HTML");
                 }finally{fresh.close();}
                 runOnUiThread(()->{
+                    if(isFinishing()||isDestroyed()){discardUnpublishedImport(key);return;}
                     importing=false;
                     endImportProgress();
                     if(folderButton!=null)folderButton.setEnabled(true);
@@ -3434,16 +3441,15 @@ public class MainActivity extends Activity {
                         status.setText("Переписка открыта · медиа из одиночного HTML недоступны");
                     }catch(Exception error){toast("Не удалось зарегистрировать чат: "+error.getMessage());}
                 });
-            }catch(Exception error){
-                ArchiveFileImport.deleteTree(root);
-                deleteDatabase("telegram_"+key+".db");
+            }catch(Exception|OutOfMemoryError error){
+                discardUnpublishedImport(key);
                 runOnUiThread(()->{
                     importing=false;
                     endImportProgress();
                     if(folderButton!=null)folderButton.setEnabled(true);
                     status.setText("Импорт HTML не завершён");
                     new FontDialog.Builder(this).setTitle("HTML не импортирован")
-                        .setMessage(error.getMessage()).setPositiveButton("Закрыть",null).show();
+                        .setMessage(error instanceof OutOfMemoryError?"Не хватает памяти для импорта. Попробуй меньший экспорт.":error.getMessage()).setPositiveButton("Закрыть",null).show();
                 });
             }
         });
@@ -3483,7 +3489,7 @@ public class MainActivity extends Activity {
             passwordDialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
     }
     private void importCompressed(Uri source,String extension,String label,char[] password){
-        if(importing){if(password!=null)java.util.Arrays.fill(password,'\0');return;}
+        if(importing||restoringBackup){if(password!=null)java.util.Arrays.fill(password,'\0');return;}
         importing=true;folderButton.setEnabled(false);
         beginImportProgress("Распаковываю «"+label+"»…");
         String key=UUID.randomUUID().toString().replace("-","");
@@ -3500,6 +3506,7 @@ public class MainActivity extends Activity {
                         throw new IOException("В архиве не найдены сообщения Telegram.");
                 }finally{fresh.close();}
                 runOnUiThread(()->{
+                    if(isFinishing()||isDestroyed()){discardUnpublishedImport(key);return;}
                     importing=false;endImportProgress();folderButton.setEnabled(true);
                     try{
                         JSONObject o=new JSONObject();o.put("key",key);o.put("name",label);
@@ -3507,12 +3514,11 @@ public class MainActivity extends Activity {
                         activateArchive(key);status.setText("Импорт завершён");
                     }catch(Exception error){toast("Ошибка регистрации чата: "+error.getMessage());}
                 });
-            }catch(Exception error){
+            }catch(Exception|OutOfMemoryError error){
                 // A failed password or corrupt archive must not publish partially indexed
                 // messages or leave a failed import hidden in app-private storage.
-                ArchiveFileImport.deleteTree(new java.io.File(new java.io.File(getFilesDir(),"telegram_imports"),key));
-                deleteDatabase("telegram_"+key+".db");
-                String message=error.getMessage()==null?"Файл не удалось распаковать":error.getMessage();
+                discardUnpublishedImport(key);
+                String message=error instanceof OutOfMemoryError?"Не хватает памяти для импорта. Попробуй меньший экспорт.":error.getMessage()==null?"Файл не удалось распаковать":error.getMessage();
                 boolean missing=password==null||password.length==0;
                 // An entered wrong 7z key can surface as a generic CRC/decode
                 // failure. Allow another password without guessing corruption.
@@ -3522,10 +3528,11 @@ public class MainActivity extends Activity {
                     lowerMessage.contains("не поддерж");
                 // Unsupported compression and malformed files are not proof of
                 // an incorrect password. Still let users enter one manually.
-                boolean auth=!unsupported&&(ArchiveFileImport.isPasswordFailure(error)
+                boolean auth=!unsupported&&((error instanceof Exception&&ArchiveFileImport.isPasswordFailure((Exception)error))
                     ||(!missing&&"7z".equalsIgnoreCase(extension)&&
                         (lowerMessage.contains("crc")||lowerMessage.contains("checksum"))));
                 runOnUiThread(()->{
+                    if(isFinishing()||isDestroyed())return;
                     importing=false;endImportProgress();folderButton.setEnabled(true);
                     status.setVisibility(View.VISIBLE);
                     status.setText("Импорт не завершён");
@@ -3551,15 +3558,16 @@ public class MainActivity extends Activity {
         });
     }
     private void importArchive(){
-        if(folder==null||importing)return;closeFloatingRound();stopPlayback();importing=true;folderButton.setEnabled(false);
+        if(folder==null||importing||restoringBackup||db==null)return;closeFloatingRound();stopPlayback();importing=true;folderButton.setEnabled(false);
         beginImportProgress("Индексирую локальную переписку…");
-        list.removeAllViews();DocumentFolder current=folder;
+        list.removeAllViews();DocumentFolder current=folder;final MessageDb source=db;
         worker.execute(()->{
             String failure=null;
-            try{TelegramImporter.importFiles(getContentResolver(),current,db,this::postImportProgress);info="Импорт завершён";}
-            catch(Exception e){failure=e.getMessage();if(failure==null||failure.trim().isEmpty())failure="Не удалось импортировать архив. Проверь файлы и повтори попытку.";info="Ошибка импорта: "+failure;}
+            try{TelegramImporter.importFiles(getContentResolver(),current,source,this::postImportProgress);info="Импорт завершён";}
+            catch(Exception|OutOfMemoryError e){failure=e instanceof OutOfMemoryError?"Не хватает памяти для индексации":e.getMessage();if(failure==null||failure.trim().isEmpty())failure="Не удалось импортировать архив. Проверь файлы и повтори попытку.";info="Ошибка импорта: "+failure;}
             final String importFailure=failure;
             runOnUiThread(()->{
+                if(isFinishing()||isDestroyed()||source!=db)return;
                 importing=false;endImportProgress();folderButton.setEnabled(true);status.setText(info);
                 chatOffset=0;mediaOffset=0;searchOffset=0;favOffset=0;showPage();
                 // showPage replaces the transient status immediately. Keep failures
