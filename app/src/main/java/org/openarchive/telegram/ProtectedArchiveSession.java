@@ -66,7 +66,7 @@ final class ProtectedArchiveSession implements AutoCloseable {
                 if(in==null)throw new IOException("Архив недоступен");
                 long limit=ArchiveFileImport.maxTemporaryCopyForFreeBytes(context.getCacheDir().getUsableSpace());
                 transfer(in,out,limit);
-            }catch(Exception ex){source.delete();throw ex;}
+            }catch(Exception|OutOfMemoryError ex){source.delete();throw ex;}
         }
         ProtectedArchiveSession result=new ProtectedArchiveSession(source,temporary,retained,format,secret);
         try{result.index();return result;}
@@ -136,6 +136,11 @@ final class ProtectedArchiveSession implements AutoCloseable {
     synchronized List<Entry> list()throws IOException{
         requireOpen();return Collections.unmodifiableList(new ArrayList<>(entries.values()));
     }
+    synchronized long entrySize(String name)throws IOException{
+        requireOpen();Entry entry=entries.get(normalized(name));
+        if(entry==null)throw new FileNotFoundException("Вложение отсутствует");
+        return entry.size;
+    }
     /** Read exactly one selected member. Caller must discard output if this throws. */
     synchronized void copyEntry(String name,OutputStream destination,long limit)throws Exception{
         requireOpen();
@@ -147,7 +152,7 @@ final class ProtectedArchiveSession implements AutoCloseable {
             net.lingala.zip4j.model.FileHeader h=zipHeaders.get(entry.name);
             if(h==null)throw new FileNotFoundException("Вложение отсутствует");
             try(InputStream in=zipReader.getInputStream(h)){
-                if(transfer(in,destination,limit)!=entry.size)
+                if(transfer(in,destination,entry.size)!=entry.size)
                     throw new IOException("Размер ZIP-вложения не совпадает");
             }
             return;
@@ -159,12 +164,12 @@ final class ProtectedArchiveSession implements AutoCloseable {
                     rar.extractFile(h,new OutputStream(){
                         @Override public void write(int value)throws IOException{
                             checkCancelled();
-                            if(count[0]>=limit)throw new IOException("Превышен лимит вложения");
+                            if(count[0]>=entry.size)throw new IOException("Превышен лимит вложения");
                             destination.write(value);count[0]++;
                         }
                         @Override public void write(byte[] b,int off,int len)throws IOException{
                             checkCancelled();
-                            if(len>limit-count[0])throw new IOException("Превышен лимит вложения");
+                            if(len>entry.size-count[0])throw new IOException("Превышен лимит вложения");
                             destination.write(b,off,len);count[0]+=len;
                         }
                     });
@@ -176,9 +181,23 @@ final class ProtectedArchiveSession implements AutoCloseable {
         throw new FileNotFoundException("Вложение отсутствует");
     }
     synchronized byte[] read(String name,int limit)throws Exception{
-        ByteArrayOutputStream data=new ByteArrayOutputStream();
-        copyEntry(name,data,limit);
-        return data.toByteArray();
+        long size=entrySize(name);
+        if(size<0||size>limit)throw new IOException("Вложение превышает лимит чтения");
+        byte[] data=new byte[(int)size];
+        try{
+            copyEntry(name,new OutputStream(){
+                private int position;
+                @Override public void write(int value)throws IOException{
+                    if(position>=data.length)throw new IOException("Размер вложения не совпадает");
+                    data[position++]=(byte)value;
+                }
+                @Override public void write(byte[] bytes,int off,int len)throws IOException{
+                    if(len>data.length-position)throw new IOException("Размер вложения не совпадает");
+                    System.arraycopy(bytes,off,data,position,len);position+=len;
+                }
+            },limit);
+            return data;
+        }catch(Exception|OutOfMemoryError e){Arrays.fill(data,(byte)0);throw e;}
     }
     synchronized boolean usesContainerCopy(){return temporary;}
     @Override public synchronized void close(){
