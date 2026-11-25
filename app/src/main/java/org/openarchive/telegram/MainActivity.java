@@ -4614,32 +4614,36 @@ public class MainActivity extends Activity {
     }
     private String initial(String s){if(s==null||s.isEmpty())return "?";return s.substring(0,1).toUpperCase(Locale.ROOT);}
     private void messageActions(MessageDb.Item m){
-        boolean outOfChat=!"chat".equals(screen);
-        ArrayList<String> actions=new ArrayList<>();
-        actions.add(m.favorite?"Убрать из избранного":"★ Добавить в избранное");
-        actions.add(db.isPinned(m.id)?"Открепить":"📌 Закрепить сообщение");
-        actions.add("◷ Отметить начало периода");
-        actions.add("◷ Отметить конец периода");
-        actions.add("♡ Добавить событие истории");
-        actions.add("❞ Цитировать фрагмент");
-        actions.add("Скопировать текст");
-        actions.add("↓ Сохранить сообщение в TXT");
-        actions.add("↓ Сохранить вложение…");
-        if(outOfChat)actions.add("↗ Перейти к сообщению");
+        final MessageDb source=db;final String key=activeKey;final int token=loadToken;
+        if(source==null||home)return;
+        boolean outOfChat=!"chat".equals(screen),hasText=m.body!=null&&!m.body.trim().isEmpty();
+        ArrayList<String> actions=new ArrayList<>();ArrayList<Runnable> handlers=new ArrayList<>();
+        actions.add(source.isFavorite(m.id)?"Убрать из избранного":"★ Добавить в избранное");handlers.add(()->toggleStar(m.id));
+        boolean pinned=source.isPinned(m.id);
+        actions.add(pinned?"Открепить":"📌 Закрепить сообщение");
+        handlers.add(()->worker.execute(()->{
+            boolean pin=source.togglePinned(m.id);
+            runOnUiThread(()->{if(sameScreenRequest(source,key,token)){toast(pin?"Закреплено":"Откреплено");renderPinnedBar();}});
+        }));
+        actions.add("◷ Отметить начало периода");handlers.add(()->selectPeriodBoundary(m,true));
+        actions.add("◷ Отметить конец периода");handlers.add(()->selectPeriodBoundary(m,false));
+        actions.add("♡ Добавить событие истории");handlers.add(()->createRelationshipEventDialog(m));
+        if(hasText){
+            actions.add("❞ Цитировать фрагмент");handlers.add(()->quoteMessage(m));
+            actions.add("Скопировать текст");handlers.add(()->{
+                android.content.ClipboardManager clipboard=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Telegram message",m.body));toast("Текст скопирован");
+            });
+            actions.add("↓ Сохранить сообщение в TXT");handlers.add(()->saveMessageText(m));
+        }
+        actions.add("↓ Сохранить вложение…");handlers.add(()->chooseMessageAttachment(m.id));
+        if(outOfChat){actions.add("↗ Перейти к сообщению");
+            handlers.add(()->jump(m.id,screen.equals("search")?"search":screen.equals("favorites")?"favorites":""));
+        }
         new FontDialog.Builder(this).setTitle("Сообщение · "+clock(m.date))
             .setItems(actions.toArray(new String[0]),(dialog,which)->{
-                if(which==0)toggleStar(m.id);
-                else if(which==1){worker.execute(()->{boolean pin=db.togglePinned(m.id);runOnUiThread(()->{toast(pin?"Закреплено":"Откреплено");renderPinnedBar();});});}
-                else if(which==2)selectPeriodBoundary(m,true);
-                else if(which==3)selectPeriodBoundary(m,false);
-                else if(which==4)createRelationshipEventDialog(m);
-                else if(which==5)quoteMessage(m);
-                else if(which==6){android.content.ClipboardManager clipboard=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
-                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Telegram message",m.body==null?"":m.body));toast("Текст скопирован");}
-                else if(which==7)saveMessageText(m);
-                else if(which==8)chooseMessageAttachment(m.id);
-                else jump(m.id,screen.equals("search")?"search":screen.equals("favorites")?"favorites":"");
-            }).show();
+                if(sameScreenRequest(source,key,token))handlers.get(which).run();
+            }).setNegativeButton("Закрыть",null).show();
     }
     /** Opt-in personal timeline. A user chooses every label and both message boundaries. */
     private void selectPeriodBoundary(MessageDb.Item message,boolean start){
@@ -5713,12 +5717,14 @@ public class MainActivity extends Activity {
     private void toggleStar(long id){
         final String archive=activeKey;
         final MessageDb source=db;
+        if(source==null||home)return;
         worker.execute(()->{
             boolean on=source.toggleFavorite(id);
             runOnUiThread(()->{
-                if(!archive.equals(activeKey)||isFinishing())return;
-                // Never call showPage(): it rebuilds ScrollView and teleports the reader.
+                if(!archive.equals(activeKey)||source!=db||isFinishing()||isDestroyed()||home)return;
                 toast(on?"★ Добавлено в избранное":"Убрано из избранного");
+                // Refresh the filtered collection only; do not teleport the chat reader.
+                if("favorites".equals(screen)&&!on){favOffset=Math.max(0,favOffset);showPage();}
             });
         });
     }
