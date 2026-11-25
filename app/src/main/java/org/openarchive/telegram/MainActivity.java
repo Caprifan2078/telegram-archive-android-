@@ -113,6 +113,7 @@ public class MainActivity extends Activity {
     private static final int WRAPPED_PNG_REQUEST=73,CAPSULE_EXPORT_REQUEST=84;
     private WrappedSummary wrappedForExport;
     private char[] pendingCapsulePassword;
+    private AlertDialog archivePasswordDialog;
     private DocumentFolder pendingMediaSaveRoot;
     private String pendingMediaSavePath;
     private MediaSavePolicy.Spec pendingMediaSaveSpec;
@@ -3446,7 +3447,8 @@ public class MainActivity extends Activity {
                 }
                 importCompressed(source,ext,displayName,password);
             }).create();
-        passwordDialog.setOnDismissListener(d->archivePassword.getText().clear());
+        archivePasswordDialog=passwordDialog;
+        passwordDialog.setOnDismissListener(d->{archivePassword.getText().clear();if(archivePasswordDialog==passwordDialog)archivePasswordDialog=null;});
         if(passwordDialog.getWindow()!=null)
             passwordDialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
         passwordDialog.show();
@@ -7486,25 +7488,46 @@ public class MainActivity extends Activity {
                 });
             }).setNegativeButton("Отмена",null).show();
     }
+    private EditText privatePasswordField(String hint){
+        EditText field=new EditText(this);field.setSingleLine(true);
+        field.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        field.setSaveEnabled(false);field.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        field.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
+        field.setHint(hint);return field;
+    }
+    private static char[] takePassword(EditText field){
+        char[] value=new char[field.length()];field.getText().getChars(0,field.length(),value,0);
+        field.getText().clear();return value;
+    }
+    private void showPasswordDialog(AlertDialog.Builder builder,EditText field){
+        AlertDialog dialog=builder.create();
+        dialog.setOnDismissListener(d->field.getText().clear());
+        if(dialog.getWindow()!=null)dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        dialog.show();
+        if(dialog.getWindow()!=null)dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+    }
+    private void clearBackupPassword(){
+        if(backupPassword!=null)java.util.Arrays.fill(backupPassword,(char)0);
+        backupPassword=null;
+    }
     private void askBackupPassword(){
         LinearLayout layout=column();layout.setPadding(px(23),px(5),px(23),px(3));
-        EditText pass=new EditText(this);pass.setHint("Пароль, не меньше 8 символов");pass.setSingleLine(true);
-        pass.setInputType(129);layout.addView(pass,p(-1,53));
-        TextView note=text("Можно оставить пустым, чтобы создать обычный ZIP без шифрования. Забытый пароль восстановить невозможно.",12,SUB);layout.addView(note);
-        new FontDialog.Builder(this).setTitle("Защитить копию паролем").setView(layout)
+        EditText pass=privatePasswordField("Пароль, не меньше 8 символов");layout.addView(pass,p(-1,53));
+        TextView note=text("Без пароля создаётся обычный ZIP. Забытый пароль восстановить невозможно.",12,SUB);layout.addView(note);
+        showPasswordDialog(new FontDialog.Builder(this).setTitle("Защитить копию паролем").setView(layout)
             .setNegativeButton("Отмена",null)
-            .setNeutralButton("Без пароля",(d,w)->{backupPassword=null;pickBackupFile();})
+            .setNeutralButton("Без пароля",(d,w)->{clearBackupPassword();pickBackupFile();})
             .setPositiveButton("С паролем",(d,w)->{
-                String value=pass.getText().toString();
-                if(value.length()<8){toast("Пароль должен содержать минимум 8 символов");return;}
-                backupPassword=value.toCharArray();pickBackupFile();
-            }).show();
+                char[] value=takePassword(pass);
+                if(value.length<8){java.util.Arrays.fill(value,(char)0);toast("Пароль должен содержать минимум 8 символов");return;}
+                clearBackupPassword();backupPassword=value;pickBackupFile();
+            }),pass);
     }
     private void pickBackupFile(){
         Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);
         i.setType("application/octet-stream");i.addCategory(Intent.CATEGORY_OPENABLE);
         i.putExtra(Intent.EXTRA_TITLE,"TelegramArchive-"+(fullBackupMode?"FULL":"COMPACT")+(backupPassword==null?".zip":".tgar"));
-        startActivityForResult(i,41);
+        try{startActivityForResult(i,41);}catch(RuntimeException error){clearBackupPassword();toast("Не удалось выбрать файл копии");}
     }
     private void dryRunPicker(){
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("*/*");
@@ -7514,15 +7537,15 @@ public class MainActivity extends Activity {
     private void dryRunSelected(Uri uri){
         try{
             if(SecureArchive.isEncrypted(this,uri)){
-                EditText input=new EditText(this);input.setInputType(129);input.setHint("Пароль резервной копии");
-                new FontDialog.Builder(this).setTitle("Пробное восстановление").setView(input)
+                EditText input=privatePasswordField("Пароль резервной копии");
+                showPasswordDialog(new FontDialog.Builder(this).setTitle("Пробное восстановление").setView(input)
                     .setNegativeButton("Отмена",null)
-                    .setPositiveButton("Проверить",(d,w)->runDryRestore(uri,input.getText().toString().toCharArray())).show();
+                    .setPositiveButton("Проверить",(d,w)->runDryRestore(uri,takePassword(input))),input);
             }else runDryRestore(uri,null);
         }catch(Exception e){status.setText("Ошибка чтения: "+e.getMessage());}
     }
     private void runDryRestore(Uri uri,char[] pass){
-        if(importing||restoringBackup)return;
+        if(importing||restoringBackup){if(pass!=null)java.util.Arrays.fill(pass,(char)0);return;}
         restoringBackup=true;status.setText("Проверяю временные базы, чаты не изменяются…");
         worker.execute(()->{
             try{
@@ -7545,16 +7568,15 @@ public class MainActivity extends Activity {
     private void verifyBackup(Uri uri){
         try{
             if(SecureArchive.isEncrypted(this,uri)){
-                EditText entry=new EditText(this);entry.setInputType(129);entry.setSingleLine(true);
-                entry.setHint("Пароль для проверки архива");
-                new FontDialog.Builder(this).setTitle("Проверка защищённой копии")
+                EditText entry=privatePasswordField("Пароль для проверки архива");
+                showPasswordDialog(new FontDialog.Builder(this).setTitle("Проверка защищённой копии")
                     .setView(entry).setNegativeButton("Отмена",null)
-                    .setPositiveButton("Проверить",(d,w)->runBackupVerify(uri,entry.getText().toString().toCharArray())).show();
+                    .setPositiveButton("Проверить",(d,w)->runBackupVerify(uri,takePassword(entry))),entry);
             }else runBackupVerify(uri,null);
         }catch(Exception problem){status.setText("Невозможно открыть копию: "+problem.getMessage());}
     }
     private void runBackupVerify(Uri uri,char[] password){
-        if(importing||restoringBackup)return;restoringBackup=true;
+        if(importing||restoringBackup){if(password!=null)java.util.Arrays.fill(password,(char)0);return;}restoringBackup=true;
         status.setText("Проверяю резервную копию, чаты не изменяются…");
         worker.execute(()->{
             try{
@@ -7590,23 +7612,20 @@ public class MainActivity extends Activity {
     }
     private void askRestorePassword(Uri uri){
         try{
-            if(!SecureArchive.isEncrypted(this,uri)){backupAction(uri,true);return;}
-            EditText entry=new EditText(this);entry.setHint("Пароль резервной копии");
-            entry.setInputType(129);entry.setSingleLine(true);
-            new FontDialog.Builder(this).setTitle("Зашифрованная копия")
+            if(!SecureArchive.isEncrypted(this,uri)){clearBackupPassword();backupAction(uri,true);return;}
+            EditText entry=privatePasswordField("Пароль резервной копии");
+            showPasswordDialog(new FontDialog.Builder(this).setTitle("Зашифрованная копия")
                 .setMessage("Введите пароль, чтобы проверить и восстановить данные")
                 .setView(entry).setNegativeButton("Отмена",null)
                 .setPositiveButton("Продолжить",(d,w)->{
-                    backupPassword=entry.getText().toString().toCharArray();
+                    clearBackupPassword();backupPassword=takePassword(entry);
                     backupAction(uri,true);
-                }).show();
+                }),entry);
         }catch(Exception error){status.setText("Не удалось прочитать архив: "+error.getMessage());}
     }
     private void backupAction(Uri uri,boolean restore){
         if(restoringBackup||importing){
-            if(!restore&&backupPassword!=null){
-                java.util.Arrays.fill(backupPassword,(char)0);backupPassword=null;
-            }
+            clearBackupPassword();
             return;
         }
         final char[] password=backupPassword;
@@ -7748,9 +7767,11 @@ public class MainActivity extends Activity {
     }
     @Override protected void onDestroy(){
         batchCancelled.set(true);
+        clearBackupPassword();
+        if(archivePasswordDialog!=null){archivePasswordDialog.dismiss();archivePasswordDialog=null;}
         if(pendingCapsulePassword!=null){java.util.Arrays.fill(pendingCapsulePassword,(char)0);pendingCapsulePassword=null;}
         if(scheduledPrefetch!=null)handler.removeCallbacks(scheduledPrefetch);
         handler.removeCallbacks(deferredReadingSave);
         handler.removeCallbacks(deferredFloatingCheck);
-        stopPlayback();worker.execute(()->db.close());worker.shutdown();mediaWorker.shutdown();super.onDestroy();}
+        stopPlayback();final MessageDb closing=db;if(closing!=null)worker.execute(closing::close);worker.shutdown();mediaWorker.shutdown();super.onDestroy();}
 }
