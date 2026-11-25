@@ -31,7 +31,7 @@ public final class ProtectedArchiveActivity extends Activity {
     private ProtectedMediaPlayer mediaPlayer;
     private int previewGeneration;
     private int generation;
-    private AlertDialog prompt;
+    private AlertDialog prompt,loadingDialog;
     private ArrayList<Line> lines;
     private String openedName="";
     private boolean showingMedia;
@@ -244,7 +244,7 @@ public final class ProtectedArchiveActivity extends Activity {
         });
     }
     private void sessionHeader(String name,String detail,Runnable toggle,String toggleLabel){
-        detachPrivateViews();body.removeAllViews();title(name);label(detail);
+        cancelPreview();detachPrivateViews();body.removeAllViews();title(name);label(detail);
         LinearLayout controls=new LinearLayout(this);
         Button change=new Button(this);change.setText(toggleLabel);
         controls.addView(change,new LinearLayout.LayoutParams(0,-2,1));change.setOnClickListener(v->toggle.run());
@@ -343,14 +343,19 @@ public final class ProtectedArchiveActivity extends Activity {
     }
     private void preview(TelegramImporter.Media media){
         if(session==null)return;
-        if(!"image".equals(media.kind)){
-            boolean video="video".equals(media.kind)||"round".equals(media.kind)||"gif".equals(media.kind)&&media.path.toLowerCase(Locale.ROOT).matches(".*\\.(mp4|webm|m4v)([?#].*)?");
+        String extension=media.path.toLowerCase(Locale.ROOT).split("[?#]",2)[0];
+        boolean picture="image".equals(media.kind)||
+            ("gif".equals(media.kind)||"sticker".equals(media.kind))&&
+            extension.matches(".*\\.(gif|webp|png|jpg|jpeg|bmp)");
+        if(!picture){
+            boolean video="video".equals(media.kind)||"round".equals(media.kind)||("gif".equals(media.kind)||"sticker".equals(media.kind))&&extension.matches(".*\\.(mp4|webm|m4v)");
             if(video||"audio".equals(media.kind)||"voice".equals(media.kind)){playMedia(media,video);return;}
             Toast.makeText(this,"Этот тип вложения пока не поддерживается в защищённом режиме",Toast.LENGTH_SHORT).show();return;
         }
         cancelPreview();final ProtectedArchiveSession current=session;final int token=generation,previewToken=previewGeneration;
         String raw=media.path.split("[?#]",2)[0];
-        String path=root+Uri.decode(raw);
+        String path=mediaPath(raw);
+        showLoading("Читаю фотографию…");
         task=reader.submit(()->{
             byte[] data=null;
             try{
@@ -364,29 +369,45 @@ public final class ProtectedArchiveActivity extends Activity {
                 if(bitmap==null)throw new IOException("Некорректное фото");
                 runOnUiThread(()->{
                     if(token!=generation||previewToken!=previewGeneration||isFinishing()||isDestroyed()){bitmap.recycle();return;}
+                    hideLoading();
                     ImageView image=new ImageView(this);image.setImageBitmap(bitmap);image.setAdjustViewBounds(true);
                     prompt=new AlertDialog.Builder(this).setView(image).setPositiveButton("Закрыть",null).create();
                     prompt.setOnDismissListener(d->{image.setImageDrawable(null);bitmap.recycle();});secureShow(prompt);
                 });
-            }catch(Exception e){runOnUiThread(()->{if(token==generation&&previewToken==previewGeneration)Toast.makeText(this,"Фото не прочитано",Toast.LENGTH_SHORT).show();});}
+            }catch(Exception|OutOfMemoryError e){runOnUiThread(()->{if(token==generation&&previewToken==previewGeneration){hideLoading();Toast.makeText(this,"Фото не прочитано",Toast.LENGTH_SHORT).show();}});}
             finally{if(data!=null)Arrays.fill(data,(byte)0);}
         });
     }
     private static void closeMediaSource(android.media.MediaDataSource source){try{source.close();}catch(IOException ignored){}}
+    private String mediaPath(String raw){
+        String path=Uri.decode(raw).replace('\\','/');
+        while(path.startsWith("./"))path=path.substring(2);
+        return root+path;
+    }
+    private void showLoading(String message){
+        hideLoading();
+        loadingDialog=new AlertDialog.Builder(this).setTitle(message)
+            .setMessage("Читается только выбранное вложение")
+            .setNegativeButton("Отмена",(d,w)->cancelPreview()).create();
+        loadingDialog.setOnCancelListener(d->cancelPreview());secureShow(loadingDialog);
+    }
+    private void hideLoading(){
+        AlertDialog old=loadingDialog;loadingDialog=null;if(old!=null)old.dismiss();
+    }
     private void cancelPreview(){
-        previewGeneration++;
+        previewGeneration++;hideLoading();
         if(mediaPlayer!=null){mediaPlayer.close();mediaPlayer=null;}
         if(task!=null){task.cancel(true);task=null;}
     }
     private void playMedia(TelegramImporter.Media media,boolean video){
         cancelPreview();
         final ProtectedArchiveSession current=session;final int token=generation,previewToken=previewGeneration;
-        final String path=root+Uri.decode(media.path.split("[?#]",2)[0]);
+        final String path=mediaPath(media.path.split("[?#]",2)[0]);
         Runtime runtime=Runtime.getRuntime();
         long headroom=runtime.maxMemory()-(runtime.totalMemory()-runtime.freeMemory());
         final long limit=Math.min(64L*1024*1024,Math.max(0,headroom/3));
 
-        Toast.makeText(this,"Читаю выбранное вложение…",Toast.LENGTH_SHORT).show();
+        showLoading("Читаю выбранное вложение…");
         task=reader.submit(()->{
             android.media.MediaDataSource source=null;
             try{
@@ -405,12 +426,13 @@ public final class ProtectedArchiveActivity extends Activity {
                 source=null;
                 runOnUiThread(()->{
                     if(token!=generation||previewToken!=previewGeneration||isFinishing()||isDestroyed()){closeMediaSource(ready);return;}
+                    hideLoading();
                     try{mediaPlayer=new ProtectedMediaPlayer(this,ready,video);}
                     catch(RuntimeException e){closeMediaSource(ready);Toast.makeText(this,"Плеер не открылся",Toast.LENGTH_SHORT).show();}
                 });
             }catch(Exception|OutOfMemoryError e){
-                runOnUiThread(()->{if(token==generation&&previewToken==previewGeneration)
-                    Toast.makeText(this,"Вложение не прочитано: проверь формат и свободное место",Toast.LENGTH_LONG).show();});
+                runOnUiThread(()->{if(token==generation&&previewToken==previewGeneration){
+                    hideLoading();Toast.makeText(this,"Вложение не прочитано: проверь формат и свободное место",Toast.LENGTH_LONG).show();}});
             }finally{if(source!=null)closeMediaSource(source);}
         });
     }
