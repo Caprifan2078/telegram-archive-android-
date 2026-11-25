@@ -3502,6 +3502,9 @@ public class MainActivity extends Activity {
     private void confirmArchiveImport(Uri source,String ext,String displayName){
         EditText archivePassword=new EditText(this);
         archivePassword.setSingleLine(true);
+        archivePassword.setSaveEnabled(false);
+        archivePassword.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        archivePassword.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
         archivePassword.setHint("Пароль от архива");
         archivePassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT|
             android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
@@ -3512,8 +3515,9 @@ public class MainActivity extends Activity {
             .setMessage("Введи пароль для открытия "+displayName+". Пароль не сохраняется.")
             .setView(archivePassword).setNegativeButton("Отмена",null)
             .setPositiveButton("Открыть",(d,w)->{
-                char[] password=archivePassword.getText().toString().toCharArray();
-                archivePassword.setText("");
+                char[] password=new char[archivePassword.length()];
+                archivePassword.getText().getChars(0,archivePassword.length(),password,0);
+                archivePassword.getText().clear();
                 if(password.length==0){
                     toast("Пароль не указан");return;
                 }
@@ -3871,53 +3875,53 @@ public class MainActivity extends Activity {
         }
         if("people".equals(analyticsSection)){
             analyticsSectionHeading("Участники переписки","Вклад каждого отправителя и сравнение активности.");
-        LinearLayout people=analyticsCard("Кто сколько написал");
-        int shown=0;
-        for(ChatAnalytics.Person person:r.people){
-            if(shown++>=35)break;
-            TextView label=text(person.display+"  ·  "+person.messages+" ("+fmtPct(ChatAnalytics.percent(person.messages,r.totalMessages))+"%)",14,FG);
-            label.setPadding(px(5),px(8),px(3),px(3));people.addView(label);
-            int weight=(int)Math.round(ChatAnalytics.percent(person.messages,r.totalMessages)*10);
-            weight=Math.min(1000,Math.max(person.messages>0?1:0,weight));
-            LinearLayout bar=row();bar.setBackground(shape(CHIP,8));
-            LinearLayout.LayoutParams bp=p(-1,10);bp.setMargins(px(5),0,px(5),px(4));people.addView(bar,bp);
-            if(weight>0){View filled=new View(this);filled.setBackground(shape(authorColor(person.display),8));
-                bar.addView(filled,new LinearLayout.LayoutParams(0,-1,weight));}
-            if(weight<1000)bar.addView(new View(this),new LinearLayout.LayoutParams(0,-1,1000-weight));
-            analyticsText(people,"Слов: "+person.words+"  ·  вложений: "+person.attachments,SUB,12);
-            Button morePerson=btn("Подробности  ▾");
-            morePerson.setContentDescription("Подробнее об участнике "+person.display);
-            LinearLayout.LayoutParams moreParams=p(-1,38);
-            moreParams.setMargins(px(4),px(1),px(4),px(11));people.addView(morePerson,moreParams);
-            LinearLayout details=column();details.setPadding(px(8),px(2),px(6),px(10));
-            details.setVisibility(View.GONE);people.addView(details,p(-1,-2));
-            morePerson.setOnClickListener(v->{
-                boolean open=details.getVisibility()!=View.VISIBLE;
-                if(open&&details.getChildCount()==0){
-                    analyticsText(details,"Слов: "+person.words+" ("+
-                        fmtPct(ChatAnalytics.percent(person.words,r.totalWords))+"%)"+
-                        " · символов: "+person.characters,SUB,12);
-                    analyticsText(details,"Вложений: "+person.attachments+" ("+
-                        fmtPct(ChatAnalytics.percent(person.attachments,r.totalMedia))+"%)",SUB,12);
-                    String[] keys={"image","round","voice","video","gif","file","audio","sticker"};
-                    String[] names={"Фото","Кружки","Голосовые","Видео","GIF","Файлы","Музыка","Стикеры"};
-                    for(int type=0;type<keys.length;type++)
-                        if(person.kind(keys[type])>0)analyticsLine(details,names[type],person.kind(keys[type]));
-                    if(person.attachments==0)analyticsText(details,"Вложений пока нет",SUB,12);
-                }
-                details.setVisibility(open?View.VISIBLE:View.GONE);
-                morePerson.setText(open?"Свернуть подробности  ▴":"Подробности  ▾");
-            });
-        }
-        if(r.people.size()>35)analyticsText(people,"Показаны первые 35 участников из "+r.people.size()+". В общих итогах учтены все.",SUB,12);
-        LinearLayout response=analyticsCard("Интервал между сообщениями участников");
-        if(r.switchCount>0){
-            analyticsText(response,"Средний интервал при смене отправителя: "+
-                fmtPct(r.meanSwitchMinutes)+" минут · пар сообщений: "+r.switchCount,FG,14);
-            analyticsText(response,"Учитываются соседние сообщения разных отправителей с датой и перерывом до 24 часов. Это приблизительная оценка темпа общения, а не подтверждённое время ответа на конкретное сообщение. В группах точность особенно ограничена.",SUB,11);
-        }else analyticsText(response,"Не удалось собрать подходящие пары сообщений.",SUB,12);
-        renderParticipantComparison(r);
-        return;
+            LinearLayout people=analyticsCard("Кто сколько написал");
+            int shown=0;
+            for(ChatAnalytics.Person person:r.people){
+                if(shown++>=35)break;
+                TextView label=text(person.display+"  ·  "+person.messages+" ("+fmtPct(ChatAnalytics.percent(person.messages,r.totalMessages))+"%)",14,FG);
+                label.setPadding(px(5),px(8),px(3),px(3));people.addView(label);
+                int weight=(int)Math.round(ChatAnalytics.percent(person.messages,r.totalMessages)*10);
+                weight=Math.min(1000,Math.max(person.messages>0?1:0,weight));
+                LinearLayout bar=row();bar.setBackground(shape(CHIP,8));
+                LinearLayout.LayoutParams bp=p(-1,10);bp.setMargins(px(5),0,px(5),px(4));people.addView(bar,bp);
+                if(weight>0){View filled=new View(this);filled.setBackground(shape(authorColor(person.display),8));
+                    bar.addView(filled,new LinearLayout.LayoutParams(0,-1,weight));}
+                if(weight<1000)bar.addView(new View(this),new LinearLayout.LayoutParams(0,-1,1000-weight));
+                analyticsText(people,"Слов: "+person.words+"  ·  вложений: "+person.attachments,SUB,12);
+                Button morePerson=btn("Подробности  ▾");
+                morePerson.setContentDescription("Подробнее об участнике "+person.display);
+                LinearLayout.LayoutParams moreParams=p(-1,38);
+                moreParams.setMargins(px(4),px(1),px(4),px(11));people.addView(morePerson,moreParams);
+                LinearLayout details=column();details.setPadding(px(8),px(2),px(6),px(10));
+                details.setVisibility(View.GONE);people.addView(details,p(-1,-2));
+                morePerson.setOnClickListener(v->{
+                    boolean open=details.getVisibility()!=View.VISIBLE;
+                    if(open&&details.getChildCount()==0){
+                        analyticsText(details,"Слов: "+person.words+" ("+
+                            fmtPct(ChatAnalytics.percent(person.words,r.totalWords))+"%)"+
+                            " · символов: "+person.characters,SUB,12);
+                        analyticsText(details,"Вложений: "+person.attachments+" ("+
+                            fmtPct(ChatAnalytics.percent(person.attachments,r.totalMedia))+"%)",SUB,12);
+                        String[] keys={"image","round","voice","video","gif","file","audio","sticker"};
+                        String[] names={"Фото","Кружки","Голосовые","Видео","GIF","Файлы","Музыка","Стикеры"};
+                        for(int type=0;type<keys.length;type++)
+                            if(person.kind(keys[type])>0)analyticsLine(details,names[type],person.kind(keys[type]));
+                        if(person.attachments==0)analyticsText(details,"Вложений пока нет",SUB,12);
+                    }
+                    details.setVisibility(open?View.VISIBLE:View.GONE);
+                    morePerson.setText(open?"Свернуть подробности  ▴":"Подробности  ▾");
+                });
+            }
+            if(r.people.size()>35)analyticsText(people,"Показаны первые 35 участников из "+r.people.size()+". В общих итогах учтены все.",SUB,12);
+            LinearLayout response=analyticsCard("Интервал между сообщениями участников");
+            if(r.switchCount>0){
+                analyticsText(response,"Средний интервал при смене отправителя: "+
+                    fmtPct(r.meanSwitchMinutes)+" минут · пар сообщений: "+r.switchCount,FG,14);
+                analyticsText(response,"Учитываются соседние сообщения разных отправителей с датой и перерывом до 24 часов. Это приблизительная оценка темпа общения, а не подтверждённое время ответа на конкретное сообщение. В группах точность особенно ограничена.",SUB,11);
+            }else analyticsText(response,"Не удалось собрать подходящие пары сообщений.",SUB,12);
+            renderParticipantComparison(r);
+            return;
         }
         if("content".equals(analyticsSection)){
             analyticsSectionHeading("О чём переписка","Фотографии, видео, голосовые, частые слова и активные даты.");
