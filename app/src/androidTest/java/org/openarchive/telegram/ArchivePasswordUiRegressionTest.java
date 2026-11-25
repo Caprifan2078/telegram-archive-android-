@@ -47,11 +47,32 @@ public final class ArchivePasswordUiRegressionTest {
             }
             Intent result=new Intent();result.setData(Uri.fromFile(encrypted));
             inst.runOnMainSync(()->activity.onActivityResult(57,Activity.RESULT_OK,result));
-            assertNotNull("Encrypted 7z should automatically show a password prompt",
-                device.wait(Until.findObject(By.textContains("Этот архив защищён паролем")),20000));
-            assertNotNull("Password entry must be visible",
-                device.findObject(By.textContains("Пароль от архива")));
-            device.pressBack();
+            // FLAG_SECURE may hide dialog nodes from UiAutomator on Android 15.
+            // Inspect the actual dialog with Espresso without disabling security.
+            long deadline=android.os.SystemClock.uptimeMillis()+20000;
+            boolean visible=false;
+            while(android.os.SystemClock.uptimeMillis()<deadline&&!visible){
+                try{
+                    androidx.test.espresso.Espresso.onView(
+                        androidx.test.espresso.matcher.ViewMatchers.withText("Этот архив защищён паролем"))
+                        .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                        .check(androidx.test.espresso.assertion.ViewAssertions.matches(
+                            androidx.test.espresso.matcher.ViewMatchers.isDisplayed()));
+                    visible=true;
+                }catch(androidx.test.espresso.NoMatchingViewException|androidx.test.espresso.NoMatchingRootException e){
+                    android.os.SystemClock.sleep(100);
+                }
+            }
+            assertTrue("Encrypted 7z should automatically show a password prompt",visible);
+            androidx.test.espresso.Espresso.onView(
+                androidx.test.espresso.matcher.ViewMatchers.withHint("Пароль от архива"))
+                .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                .check(androidx.test.espresso.assertion.ViewAssertions.matches(
+                    androidx.test.espresso.matcher.ViewMatchers.isDisplayed()));
+            androidx.test.espresso.Espresso.onView(
+                androidx.test.espresso.matcher.ViewMatchers.withText("Отмена"))
+                .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                .perform(androidx.test.espresso.action.ViewActions.click());
             inst.waitForIdleSync();
             File dir=new File(root);
             int after=dir.listFiles()==null?0:dir.listFiles().length;
