@@ -22,6 +22,7 @@ import org.jsoup.nodes.Element;
 /** Experimental protected viewer: separate from persistent SQLite and backup features. */
 public final class ProtectedArchiveActivity extends Activity {
     private static final int PICK=81, HTML_LIMIT=32*1024*1024, IMAGE_LIMIT=16*1024*1024;
+    private static final java.util.concurrent.atomic.AtomicBoolean ORPHANS_SCANNED=new java.util.concurrent.atomic.AtomicBoolean();
     private final ExecutorService reader=Executors.newSingleThreadExecutor();
     private LinearLayout body;
     private ProtectedArchiveSession session;
@@ -51,6 +52,13 @@ public final class ProtectedArchiveActivity extends Activity {
     }
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
+        // After a process crash the ephemeral key is gone. Remove only our own
+        // orphaned containers/ciphertext once, before any new session can open.
+        if(ORPHANS_SCANNED.compareAndSet(false,true)){
+            File[] orphaned=getCacheDir().listFiles((dir,name)->
+                name.startsWith("protected-container-")||name.startsWith("protected-media-")&&name.endsWith(".enc"));
+            if(orphaned!=null)for(File f:orphaned)if(f.isFile())f.delete();
+        }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         body=new LinearLayout(this);body.setOrientation(LinearLayout.VERTICAL);body.setSaveEnabled(false);
         body.setSaveFromParentEnabled(false);
@@ -137,6 +145,7 @@ public final class ProtectedArchiveActivity extends Activity {
     private void ask(Uri uri,String name){
         EditText field=new EditText(this);field.setSingleLine(true);
         field.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        if(android.os.Build.VERSION.SDK_INT>=26)field.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO);
         field.setSaveEnabled(false);field.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);field.setHint("Пароль архива");
         prompt=new AlertDialog.Builder(this).setTitle(name).setView(field)
             .setNegativeButton("Отмена",(d,w)->field.getText().clear())
@@ -264,7 +273,7 @@ public final class ProtectedArchiveActivity extends Activity {
         ListView list=new ListView(this);chatList=list;configureList(list);
         final ArrayAdapter<Line> adapter=new ArrayAdapter<>(this,android.R.layout.simple_list_item_1,new ArrayList<>());
         adapter.addAll(lines);list.setAdapter(adapter);
-        EditText search=new EditText(this);activeSearch=search;search.setSingleLine(true);search.setSaveEnabled(false);
+        EditText search=new EditText(this);activeSearch=search;search.setSingleLine(true);search.setSaveEnabled(false);search.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO);
         search.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
         search.setHint("Поиск по переписке");
         search.addTextChangedListener(new android.text.TextWatcher(){
