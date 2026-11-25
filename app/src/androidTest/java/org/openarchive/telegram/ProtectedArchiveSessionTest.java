@@ -139,4 +139,43 @@ public final class ProtectedArchiveSessionTest {
             fail("Account-level export is not a single chat");}
         catch(IOException expected){}
     }
+    @Test public void protectedSessionUsesOneBoundedCopyForNonseekableSaf()throws Exception{
+        char[] secret="synthetic-password".toCharArray();File zip=createZip(secret);
+        java.util.Set<String> before=protectedCopies();
+        try{
+            String encoded=android.util.Base64.encodeToString(Files.readAllBytes(zip.toPath()),
+                android.util.Base64.NO_WRAP|android.util.Base64.NO_PADDING|android.util.Base64.URL_SAFE);
+            Uri uri=Uri.parse("content://"+ArchivePipeTestProvider.AUTHORITY+"/fixture/"+encoded);
+            try(ProtectedArchiveSession session=ProtectedArchiveSession.open(context,uri,"zip",secret)){
+                assertTrue(session.usesContainerCopy());
+                assertEquals(before.size()+1,protectedCopies().size());
+                assertArrayEquals(TEXT,session.read("Chat/messages.html",1024));
+                assertArrayEquals(TEXT,session.read("Chat/photos/photo.jpg",1024));
+                assertEquals(before.size()+1,protectedCopies().size());
+            }
+            assertEquals(before,protectedCopies());
+        }finally{zip.delete();Arrays.fill(secret,'\0');}
+    }
+    private java.util.Set<String> protectedCopies(){
+        String[] files=context.getCacheDir().list((dir,name)->name.startsWith("protected-container-"));
+        return files==null?new java.util.HashSet<>():new java.util.HashSet<>(Arrays.asList(files));
+    }
+    @Test public void androidDecoderCanOpenAndSeekRamOnlyWav()throws Exception{
+        int bytes=16000*2;
+        java.nio.ByteBuffer wav=java.nio.ByteBuffer.allocate(44+bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        wav.put("RIFF".getBytes(StandardCharsets.US_ASCII)).putInt(36+bytes);
+        wav.put("WAVEfmt ".getBytes(StandardCharsets.US_ASCII)).putInt(16);
+        wav.putShort((short)1).putShort((short)1).putInt(16000).putInt(32000);
+        wav.putShort((short)2).putShort((short)16);
+        wav.put("data".getBytes(StandardCharsets.US_ASCII)).putInt(bytes);
+        for(int i=0;i<16000;i++)wav.putShort((short)(Math.sin(i*2*Math.PI*440/16000)*1000));
+        ProtectedMediaSource source=new ProtectedMediaSource(wav.capacity());
+        android.media.MediaPlayer player=new android.media.MediaPlayer();
+        try{
+            source.sink().write(wav.array());source.seal();
+            player.setDataSource(source);player.prepare();
+            assertTrue(player.getDuration()>=900&&player.getDuration()<=1100);
+            player.seekTo(500);player.start();player.pause();
+        }finally{player.release();source.close();}
+    }
 }
