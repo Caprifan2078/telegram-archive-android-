@@ -3610,7 +3610,7 @@ public class MainActivity extends Activity {
         if(scheduledPrefetch!=null){handler.removeCallbacks(scheduledPrefetch);scheduledPrefetch=null;}
         if(screen.equals("saved")){if(pdfButton!=null)pdfButton.setVisibility(View.GONE);renderSaved();return;}
         bottomNav.setVisibility(View.GONE);
-        if(importing)return;if(floatingPanel==null)stopPlayback();refreshTabs();configureBars();renderPinnedBar();int token=++loadToken;
+        if(importing)return;if(floatingPanel==null)stopPlayback();refreshTabs();configureBars();int token=++loadToken;renderPinnedBar();
         loadingMore=false; // A stale asynchronous page must not block the new tab.
         if(home){renderHome();return;}
         // Do not show the old chat-list contents under the new conversation header
@@ -3620,7 +3620,10 @@ public class MainActivity extends Activity {
             list.setTag(null);list.setBackgroundColor(BG);
             scroll.scrollTo(0,0);
         }
+        final MessageDb source=db;final String archive=activeKey;
+        if(source==null)return;
         final String tab=screen,kind=mediaKind,search=q,who=byAuthor;
+        final int chatLimit=Math.max(PAGE,autoLoaded),searchLimit=Math.max(PAGE,searchLoaded);
         final int requested=getOffset();final boolean deepMode=deep,hasMedia=onlyMedia;
         if("media".equals(tab)){
             // Never expose the previous category/chat beneath the new filter.
@@ -3636,9 +3639,9 @@ public class MainActivity extends Activity {
                 if("analytics".equals(tab)){
                     // Run SQLite scan off the UI thread. The load token drops stale results
                     // after switching chats/tabs, without ever writing to the database.
-                    ChatAnalytics.Snapshot report=db.analytics();
+                    ChatAnalytics.Snapshot report=source.analytics();
                     runOnUiThread(()->{
-                        if(isFinishing()||token!=loadToken)return;
+                        if(!sameScreenRequest(source,archive,token))return;
                         lastAnalytics=report;list.removeAllViews();list.setBackgroundColor(BG);
                         renderAnalytics(report);
                         if(pendingAnalyticsScroll>=0){
@@ -3659,19 +3662,19 @@ public class MainActivity extends Activity {
                     return;
                 }
                 boolean gallery="media".equals(tab),find="search".equals(tab),favs="favorites".equals(tab);
-                int count=gallery?db.mediaCount(kind):db.count(find?search:"",find&&deepMode,find&&deepMode?who:"",find&&deepMode&&hasMedia,favs);
+                int count=gallery?source.mediaCount(kind):source.count(find?search:"",find&&deepMode,find&&deepMode?who:"",find&&deepMode&&hasMedia,favs);
                 // Restore the actual source attachment position (including after
                 // rotation), not always attachment zero. Filter changes reset
                 // mediaOffset via their click handlers.
                 int pos=count==0?0:Math.max(0,Math.min(requested,count-1));
                 List<MessageDb.Attachment> attachments=gallery?
-                    db.mediaPage(kind,pos,MediaGalleryState.PAGE_SIZE):null;
-                List<MessageDb.Item> messages=gallery?null:db.page(pos,tab.equals("chat")?Math.max(PAGE,autoLoaded):tab.equals("search")?Math.max(PAGE,searchLoaded):PAGE,find?search:"",find&&deepMode,find&&deepMode?who:"",find&&deepMode&&hasMedia,favs);
-                Map<Long,List<MessageDb.Attachment>> links=messages==null?new HashMap<>():db.attachmentsForMessages(messages);
-                Map<Long,MessageDb.ReplyInfo> replies=messages==null?new HashMap<>():db.replyPreviews(messages);
-                MessageDb.SearchStats stats=find?db.searchStats(search,deepMode,deepMode?who:"",deepMode&&hasMedia):null;
+                    source.mediaPage(kind,pos,MediaGalleryState.PAGE_SIZE):null;
+                List<MessageDb.Item> messages=gallery?null:source.page(pos,tab.equals("chat")?chatLimit:tab.equals("search")?searchLimit:PAGE,find?search:"",find&&deepMode,find&&deepMode?who:"",find&&deepMode&&hasMedia,favs);
+                Map<Long,List<MessageDb.Attachment>> links=messages==null?new HashMap<>():source.attachmentsForMessages(messages);
+                Map<Long,MessageDb.ReplyInfo> replies=messages==null?new HashMap<>():source.replyPreviews(messages);
+                MessageDb.SearchStats stats=find?source.searchStats(search,deepMode,deepMode?who:"",deepMode&&hasMedia):null;
                 runOnUiThread(()->{
-                    if(isFinishing()||token!=loadToken)return;
+                    if(!sameScreenRequest(source,archive,token))return;
                     total=count;setOffset(pos);list.removeAllViews();
                     if("chat".equals(tab)){
                         android.graphics.drawable.Drawable custom=PersonalImages.wallpaper(this,getPreferences(MODE_PRIVATE),activeKey,BG);
@@ -3744,7 +3747,7 @@ public class MainActivity extends Activity {
                             "search".equals(tab)?(search.isEmpty()?"Введите слово или фразу":("Сообщений: "+count+"  ·  Точных вхождений «"+clip(search,28)+"»: "+stats.literalOccurrences+(deepMode?"":"  ·  Быстрый поиск учитывает начала слов"))):
                             "favorites".equals(tab)?"Твои избранные сообщения": "История · удерживай сообщение для действий");
                 });
-            }catch(Exception e){runOnUiThread(()->{if(token==loadToken)status.setText("Не удалось прочитать базу: "+e.getMessage());});}
+            }catch(Exception e){runOnUiThread(()->{if(sameScreenRequest(source,archive,token))status.setText("Не удалось прочитать базу: "+e.getMessage());});}
         });
     }
     /** Analytics is a read-only, anonymous-by-default view of the current chat DB. */
