@@ -126,4 +126,17 @@ public final class ProtectedArchiveSessionTest {
         assertFalse(file.exists());
         try{cache.getSize();fail("Locked cache readable");}catch(IOException expected){}
     }
+    @Test public void jsonChatReadsRichTextAndVoiceReferences()throws Exception{
+        String json="{\"name\":\"Synthetic chat\",\"messages\":[{\"from\":\"Test\",\"date\":\"2026-01-01T00:00:00\",\"text\":[\"Hello \",{\"type\":\"bold\",\"text\":\"world\"}],\"file\":\"voice_messages/a.ogg\",\"media_type\":\"voice_message\"},{\"actor\":\"Test\",\"action\":\"join_group\",\"text\":\"\"}]}";
+        java.util.List<ProtectedJsonChat.Message> messages=ProtectedJsonChat.parse(
+            new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
+        assertEquals(2,messages.size());
+        assertTrue(messages.get(0).display.contains("Hello world"));
+        assertEquals("voice",messages.get(0).media.get(0).kind);
+        assertEquals("voice_messages/a.ogg",messages.get(0).media.get(0).path);
+        assertTrue(messages.get(1).display.contains("join_group"));
+        try{ProtectedJsonChat.parse(new ByteArrayInputStream("{\"chats\":{\"list\":[]}}".getBytes(StandardCharsets.UTF_8)));
+            fail("Account-level export is not a single chat");}
+        catch(IOException expected){}
+    }
 }
