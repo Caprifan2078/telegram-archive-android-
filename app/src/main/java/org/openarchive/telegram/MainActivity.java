@@ -98,6 +98,7 @@ public class MainActivity extends Activity {
     private String cinemaReturnScreen="chat";
     // Read-only side-by-side workspaces. The first archive is always the active chat.
     private String dualSecondKey="",dualSecondName="";
+    private boolean comparisonFromHome=false;
     private int dualYear=LocalDate.now().getYear(),dualMonth=0;
     // Read-only combined timeline state. Original chats retain their own databases and notes.
     private String multiTimelineGroupId="";
@@ -261,6 +262,7 @@ public class MainActivity extends Activity {
             analyticsCalendarYear=state.getInt("ta_analytics_year",0);
             analyticsCompareFirst=state.getString("ta_analytics_compare_first","");
             analyticsCompareSecond=state.getString("ta_analytics_compare_second","");
+            comparisonFromHome=state.getBoolean("ta_compare_from_home",false);
             dualSecondKey=state.getString("ta_dual_second_key","");
             dualSecondName=state.getString("ta_dual_second_name","");
             dualYear=Math.max(1,Math.min(9999,state.getInt("ta_dual_year",LocalDate.now().getYear())));
@@ -316,6 +318,7 @@ public class MainActivity extends Activity {
         state.putInt("ta_analytics_year",analyticsCalendarYear);
         state.putString("ta_analytics_compare_first",analyticsCompareFirst);
         state.putString("ta_analytics_compare_second",analyticsCompareSecond);
+        state.putBoolean("ta_compare_from_home",comparisonFromHome);
         state.putString("ta_dual_second_key",dualSecondKey);
         state.putString("ta_dual_second_name",dualSecondName);
         state.putInt("ta_dual_year",dualYear);
@@ -3179,6 +3182,10 @@ public class MainActivity extends Activity {
     /** Android Back and header Back follow the same history hierarchy. */
     private boolean backWithinHistory(){
         if(home)return false;
+        if("dual_compare".equals(screen)||"dual_memories".equals(screen)){
+            home=comparisonFromHome;screen=home?"chat":"relationships";returnScreen="";
+            showPage();return true;
+        }
         if("analytics".equals(screen)&&!"overview".equals(analyticsSection)){
             selectAnalyticsSection("overview");return true;
         }
@@ -4847,7 +4854,7 @@ public class MainActivity extends Activity {
         Button echoes=btn("Повторяющиеся фразы");advanced.addView(echoes,p(-1,48));
         echoes.setOnClickListener(v->{screen="echo";showPage();});
         Button fullCompare=btn("Сравнить две переписки");advanced.addView(fullCompare,p(-1,48));
-        fullCompare.setOnClickListener(v->chooseDualChat("dual_compare"));
+        fullCompare.setOnClickListener(v->{comparisonFromHome=false;chooseDualChat("dual_compare");});
         fullCompare.setContentDescription("Сравнить статистику, календари и общую историю двух переписок");
         Button gaps=btn("Паузы между сообщениями");advanced.addView(gaps,p(-1,48));
         gaps.setOnClickListener(v->showConversationPauses());
@@ -5030,6 +5037,7 @@ public class MainActivity extends Activity {
         if(keys.size()<2){toast("Добавь вторую переписку");return;}
         new FontDialog.Builder(this).setTitle("Первая переписка для сравнения")
             .setItems(names.toArray(new String[0]),(d,index)->{
+                comparisonFromHome=true;
                 activateArchive(keys.get(index));
                 if(!home)chooseDualChat(mode);
             }).setNegativeButton("Отмена",null).show();
