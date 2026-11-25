@@ -64,7 +64,7 @@ public class RoundPlayerActivity extends Activity {
     }
     private Button button(String title,int width){
         Button b=new Button(this);b.setText(title);b.setTextSize(17);b.setAllCaps(false);
-        b.setTextColor(Color.WHITE);b.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));
+        b.setTextColor(Color.WHITE);b.setTypeface(android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.NORMAL));
         b.setBackground(new RippleDrawable(ColorStateList.valueOf(0x3c7ad2ff),glass(14),null));
         b.setElevation(0);b.setStateListAnimator(null);
         b.setMinWidth(0);b.setMinimumWidth(0);b.setPadding(dp(8),0,dp(8),0);
@@ -121,7 +121,7 @@ public class RoundPlayerActivity extends Activity {
         back.setOnClickListener(v->finish());
         TextView title=new TextView(this);title.setText("Видеосообщение");title.setTextColor(Color.WHITE);title.setTextSize(16);
         title.setGravity(Gravity.CENTER_VERTICAL);title.setPadding(dp(14),0,0,0);
-        title.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));
+        title.setTypeface(android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.NORMAL));
         topBar.addView(title,new LinearLayout.LayoutParams(0,-1,1));
         Button speedButton=button("1×",54);speedButton.setContentDescription("Скорость видео");topBar.addView(speedButton);
         speedButton.setOnClickListener(v->chooseSpeed(speedButton));
@@ -182,7 +182,7 @@ public class RoundPlayerActivity extends Activity {
                 else {speed=1f;control.setText("1×");android.widget.Toast.makeText(this,"Этот кодек не поддерживает скорость",android.widget.Toast.LENGTH_SHORT).show();}}).show();
     }
     private boolean applySpeed(){
-        if(currentPlayer==null||Build.VERSION.SDK_INT<23)return false;
+        if(currentPlayer==null)return false;
         try{boolean playing=video.isPlaying();android.media.PlaybackParams params=currentPlayer.getPlaybackParams();params.setSpeed(speed);currentPlayer.setPlaybackParams(params);if(!playing)video.pause();return true;}
         catch(Exception ignored){return false;}
     }
@@ -195,7 +195,7 @@ public class RoundPlayerActivity extends Activity {
         if(!prepared)return;
         int duration=Math.max(0,video.getDuration());
         int position=Math.max(0,Math.min(duration,wantedMs));
-        if(Build.VERSION.SDK_INT>=26 && currentPlayer!=null){
+        if(currentPlayer!=null){
             try{
                 currentPlayer.seekTo((long)position,MediaPlayer.SEEK_CLOSEST);
                 return;
@@ -208,9 +208,21 @@ public class RoundPlayerActivity extends Activity {
             video.getCurrentPosition()+ms)));
     }
     private void enterPip(){
-        if(!prepared||Build.VERSION.SDK_INT<26)return;
-        try{enterPictureInPictureMode(new PictureInPictureParams.Builder().setAspectRatio(new Rational(1,1)).build());}
-        catch(Exception ignored){}
+        if(!prepared)return;
+        if(!getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE)){
+            android.widget.Toast.makeText(this,"Плавающее окно не поддерживается устройством",android.widget.Toast.LENGTH_SHORT).show();return;
+        }
+        try{
+            PictureInPictureParams.Builder params=new PictureInPictureParams.Builder().setAspectRatio(new Rational(1,1));
+            android.graphics.Rect visible=new android.graphics.Rect();
+            if(video.getGlobalVisibleRect(visible)&&!visible.isEmpty())params.setSourceRectHint(visible);
+            // Explicit PiP button only: Home must not silently open a private video.
+            if(Build.VERSION.SDK_INT>=31)params.setAutoEnterEnabled(false);
+            if(!enterPictureInPictureMode(params.build()))
+                android.widget.Toast.makeText(this,"Не удалось открыть плавающее окно",android.widget.Toast.LENGTH_SHORT).show();
+        }catch(RuntimeException e){
+            android.widget.Toast.makeText(this,"Плавающее окно недоступно",android.widget.Toast.LENGTH_SHORT).show();
+        }
     }
     // PiP must be explicit: pressing Home should not surprise the user with a
     // floating window or trigger device-specific Picture-in-Picture races.

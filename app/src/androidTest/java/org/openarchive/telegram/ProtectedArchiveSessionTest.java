@@ -412,4 +412,17 @@ public final class ProtectedArchiveSessionTest {
         String[] names=context.getCacheDir().list((dir,name)->name.startsWith("protected-media-")&&name.endsWith(".enc"));
         return names==null?new java.util.HashSet<>():new java.util.HashSet<>(Arrays.asList(names));
     }
+    @Test public void localMediaResolverRejectsTraversalAndPreservesEncodedNames()throws Exception{
+        File dir=java.nio.file.Files.createTempDirectory(context.getCacheDir().toPath(),"audit-media-").toFile();
+        File nested=new File(dir,"photos");assertTrue(nested.mkdir());
+        File photo=new File(nested,"example#1.jpg");Files.write(photo.toPath(),TEXT);
+        try{
+            DocumentFolder folder=new DocumentFolder(context.getContentResolver(),dir);
+            assertEquals(Uri.fromFile(photo),folder.resolve("./photos/example%231.jpg?unused=1"));
+            for(String path:new String[]{"photos/../photos/example%231.jpg","photos/%2e%2e/photos/example%231.jpg",
+                "photos//example%231.jpg","photos/example%231.jpg/","/photos/example%231.jpg","photos/./example%231.jpg"}){
+                assertNull("Unsafe or ambiguous relative path",folder.resolve(path));
+            }
+        }finally{photo.delete();nested.delete();dir.delete();}
+    }
 }

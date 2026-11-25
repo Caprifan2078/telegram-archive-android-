@@ -89,13 +89,30 @@ public final class MediaInfiniteGalleryRegressionTest {
                     activity.getPreferences(Context.MODE_PRIVATE).edit()
                         .putBoolean("gallery_grid_round",true).commit();
                     invoke(activity,"showPage",new Class<?>[0]);
+                    RecyclerView.Adapter<?> current=gallery.getAdapter();
+                    assertNotNull("Gallery adapter",current);
+                    assertEquals("Old category must disappear immediately while new media is loading",0,current.getItemCount());
                 }catch(Exception e){throw new AssertionError(e);}
             });
-            waitFor(activity,"mediaLoaded",9);
+            // The old mixed gallery already has >= 90 attachments. A count-only
+            // wait succeeds before the new round gallery has been published.
             Object adapter=field(activity,"mediaAdapter");
             Field entries=adapter.getClass().getDeclaredField("entries");
             entries.setAccessible(true);
-            java.util.List<?> shown=(java.util.List<?>)entries.get(adapter);
+            java.util.List<?> shown=java.util.Collections.emptyList();
+            long deadline=android.os.SystemClock.uptimeMillis()+15000;
+            while(android.os.SystemClock.uptimeMillis()<deadline){
+                java.util.concurrent.atomic.AtomicReference<java.util.List<?>> snapshot=new java.util.concurrent.atomic.AtomicReference<>();
+                onUi(activity,()->{
+                    try{snapshot.set(new java.util.ArrayList<>((java.util.List<?>)entries.get(adapter)));}
+                    catch(Exception e){throw new AssertionError(e);}
+                });
+                shown=snapshot.get();
+                int rounds=0;
+                for(Object item:shown)if(item instanceof MessageDb.Attachment&&"round".equals(((MessageDb.Attachment)item).kind))rounds++;
+                if(rounds==9)break;
+                Thread.sleep(100);
+            }
             assertTrue("01 September group missing",shown.contains("01.09.2026")||
                 shown.toString().contains("01.09.2026")||shown.toString().contains("2026-09-01"));
             assertEquals("Three distinct days, not calendar fillers",12,shown.size());

@@ -1258,10 +1258,10 @@ public class MainActivity extends Activity {
             case "serif":chosen=Typeface.SERIF;break;
             case "mono":chosen=Typeface.MONOSPACE;break;
             case "sans":chosen=Typeface.SANS_SERIF;break;
-            case "condensed":chosen=Typeface.create("sans-serif-condensed",0);break;
-            case "casual":chosen=Typeface.create("casual",0);break;
-            case "light":chosen=Typeface.create("sans-serif-light",0);break;
-            case "medium":chosen=Typeface.create("sans-serif-medium",0);break;
+            case "condensed":chosen=Typeface.create("sans-serif-condensed",Typeface.NORMAL);break;
+            case "casual":chosen=Typeface.create("casual",Typeface.NORMAL);break;
+            case "light":chosen=Typeface.create("sans-serif-light",Typeface.NORMAL);break;
+            case "medium":chosen=Typeface.create("sans-serif-medium",Typeface.NORMAL);break;
             case "custom":chosen=Typeface.createFromFile(FontManager.customFile(this));break;
             default:chosen=Typeface.DEFAULT;
         }
@@ -1498,8 +1498,22 @@ public class MainActivity extends Activity {
         homeHeading.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
         TextView countLabel=text(String.valueOf(archives.length())+(hiddenChats>0?" · скрыто "+hiddenChats:""),12,SUB);
         homeHeading.addView(countLabel);
-        Button protectedArchives=btn("Защищённые архивы · ZIP / RAR");
-        list.addView(protectedArchives,p(-1,45));
+        // One primary import action stays on the home screen. The protected
+        // library is a navigation destination, not a second import button.
+        int protectedCount=0;
+        try{
+            protectedCount=new JSONArray(getSharedPreferences("protected_archive_pins",MODE_PRIVATE)
+                .getString("items","[]")).length();
+        }catch(org.json.JSONException ignored){}
+        TextView protectedArchives=text("Защищённые переписки"+
+            (protectedCount>0?" · "+protectedCount:"")+"   ›",14,ACCENT);
+        protectedArchives.setGravity(Gravity.CENTER_VERTICAL);
+        protectedArchives.setPadding(px(12),0,px(12),0);
+        protectedArchives.setMinHeight(px(48));
+        protectedArchives.setContentDescription("Защищённые архивы ZIP и RAR, открыть библиотеку");
+        protectedArchives.setBackground(new RippleDrawable(ColorStateList.valueOf(0x3390d5ff),
+            shape(0x00000000,12),shape(0xffffffff,12)));
+        list.addView(protectedArchives,p(-1,-2));
         protectedArchives.setOnClickListener(v->startActivity(new Intent(this,ProtectedArchiveActivity.class)));
         JSONArray trash=chatTrash();
         if(trash==null||trash.length()>0){
@@ -3502,23 +3516,33 @@ public class MainActivity extends Activity {
     private void confirmArchiveImport(Uri source,String ext,String displayName){
         EditText archivePassword=new EditText(this);
         archivePassword.setSingleLine(true);
+        archivePassword.setSaveEnabled(false);
+        archivePassword.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        archivePassword.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
         archivePassword.setHint("Пароль от архива");
         archivePassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT|
             android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
         archivePassword.setTextColor(FG);
         archivePassword.setHintTextColor(SUB);
         archivePassword.setPadding(px(18),px(10),px(18),px(10));
-        new FontDialog.Builder(this).setTitle("Этот архив защищён паролем")
+        android.app.AlertDialog passwordDialog=new FontDialog.Builder(this).setTitle("Этот архив защищён паролем")
             .setMessage("Введи пароль для открытия "+displayName+". Пароль не сохраняется.")
             .setView(archivePassword).setNegativeButton("Отмена",null)
             .setPositiveButton("Открыть",(d,w)->{
-                char[] password=archivePassword.getText().toString().toCharArray();
-                archivePassword.setText("");
+                char[] password=new char[archivePassword.length()];
+                archivePassword.getText().getChars(0,archivePassword.length(),password,0);
+                archivePassword.getText().clear();
                 if(password.length==0){
                     toast("Пароль не указан");return;
                 }
                 importCompressed(source,ext,displayName,password);
-            }).show();
+            }).create();
+        passwordDialog.setOnDismissListener(d->archivePassword.getText().clear());
+        if(passwordDialog.getWindow()!=null)
+            passwordDialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
+        passwordDialog.show();
+        if(passwordDialog.getWindow()!=null)
+            passwordDialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
     }
     private void importCompressed(Uri source,String extension,String label,char[] password){
         if(importing){if(password!=null)java.util.Arrays.fill(password,'\0');return;}
@@ -3652,6 +3676,14 @@ public class MainActivity extends Activity {
         }
         final String tab=screen,kind=mediaKind,search=q,who=byAuthor;
         final int requested=getOffset();final boolean deepMode=deep,hasMedia=onlyMedia;
+        if("media".equals(tab)){
+            // Never expose the previous category/chat beneath the new filter.
+            // Keep the requested source offset, but invalidate all old pages.
+            mediaTotal=0;mediaLoaded=0;mediaWindowStart=0;
+            mediaAppending=false;mediaPrepending=false;
+            mediaFastScroller.setVisibility(View.GONE);
+            mediaAdapter.reset();
+        }
         backPage.setEnabled(false);nextPage.setEnabled(false);status.setVisibility(View.VISIBLE);status.setText("Загружаю…");
         worker.execute(()->{
             try{
@@ -3871,51 +3903,51 @@ public class MainActivity extends Activity {
         }
         if("people".equals(analyticsSection)){
             analyticsSectionHeading("Участники переписки","Вклад каждого отправителя и сравнение активности.");
-        LinearLayout people=analyticsCard("Кто сколько написал");
-        int shown=0;
-        for(ChatAnalytics.Person person:r.people){
-            if(shown++>=35)break;
-            TextView label=text(person.display+"  ·  "+person.messages+" ("+fmtPct(ChatAnalytics.percent(person.messages,r.totalMessages))+"%)",14,FG);
-            label.setPadding(px(5),px(8),px(3),px(3));people.addView(label);
-            int weight=(int)Math.round(ChatAnalytics.percent(person.messages,r.totalMessages)*10);
-            weight=Math.min(1000,Math.max(person.messages>0?1:0,weight));
-            LinearLayout bar=row();bar.setBackground(shape(CHIP,8));
-            LinearLayout.LayoutParams bp=p(-1,10);bp.setMargins(px(5),0,px(5),px(4));people.addView(bar,bp);
-            if(weight>0){View filled=new View(this);filled.setBackground(shape(authorColor(person.display),8));
-                bar.addView(filled,new LinearLayout.LayoutParams(0,-1,weight));}
-            if(weight<1000)bar.addView(new View(this),new LinearLayout.LayoutParams(0,-1,1000-weight));
-            analyticsText(people,"Слов: "+person.words+"  ·  вложений: "+person.attachments,SUB,12);
-            Button morePerson=btn("Подробности  ▾");
-            morePerson.setContentDescription("Подробнее об участнике "+person.display);
-            LinearLayout.LayoutParams moreParams=p(-1,38);
-            moreParams.setMargins(px(4),px(1),px(4),px(11));people.addView(morePerson,moreParams);
-            LinearLayout details=column();details.setPadding(px(8),px(2),px(6),px(10));
-            details.setVisibility(View.GONE);people.addView(details,p(-1,-2));
-            morePerson.setOnClickListener(v->{
-                boolean open=details.getVisibility()!=View.VISIBLE;
-                if(open&&details.getChildCount()==0){
-                    analyticsText(details,"Слов: "+person.words+" ("+
-                        fmtPct(ChatAnalytics.percent(person.words,r.totalWords))+"%)"+
-                        " · символов: "+person.characters,SUB,12);
-                    analyticsText(details,"Вложений: "+person.attachments+" ("+
-                        fmtPct(ChatAnalytics.percent(person.attachments,r.totalMedia))+"%)",SUB,12);
-                    String[] keys={"image","round","voice","video","gif","file","audio","sticker"};
-                    String[] names={"Фото","Кружки","Голосовые","Видео","GIF","Файлы","Музыка","Стикеры"};
-                    for(int type=0;type<keys.length;type++)
-                        if(person.kind(keys[type])>0)analyticsLine(details,names[type],person.kind(keys[type]));
-                    if(person.attachments==0)analyticsText(details,"Вложений пока нет",SUB,12);
-                }
-                details.setVisibility(open?View.VISIBLE:View.GONE);
-                morePerson.setText(open?"Свернуть подробности  ▴":"Подробности  ▾");
-            });
-        }
-        if(r.people.size()>35)analyticsText(people,"Показаны первые 35 участников из "+r.people.size()+". В общих итогах учтены все.",SUB,12);
-        LinearLayout response=analyticsCard("Интервал между сообщениями участников");
-        if(r.switchCount>0){
-            analyticsText(response,"Средний интервал при смене отправителя: "+
-                fmtPct(r.meanSwitchMinutes)+" минут · пар сообщений: "+r.switchCount,FG,14);
-            analyticsText(response,"Учитываются соседние сообщения разных отправителей с датой и перерывом до 24 часов. Это приблизительная оценка темпа общения, а не подтверждённое время ответа на конкретное сообщение. В группах точность особенно ограничена.",SUB,11);
-        }else analyticsText(response,"Не удалось собрать подходящие пары сообщений.",SUB,12);
+            LinearLayout people=analyticsCard("Кто сколько написал");
+            int shown=0;
+            for(ChatAnalytics.Person person:r.people){
+                if(shown++>=35)break;
+                TextView label=text(person.display+"  ·  "+person.messages+" ("+fmtPct(ChatAnalytics.percent(person.messages,r.totalMessages))+"%)",14,FG);
+                label.setPadding(px(5),px(8),px(3),px(3));people.addView(label);
+                int weight=(int)Math.round(ChatAnalytics.percent(person.messages,r.totalMessages)*10);
+                weight=Math.min(1000,Math.max(person.messages>0?1:0,weight));
+                LinearLayout bar=row();bar.setBackground(shape(CHIP,8));
+                LinearLayout.LayoutParams bp=p(-1,10);bp.setMargins(px(5),0,px(5),px(4));people.addView(bar,bp);
+                if(weight>0){View filled=new View(this);filled.setBackground(shape(authorColor(person.display),8));
+                    bar.addView(filled,new LinearLayout.LayoutParams(0,-1,weight));}
+                if(weight<1000)bar.addView(new View(this),new LinearLayout.LayoutParams(0,-1,1000-weight));
+                analyticsText(people,"Слов: "+person.words+"  ·  вложений: "+person.attachments,SUB,12);
+                Button morePerson=btn("Подробности  ▾");
+                morePerson.setContentDescription("Подробнее об участнике "+person.display);
+                LinearLayout.LayoutParams moreParams=p(-1,38);
+                moreParams.setMargins(px(4),px(1),px(4),px(11));people.addView(morePerson,moreParams);
+                LinearLayout details=column();details.setPadding(px(8),px(2),px(6),px(10));
+                details.setVisibility(View.GONE);people.addView(details,p(-1,-2));
+                morePerson.setOnClickListener(v->{
+                    boolean open=details.getVisibility()!=View.VISIBLE;
+                    if(open&&details.getChildCount()==0){
+                        analyticsText(details,"Слов: "+person.words+" ("+
+                            fmtPct(ChatAnalytics.percent(person.words,r.totalWords))+"%)"+
+                            " · символов: "+person.characters,SUB,12);
+                        analyticsText(details,"Вложений: "+person.attachments+" ("+
+                            fmtPct(ChatAnalytics.percent(person.attachments,r.totalMedia))+"%)",SUB,12);
+                        String[] keys={"image","round","voice","video","gif","file","audio","sticker"};
+                        String[] names={"Фото","Кружки","Голосовые","Видео","GIF","Файлы","Музыка","Стикеры"};
+                        for(int type=0;type<keys.length;type++)
+                            if(person.kind(keys[type])>0)analyticsLine(details,names[type],person.kind(keys[type]));
+                        if(person.attachments==0)analyticsText(details,"Вложений пока нет",SUB,12);
+                    }
+                    details.setVisibility(open?View.VISIBLE:View.GONE);
+                    morePerson.setText(open?"Свернуть подробности  ▴":"Подробности  ▾");
+                });
+            }
+            if(r.people.size()>35)analyticsText(people,"Показаны первые 35 участников из "+r.people.size()+". В общих итогах учтены все.",SUB,12);
+            LinearLayout response=analyticsCard("Интервал между сообщениями участников");
+            if(r.switchCount>0){
+                analyticsText(response,"Средний интервал при смене отправителя: "+
+                    fmtPct(r.meanSwitchMinutes)+" минут · пар сообщений: "+r.switchCount,FG,14);
+                analyticsText(response,"Учитываются соседние сообщения разных отправителей с датой и перерывом до 24 часов. Это приблизительная оценка темпа общения, а не подтверждённое время ответа на конкретное сообщение. В группах точность особенно ограничена.",SUB,11);
+            }else analyticsText(response,"Не удалось собрать подходящие пары сообщений.",SUB,12);
             renderParticipantComparison(r);
             return;
         }
@@ -5941,17 +5973,16 @@ public class MainActivity extends Activity {
             try{earlier=source.mediaPage(kind,start,amount);}
             catch(Exception error){
                 runOnUiThread(()->{
-                    mediaPrepending=false;
-                    if(token==loadToken&&"media".equals(screen))
+                    if(token==loadToken&&db==source&&"media".equals(screen)&&kind.equals(mediaKind)){
+                        mediaPrepending=false;
                         status.setText("Не удалось загрузить более ранние файлы");
+                    }
                 });return;
             }
             final List<MessageDb.Attachment> prior=earlier;
             runOnUiThread(()->{
                 if(isFinishing()||isDestroyed()||token!=loadToken||db!=source||
-                    !archive.equals(activeKey)||!"media".equals(screen)||!kind.equals(mediaKind)){
-                    mediaPrepending=false;return;
-                }
+                    !archive.equals(activeKey)||!"media".equals(screen)||!kind.equals(mediaKind))return;
                 mediaPrepending=false;
                 if(prior.isEmpty())return;
                 int firstVisible=Math.max(0,mediaLayout.findFirstVisibleItemPosition());
@@ -5973,7 +6004,7 @@ public class MainActivity extends Activity {
     /** Fetch only the next 30 from SQLite; never reset scroll when the next page arrives. */
     private void maybeAppendMedia(){
         if(mediaRecycler==null||mediaLayout==null||mediaAppending
-            ||!"media".equals(screen)||home||importing||db==null
+            ||mediaPrepending||!"media".equals(screen)||home||importing||db==null
             ||mediaLoaded>=mediaTotal||mediaAdapter.getItemCount()==0)return;
         int last=mediaLayout.findLastVisibleItemPosition();
         if(last<mediaAdapter.getItemCount()-10)return;
@@ -5986,13 +6017,14 @@ public class MainActivity extends Activity {
             try{next=source.mediaPage(filter,from,MediaGalleryState.PAGE_SIZE);}
             catch(Exception error){
                 runOnUiThread(()->{
-                    if(token==loadToken&&"media".equals(screen))status.setText("Не удалось догрузить медиа. Прокрути ещё раз.");
-                    mediaAppending=false;
+                    if(token==loadToken&&db==source&&"media".equals(screen)&&filter.equals(mediaKind)){
+                        mediaAppending=false;status.setText("Не удалось догрузить медиа. Прокрути ещё раз.");
+                    }
                 });return;
             }
             runOnUiThread(()->{
                 if(isFinishing()||token!=loadToken||db!=source||!archive.equals(activeKey)
-                    ||!"media".equals(screen)||!filter.equals(mediaKind)){mediaAppending=false;return;}
+                    ||!"media".equals(screen)||!filter.equals(mediaKind))return;
                 mediaAdapter.append(next);
                 mediaLoaded+=next.size();
                 if(next.isEmpty())mediaLoaded=mediaTotal;
@@ -6339,7 +6371,29 @@ public class MainActivity extends Activity {
                 holder.setScaleX(zoom);holder.setScaleY(zoom);return true;
             }
         });
-        holder.setOnTouchListener((v,e)->{videoZoom.onTouchEvent(e);return e.getPointerCount()>1;});
+        holder.setOnTouchListener(new View.OnTouchListener(){
+            private boolean pinch;
+            @Override public boolean onTouch(View v,MotionEvent e){
+                int action=e.getActionMasked();
+                if(action==MotionEvent.ACTION_DOWN)pinch=false;
+                videoZoom.onTouchEvent(e);
+                if(e.getPointerCount()>1||action==MotionEvent.ACTION_POINTER_DOWN){
+                    if(!pinch){v.cancelLongPress();v.setPressed(false);}
+                    pinch=true;
+                }
+                if(pinch){
+                    if(action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL){
+                        pinch=false;v.cancelLongPress();v.setPressed(false);
+                        MotionEvent cancel=MotionEvent.obtain(e);
+                        cancel.setAction(MotionEvent.ACTION_CANCEL);
+                        try{v.onTouchEvent(cancel);}finally{cancel.recycle();}
+                    }
+                    return true;
+                }
+                // Normal tap/long press uses the View's standard accessible click handling.
+                return false;
+            }
+        });
         holder.setTag(controls);
         holder.setOnClickListener(v->{
             if(chatCircle){

@@ -66,7 +66,7 @@ public final class AttachmentPreviewActivity extends Activity {
     }
     private void showHeader(){
         panel.removeAllViews();
-        TextView title=text("▣ "+fileName,19,FG);title.setTypeface(null,1);title.setMaxLines(2);
+        TextView title=text("▣ "+fileName,19,FG);title.setTypeface(null,android.graphics.Typeface.BOLD);title.setMaxLines(2);
         panel.addView(title);
         panel.addView(text("Только просмотр · локально · исходный файл не меняется",12,SUB));
         button("← Закрыть просмотр",this::finish);

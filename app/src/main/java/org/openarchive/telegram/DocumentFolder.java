@@ -65,7 +65,7 @@ class DocumentFolder {
         try{return n.isEmpty()?1:Integer.parseInt(n);}catch(Exception e){return Integer.MAX_VALUE;}
     }
     /** Resolve relative export path on demand; reject directory traversal and external URLs. */
-    Uri resolve(String relative) {
+    synchronized Uri resolve(String relative) {
         if(relative==null||relative.isEmpty())return null;
         // Remove raw URL query and fragment delimiters BEFORE percent decoding.
         // Encoded filename characters %23 and %3F are not delimiters.
@@ -75,9 +75,10 @@ class DocumentFolder {
         if(fragment>=0)end=Math.min(end,fragment);
         String s=Uri.decode(raw.substring(0,end));
         while(s.startsWith("./"))s=s.substring(2);
-        if(s.startsWith("/") || s.contains(":") || s.startsWith("//"))return null;
+        if(s.startsWith("/") || s.contains(":") || s.startsWith("//")||s.indexOf('\0')>=0)return null;
+        String[] segments=s.split("/",-1);
+        for(String part:segments)if(part.isEmpty()||part.equals(".")||part.equals(".."))return null;
         if(localRoot!=null){try{java.io.File file=new java.io.File(localRoot,s);String base=localRoot.getCanonicalPath()+java.io.File.separator;if(file.isFile()&&file.getCanonicalPath().startsWith(base))return Uri.fromFile(file);}catch(Exception ignored){}return null;}
-        String[] segments=s.split("/");
         String parent=rootId; String prefix="";
         for(int i=0;i<segments.length;i++) {
             String part=segments[i];
