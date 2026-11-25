@@ -1,7 +1,7 @@
 name: Protected archive isolated QA
 on:
   push:
-    branches: [qa/protected-archive-session-20261125, qa/protected-video-regression-20261125]
+    branches: [qa/protected-archive-session-20261125, qa/protected-video-regression-20261125, qa/protected-player-lifecycle-20261126]
   pull_request:
     branches: [qa/drawer-aes-zip-20261123, qa/protected-archive-session-20261125]
     paths:
