@@ -425,4 +425,55 @@ public final class ProtectedArchiveSessionTest {
             }
         }finally{photo.delete();nested.delete();dir.delete();}
     }
+    @Test public void protectedPlayerDialogCanPauseAndCloseItsRealAudioSource()throws Exception{
+        int sampleRate=16000,seconds=5,bytes=sampleRate*seconds*2;
+        java.nio.ByteBuffer wav=java.nio.ByteBuffer.allocate(44+bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        wav.put("RIFF".getBytes(StandardCharsets.US_ASCII)).putInt(36+bytes);
+        wav.put("WAVEfmt ".getBytes(StandardCharsets.US_ASCII)).putInt(16);
+        wav.putShort((short)1).putShort((short)1).putInt(sampleRate).putInt(sampleRate*2);
+        wav.putShort((short)2).putShort((short)16);
+        wav.put("data".getBytes(StandardCharsets.US_ASCII)).putInt(bytes);
+        for(int n=0;n<sampleRate*seconds;n++)wav.putShort((short)0);
+        ProtectedMediaSource source=new ProtectedMediaSource(wav.capacity());
+        source.sink().write(wav.array());source.seal();
+        Arrays.fill(wav.array(),(byte)0);
+        android.app.Instrumentation inst=InstrumentationRegistry.getInstrumentation();
+        android.app.Activity activity=inst.startActivitySync(new android.content.Intent(context,ProtectedArchiveActivity.class)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+        java.util.concurrent.atomic.AtomicReference<ProtectedMediaPlayer> ref=new java.util.concurrent.atomic.AtomicReference<>();
+        try{
+            inst.runOnMainSync(()->ref.set(new ProtectedMediaPlayer(activity,source,false)));
+            ProtectedMediaPlayer panel=ref.get();
+            java.lang.reflect.Field playField=ProtectedMediaPlayer.class.getDeclaredField("play");
+            playField.setAccessible(true);
+            android.widget.Button button=(android.widget.Button)playField.get(panel);
+            java.lang.reflect.Field seekField=ProtectedMediaPlayer.class.getDeclaredField("seek");
+            seekField.setAccessible(true);
+            android.widget.SeekBar seek=(android.widget.SeekBar)seekField.get(panel);
+            java.lang.reflect.Field dialogField=ProtectedMediaPlayer.class.getDeclaredField("dialog");
+            dialogField.setAccessible(true);
+            android.app.AlertDialog dialog=(android.app.AlertDialog)dialogField.get(panel);
+            long until=android.os.SystemClock.uptimeMillis()+10000;
+            java.util.concurrent.atomic.AtomicBoolean ready=new java.util.concurrent.atomic.AtomicBoolean();
+            while(android.os.SystemClock.uptimeMillis()<until){
+                inst.runOnMainSync(()->ready.set(button.isEnabled()&&seek.isEnabled()));
+                if(ready.get())break;
+                android.os.SystemClock.sleep(100);
+            }
+            assertTrue("Real audio decoder enabled playback controls",ready.get());
+            inst.runOnMainSync(()->{
+                assertTrue((dialog.getWindow().getAttributes().flags&
+                    android.view.WindowManager.LayoutParams.FLAG_SECURE)!=0);
+                assertTrue(seek.getMax()>=4500);
+                assertTrue(button.performClick());
+                panel.close();
+                panel.close();
+                assertFalse(dialog.isShowing());
+            });
+            try{source.getSize();fail("Closed dialog must release its media source");}catch(IOException expected){}
+        }finally{
+            inst.runOnMainSync(()->{if(ref.get()!=null)ref.get().close();activity.finish();});
+            source.close();
+        }
+    }
 }
