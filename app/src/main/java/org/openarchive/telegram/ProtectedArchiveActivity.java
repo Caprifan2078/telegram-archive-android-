@@ -35,7 +35,8 @@ public final class ProtectedArchiveActivity extends Activity {
     private String openedName="";
     private boolean showingMedia;
     private int chatPosition,chatTop;
-    private ListView chatList;
+    private ListView chatList,activeList;
+    private EditText activeSearch;
     private final ArrayList<MediaRow> mediaRows=new ArrayList<>();
     private static final class MediaRow {
         final TelegramImporter.Media attachment; final int message;
@@ -54,7 +55,16 @@ public final class ProtectedArchiveActivity extends Activity {
         body=new LinearLayout(this);body.setOrientation(LinearLayout.VERTICAL);body.setSaveEnabled(false);
         body.setSaveFromParentEnabled(false);
         int p=(int)(16*getResources().getDisplayMetrics().density);body.setPadding(p,p,p,p);
-        setContentView(body);library();
+        setContentView(body);
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(body,(v,insets)->{
+            androidx.core.graphics.Insets bars=insets.getInsets(
+                androidx.core.view.WindowInsetsCompat.Type.systemBars()|
+                androidx.core.view.WindowInsetsCompat.Type.displayCutout());
+            v.setPadding(p+bars.left,p+bars.top,p+bars.right,p+bars.bottom);
+            return insets;
+        });
+        androidx.core.view.ViewCompat.requestApplyInsets(body);
+        library();
     }
     private SharedPreferences pins(){return getSharedPreferences("protected_archive_pins",MODE_PRIVATE);}
     private JSONArray entries(){
@@ -225,7 +235,7 @@ public final class ProtectedArchiveActivity extends Activity {
         });
     }
     private void sessionHeader(String name,String detail,Runnable toggle,String toggleLabel){
-        body.removeAllViews();title(name);label(detail);
+        detachPrivateViews();body.removeAllViews();title(name);label(detail);
         LinearLayout controls=new LinearLayout(this);
         Button change=new Button(this);change.setText(toggleLabel);
         controls.addView(change,new LinearLayout.LayoutParams(0,-2,1));change.setOnClickListener(v->toggle.run());
@@ -240,6 +250,7 @@ public final class ProtectedArchiveActivity extends Activity {
         chatTop=chatList.getChildCount()==0?0:chatList.getChildAt(0).getTop();
     }
     private void configureList(ListView list){
+        activeList=list;
         list.setFastScrollEnabled(true);list.setFastScrollAlwaysVisible(true);
         list.setVerticalScrollBarEnabled(true);list.setSaveEnabled(false);
         list.setSaveFromParentEnabled(false);
@@ -251,23 +262,21 @@ public final class ProtectedArchiveActivity extends Activity {
             rememberPosition();showMedia("all");
         },"Медиа · "+mediaRows.size());
         ListView list=new ListView(this);chatList=list;configureList(list);
-        final ArrayList<Integer> visible=new ArrayList<>();
         final ArrayAdapter<Line> adapter=new ArrayAdapter<>(this,android.R.layout.simple_list_item_1,new ArrayList<>());
-        for(int i=0;i<lines.size();i++)visible.add(i);
         adapter.addAll(lines);list.setAdapter(adapter);
-        EditText search=new EditText(this);search.setSingleLine(true);search.setSaveEnabled(false);
+        EditText search=new EditText(this);activeSearch=search;search.setSingleLine(true);search.setSaveEnabled(false);
         search.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
         search.setHint("Поиск по переписке");
         search.addTextChangedListener(new android.text.TextWatcher(){
             @Override public void beforeTextChanged(CharSequence s,int start,int count,int after){}
             @Override public void onTextChanged(CharSequence s,int start,int before,int count){
-                if(lines==null)return;
+                if(lines==null||activeSearch!=search||activeList!=list)return;
                 String q=s.toString().toLowerCase(Locale.ROOT);
-                visible.clear();adapter.setNotifyOnChange(false);adapter.clear();
+                adapter.setNotifyOnChange(false);adapter.clear();
                 for(int i=0;i<lines.size();i++){
                     Line line=lines.get(i);
                     if(q.isEmpty()||line.text.toLowerCase(Locale.ROOT).contains(q)){
-                        visible.add(i);adapter.add(line);
+                        adapter.add(line);
                     }
                 }
                 adapter.notifyDataSetChanged();
@@ -396,6 +405,15 @@ public final class ProtectedArchiveActivity extends Activity {
             }finally{if(source!=null)closeMediaSource(source);}
         });
     }
+    private void detachPrivateViews(){
+        if(activeList!=null){
+            android.widget.ListAdapter old=activeList.getAdapter();
+            activeList.setOnItemClickListener(null);activeList.setOnItemLongClickListener(null);
+            activeList.setAdapter(null);activeList=null;
+            if(old instanceof ArrayAdapter)((ArrayAdapter<?>)old).clear();
+        }
+        if(activeSearch!=null){activeSearch.getText().clear();activeSearch=null;}
+    }
     private void lock(){
         generation++;cancelPreview();
         if(prompt!=null){prompt.dismiss();prompt=null;}
@@ -404,7 +422,7 @@ public final class ProtectedArchiveActivity extends Activity {
         ProtectedArchiveSession old=session;session=null;
         if(old!=null)reader.execute(old::close);
         if(lines!=null){lines.clear();lines=null;}
-        if(chatList!=null){chatList.setAdapter(null);chatList=null;}
+        detachPrivateViews();chatList=null;
         mediaRows.clear();showingMedia=false;openedName="";chatPosition=chatTop=0;
         root="";body.removeAllViews();
     }
