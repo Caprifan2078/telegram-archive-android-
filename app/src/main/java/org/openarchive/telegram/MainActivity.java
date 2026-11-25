@@ -678,7 +678,7 @@ public class MainActivity extends Activity {
                     }
                     text.append("\nЭто только проверка доступности: файлы не читаются и не удаляются. ")
                         .append("Проблема доступа SAF может выглядеть как отсутствие файла.");
-                    new FontDialog.Builder(this).setTitle("Здоровье медиатеки")
+                    new FontDialog.Builder(this).setTitle("Доступность оригиналов")
                         .setMessage(text.toString()).setPositiveButton("Готово",null).show();
                     status.setText("Проверка медиатеки завершена");
                 });
@@ -4653,6 +4653,8 @@ public class MainActivity extends Activity {
             }).show();
     }
     private void createPeriodDialog(ConversationPeriods.Boundary start,ConversationPeriods.Boundary end){
+        if(home||db==null)return;
+        final MessageDb source=db;final String archive=activeKey;final int token=loadToken;
         LinearLayout form=column();form.setPadding(px(18),px(5),px(18),px(6));
         EditText name=new EditText(this);name.setSingleLine(true);name.setHint("Например: Знакомство");
         name.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(ConversationPeriods.MAX_NAME)});
@@ -4666,11 +4668,12 @@ public class MainActivity extends Activity {
         dialog.setOnShowListener(ignored->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
             final String label=name.getText().toString().trim(),comment=note.getText().toString().trim();
             try{ConversationPeriods.validate(label,comment,start,end);}catch(IllegalArgumentException e){name.setError(e.getMessage());return;}
-            final MessageDb source=db;final String archive=activeKey;
+            if(!sameScreenRequest(source,archive,token)){dialog.dismiss();toast("Переписка изменилась");return;}
+            Button save=dialog.getButton(AlertDialog.BUTTON_POSITIVE);save.setEnabled(false);
             worker.execute(()->{try{source.addPeriod(label,comment,start,end);
-                runOnUiThread(()->{if(!archive.equals(activeKey)||isFinishing())return;
-                    pendingPeriodStart=null;pendingPeriodArchive="";dialog.dismiss();chronologySection="stages";screen="chronology";showPage();});
-            }catch(Exception e){runOnUiThread(()->toast("Не сохранилось: "+e.getMessage()));}});
+                runOnUiThread(()->{if(isDestroyed()||isFinishing())return;dialog.dismiss();if(!sameScreenRequest(source,archive,token))return;
+                    pendingPeriodStart=null;pendingPeriodArchive="";chronologySection="stages";screen="chronology";showPage();});
+            }catch(Exception e){runOnUiThread(()->{if(dialog.isShowing()){save.setEnabled(true);name.setError("Не удалось сохранить этап");}});}});
         }));dialog.show();
     }
     /** Opt-in relationship workspace: no automatic categorization or upload. */
@@ -4699,6 +4702,7 @@ public class MainActivity extends Activity {
     }
     private void createRelationshipEventDialog(MessageDb.Item m){
         if(home||db==null)return;
+        final MessageDb source=db;final String key=activeKey;final int token=loadToken;
         LinearLayout form=column();form.setPadding(px(16),px(4),px(16),px(8));
         EditText name=new EditText(this);name.setSingleLine(true);name.setHint("Например: Первая встреча");
         name.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(90)});
@@ -4709,18 +4713,29 @@ public class MainActivity extends Activity {
         form.addView(description,p(-1,-2));
         TextView explain=text("Событие привяжется к выбранному сообщению. Переписка не меняется. После сохранения можно прикрепить фото, видео, кружки, голосовые и файлы ИЗ ЭТОГО АРХИВА.",12,SUB);
         form.addView(explain);
-        new FontDialog.Builder(this).setTitle("♡ Событие в истории")
-            .setNeutralButton("Как это работает",(d,w)->openHelpChapter(24)).setView(form).setNegativeButton("Отмена",null).setPositiveButton("Сохранить",(dialog,which)->{
-                String label=name.getText().toString(),note=description.getText().toString();
-                if(label.trim().isEmpty()){toast("Название не может быть пустым");return;}
-                final MessageDb source=db;final String key=activeKey;
-                worker.execute(()->{
-                    try{source.addRelationshipEvent(label,note,m.id,0);
-                        runOnUiThread(()->{if(key.equals(activeKey))toast("Событие сохранено → меню ⋮ → Хронология");});
-                    }catch(Exception e){runOnUiThread(()->toast("Событие не сохранено: "+e.getMessage()));}
-                });
-            }).show();
+        AlertDialog eventDialog=new FontDialog.Builder(this).setTitle("Новое событие")
+            .setView(form).setNegativeButton("Отмена",null).setPositiveButton("Сохранить",null).create();
+        eventDialog.setOnShowListener(ignored->eventDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            String label=name.getText().toString().trim(),note=description.getText().toString().trim();
+            if(label.isEmpty()){name.setError("Введи название события");return;}
+            if(!sameScreenRequest(source,key,token)){eventDialog.dismiss();toast("Переписка изменилась");return;}
+            Button save=eventDialog.getButton(AlertDialog.BUTTON_POSITIVE);save.setEnabled(false);
+            worker.execute(()->{
+                try{
+                    if(!source.hasMessage(m.id))throw new IOException("Исходное сообщение не найдено");
+                    source.addRelationshipEvent(label,note,m.id,0);
+                    runOnUiThread(()->{
+                        if(isDestroyed()||isFinishing())return;
+                        eventDialog.dismiss();
+                        if(sameScreenRequest(source,key,token))toast("Событие сохранено в хронологии");
+                    });
+                }catch(Exception e){runOnUiThread(()->{
+                    if(!eventDialog.isShowing())return;save.setEnabled(true);name.setError("Не удалось сохранить событие");
+                });}
+            });
+        }));eventDialog.show();
     }
+
     private LinearLayout relationshipCard(LinearLayout parent,String title){
         LinearLayout card=column();card.setPadding(px(13),px(12),px(13),px(13));
         card.setBackground(glass(PANEL,17));
@@ -4774,7 +4789,7 @@ public class MainActivity extends Activity {
     private void renderRelationshipsPage(){
         int token=++loadToken;
         if(home){screen="chat";showPage();return;}
-        prepareRelationshipScreen("Хронология","События, периоды и воспоминания — по разделам.");
+        prepareRelationshipScreen("Хронология","События, периоды и воспоминания");
         // Find old user-authored events directly, regardless of the current 20-item page.
         // Searching never traverses the private message text or modifies annotations.
         LinearLayout eventSearch=row();eventSearch.setGravity(Gravity.CENTER_VERTICAL);
@@ -4799,18 +4814,22 @@ public class MainActivity extends Activity {
         TextView events=secondaryDisclosure(historyEventsExpanded?
             "01 · События переписки  ▴":"01 · События переписки  ▾");
         list.addView(events,p(-1,44));
-        events.setContentDescription("Раскрыть или свернуть ленту событий");
+        events.setContentDescription("События: личные отметки, привязанные к сообщениям");
         events.setOnClickListener(v->{
             historyEventsExpanded=!historyEventsExpanded;
             renderRelationshipsPage();
         });
         TextView stages=secondaryDisclosure("02 · Этапы переписки  ›");list.addView(stages,p(-1,44));
+        stages.setContentDescription("Этапы: от одного сообщения до другого");
         stages.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="stages";screen="chronology";showPage();});
         TextView calendar=secondaryDisclosure("03 · Периоды по датам  ›");list.addView(calendar,p(-1,44));
+        calendar.setContentDescription("Периоды по датам: личные даты, даже за пределами переписки");
         calendar.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="calendar";screen="chronology";showPage();});
         TextView charts=secondaryDisclosure("04 · Сравнение этапов  ›");list.addView(charts,p(-1,44));
+        charts.setContentDescription("Сравнение этапов: число сообщений и вложений в отмеченных этапах");
         charts.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="chart";screen="chronology";showPage();});
         TextView memories=secondaryDisclosure("05 · В этот день  ›");list.addView(memories,p(-1,48));
+        memories.setContentDescription("В этот день: сообщения за одну дату в разных годах");
         memories.setOnClickListener(v->{LocalDate today=LocalDate.now();showOnThisDay(today.getMonthValue(),today.getDayOfMonth());});
         Button backToChat=btn("+ Отметить событие в переписке");list.addView(backToChat,p(-1,46));
         backToChat.setOnClickListener(v->{screen="chat";showPage();
