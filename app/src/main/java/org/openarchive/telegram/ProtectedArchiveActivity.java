@@ -383,7 +383,20 @@ public final class ProtectedArchiveActivity extends Activity {
         ArrayList<MediaRow> filtered=new ArrayList<>(mediaIndex.getOrDefault(category,Collections.emptyList()));
         if(filtered.isEmpty()){label("В этой категории нет вложений");return;}
         ListView list=new ListView(this);configureList(list);
-        ArrayAdapter<MediaRow> adapter=new ArrayAdapter<>(this,android.R.layout.simple_list_item_1,filtered);
+        ArrayAdapter<MediaRow> adapter=new ArrayAdapter<>(this,android.R.layout.simple_list_item_1,new ArrayList<>(filtered));
+        EditText search=new EditText(this);activeSearch=search;search.setSingleLine(true);search.setSaveEnabled(false);
+        search.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO);
+        search.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
+        search.setHint("Поиск по имени файла");body.addView(search);
+        TextView results=new TextView(this);results.setText("Файлов: "+filtered.size());body.addView(results);
+        search.addTextChangedListener(new android.text.TextWatcher(){
+            @Override public void beforeTextChanged(CharSequence s,int start,int count,int after){}
+            @Override public void onTextChanged(CharSequence s,int start,int before,int count){
+                if(activeSearch==search&&activeList==list&&session!=null)
+                    filterMedia(s.toString(),filtered,list,adapter,results);
+            }
+            @Override public void afterTextChanged(android.text.Editable e){}
+        });
         list.setAdapter(adapter);
         list.setOnItemClickListener((p,v,position,id)->{MediaRow row=adapter.getItem(position);if(row!=null)preview(row.attachment);});
         list.setOnItemLongClickListener((p,v,position,id)->{
@@ -392,6 +405,34 @@ public final class ProtectedArchiveActivity extends Activity {
         });
         body.addView(list,new LinearLayout.LayoutParams(-1,0,1));
         label("Долгое нажатие — перейти к сообщению");
+    }
+    private void filterMedia(String query,List<MediaRow> rows,ListView list,ArrayAdapter<MediaRow> adapter,TextView result){
+        cancelSearch();
+        final int token=generation,searchToken=searchGeneration;
+        final String needle=query.trim().toLowerCase(Locale.ROOT);
+        if(needle.isEmpty()){
+            adapter.setNotifyOnChange(false);adapter.clear();adapter.addAll(rows);adapter.notifyDataSetChanged();
+            result.setText("Файлов: "+rows.size());return;
+        }
+        pendingSearch=()->{
+            pendingSearch=null;
+            if(token!=generation||searchToken!=searchGeneration||activeList!=list)return;
+            searchTask=searchWorker.submit(()->{
+                ArrayList<MediaRow> matches=new ArrayList<>();
+                for(MediaRow row:rows){
+                    if(Thread.currentThread().isInterrupted())return;
+                    String path=row.attachment.path;
+                    String name=Uri.decode(path.substring(path.lastIndexOf('/')+1));
+                    if(name.toLowerCase(Locale.ROOT).contains(needle))matches.add(row);
+                }
+                runOnUiThread(()->{
+                    if(token!=generation||searchToken!=searchGeneration||activeList!=list||session==null)return;
+                    adapter.setNotifyOnChange(false);adapter.clear();adapter.addAll(matches);adapter.notifyDataSetChanged();
+                    result.setText(matches.isEmpty()?"Ничего не найдено":"Найдено: "+matches.size()+" из "+rows.size());
+                });
+            });
+        };
+        searchHandler.postDelayed(pendingSearch,180);
     }
     private void secureShow(AlertDialog dialog){
         if(dialog.getWindow()!=null)dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
@@ -412,6 +453,7 @@ public final class ProtectedArchiveActivity extends Activity {
         if(!picture){
             boolean video="video".equals(media.kind)||"round".equals(media.kind)||("gif".equals(media.kind)||"sticker".equals(media.kind))&&extension.matches(".*\\.(mp4|webm|m4v)");
             if(video||"audio".equals(media.kind)||"voice".equals(media.kind)){playMedia(media,video);return;}
+            if(extension.matches(".*\\.(txt|csv|json|xml|log|md)")){previewText(media);return;}
             Toast.makeText(this,"Этот тип вложения пока не поддерживается в защищённом режиме",Toast.LENGTH_SHORT).show();return;
         }
         cancelPreview();final ProtectedArchiveSession current=session;final int token=generation,previewToken=previewGeneration;
@@ -438,6 +480,34 @@ public final class ProtectedArchiveActivity extends Activity {
                 });
             }catch(Exception|OutOfMemoryError e){runOnUiThread(()->{if(token==generation&&previewToken==previewGeneration){hideLoading();Toast.makeText(this,"Фото не прочитано",Toast.LENGTH_SHORT).show();}});}
             finally{if(data!=null)Arrays.fill(data,(byte)0);}
+        });
+    }
+    private void previewText(TelegramImporter.Media media){
+        cancelPreview();final ProtectedArchiveSession current=session;
+        final int token=generation,previewToken=previewGeneration;
+        final String path=mediaPath(media.path.split("[?#]",2)[0]);
+        final String name=path.substring(path.lastIndexOf('/')+1);
+        showLoading("Читаю текстовый файл…");
+        task=reader.submit(()->{
+            byte[] bytes=null;
+            try{
+                bytes=current.read(path,256*1024);
+                final String text=ProtectedTextPreview.decode(bytes);
+                runOnUiThread(()->{
+                    if(token!=generation||previewToken!=previewGeneration||isFinishing()||isDestroyed())return;
+                    hideLoading();
+                    ScrollView scroll=new ScrollView(this);TextView content=new TextView(this);
+                    content.setPadding(dp(16),dp(8),dp(16),dp(16));content.setTextSize(14);
+                    content.setTypeface(android.graphics.Typeface.MONOSPACE);content.setText(text);
+                    content.setTextIsSelectable(false);content.setSaveEnabled(false);scroll.addView(content);
+                    prompt=new FontDialog.Builder(this).setTitle(name).setView(scroll).setPositiveButton("Закрыть",null).create();
+                    prompt.setOnDismissListener(d->content.setText(""));secureShow(prompt);
+                });
+            }catch(Exception|OutOfMemoryError e){
+                runOnUiThread(()->{if(token==generation&&previewToken==previewGeneration){
+                    hideLoading();Toast.makeText(this,"Не удалось прочитать текст (лимит 256 КБ, UTF-8 / UTF-16)",Toast.LENGTH_LONG).show();
+                }});
+            }finally{if(bytes!=null)Arrays.fill(bytes,(byte)0);}
         });
     }
     private static void closeMediaSource(android.media.MediaDataSource source){try{source.close();}catch(IOException ignored){}}
