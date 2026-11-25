@@ -1,0 +1,74 @@
+name: Protected archive isolated QA
+on:
+  push:
+    branches: [qa/protected-archive-session-20261125]
+  pull_request:
+    branches: [qa/drawer-aes-zip-20261123]
+    paths:
+      - 'app/src/**/ProtectedArchive*.java'
+      - '.github/workflows/protected-archive-qa.yml'
+permissions:
+  contents: read
+concurrency:
+  group: protected-archive-qa-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  protected:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: SDK
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: Build and unit tests
+        run: gradle --no-daemon --max-workers=2 assembleProtectedArchiveQa assembleProtectedArchiveQaAndroidTest testProtectedArchiveQaUnitTest -PqaProtectedArchiveInstrumentation=true
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Protected ZIP session tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          script: gradle --no-daemon --max-workers=2 connectedProtectedArchiveQaAndroidTest -PqaProtectedArchiveInstrumentation=true -Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.ProtectedArchiveSessionTest
+      - name: Test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: protected-archive-test-reports
+          path: |
+            app/build/outputs/androidTest-results/
+            app/build/reports/androidTests/
+            app/build/test-results/
+      - name: Verify isolated offline APK
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/protectedArchiveQa/app-protectedArchiveQa.apk
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -q "package: name='org.openarchive.telegram.qa.protectedarchive20261125'"
+          ! "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$apk" | grep -q 'android.permission.INTERNET'
+          mkdir -p deliver
+          cp "$apk" deliver/TelegramViewer_ProtectedArchive_EXPERIMENTAL.apk
+          (cd deliver && sha256sum *.apk > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: protected-archive-experimental-apk
+          path: deliver/
+          if-no-files-found: error
+          retention-days: 7
