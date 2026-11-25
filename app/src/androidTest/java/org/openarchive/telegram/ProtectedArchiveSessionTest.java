@@ -243,9 +243,12 @@ public final class ProtectedArchiveSessionTest {
             instrumentation.runOnMainSync(()->assertTrue(
                 (screen.getWindow().getAttributes().flags&
                     android.view.WindowManager.LayoutParams.FLAG_SECURE)!=0));
-            androidx.test.espresso.Espresso.onView(
-                androidx.test.espresso.matcher.ViewMatchers.withText(org.hamcrest.Matchers.containsString("Synthetic secure fixture")))
-                .perform(androidx.test.espresso.action.ViewActions.click());
+            android.view.View pinnedButton=awaitText(screen,"Synthetic secure fixture",10000);
+            assertNotNull("Pinned archive is present in actual activity hierarchy",pinnedButton);
+            instrumentation.runOnMainSync(()->{
+                assertTrue("Pinned archive button must be visible and enabled",pinnedButton.isShown()&&pinnedButton.isEnabled());
+                assertTrue(pinnedButton.performClick());
+            });
             androidx.test.espresso.Espresso.onView(
                 androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom(android.widget.EditText.class))
                 .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
