@@ -26,6 +26,7 @@ public final class ProtectedArchiveActivity extends Activity {
     private LinearLayout body;
     private ProtectedArchiveSession session;
     private Future<?> task;
+    private char[] pendingPassword;
     private int generation;
     private AlertDialog prompt;
     private ArrayList<Line> lines;
@@ -121,7 +122,7 @@ public final class ProtectedArchiveActivity extends Activity {
         prompt.setOnDismissListener(d->field.getText().clear());prompt.show();
     }
     private void open(Uri uri,String name,char[] password){
-        lock();final int token=++generation;
+        lock();pendingPassword=password;final int token=++generation;
         body.removeAllViews();title(name);label("Открываю каталог и читаю сообщения без распаковки медиа…");
         button("Отмена",()->{lock();library();});
         task=reader.submit(()->{
@@ -198,7 +199,7 @@ public final class ProtectedArchiveActivity extends Activity {
             Line line=lines.get(position);if(line.media.isEmpty())return;
             String[] names=new String[line.media.size()];
             for(int j=0;j<names.length;j++)names[j]=line.media.get(j).path;
-            new AlertDialog.Builder(this).setItems(names,(d,w)->preview(line.media.get(w))).show();
+            prompt=new AlertDialog.Builder(this).setItems(names,(d,w)->preview(line.media.get(w))).create();prompt.show();
         });
         body.addView(list,new LinearLayout.LayoutParams(-1,0,1));
     }
@@ -233,6 +234,7 @@ public final class ProtectedArchiveActivity extends Activity {
         generation++;
         if(prompt!=null){prompt.dismiss();prompt=null;}
         if(task!=null){task.cancel(true);task=null;}
+        if(pendingPassword!=null){Arrays.fill(pendingPassword,'\0');pendingPassword=null;}
         ProtectedArchiveSession old=session;session=null;
         if(old!=null)reader.execute(old::close);
         if(lines!=null){lines.clear();lines=null;}
