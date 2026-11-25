@@ -1498,8 +1498,22 @@ public class MainActivity extends Activity {
         homeHeading.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
         TextView countLabel=text(String.valueOf(archives.length())+(hiddenChats>0?" · скрыто "+hiddenChats:""),12,SUB);
         homeHeading.addView(countLabel);
-        Button protectedArchives=btn("Защищённые архивы · ZIP / RAR");
-        list.addView(protectedArchives,p(-1,45));
+        // One primary import action stays on the home screen. The protected
+        // library is a navigation destination, not a second import button.
+        int protectedCount=0;
+        try{
+            protectedCount=new JSONArray(getSharedPreferences("protected_archive_pins",MODE_PRIVATE)
+                .getString("items","[]")).length();
+        }catch(JSONException ignored){}
+        TextView protectedArchives=text("Защищённые переписки"+
+            (protectedCount>0?" · "+protectedCount:"")+"   ›",14,ACCENT);
+        protectedArchives.setGravity(Gravity.CENTER_VERTICAL);
+        protectedArchives.setPadding(px(12),0,px(12),0);
+        protectedArchives.setMinHeight(px(48));
+        protectedArchives.setContentDescription("Защищённые архивы ZIP и RAR, открыть библиотеку");
+        protectedArchives.setBackground(new RippleDrawable(ColorStateList.valueOf(0x3390d5ff),
+            shape(0x00000000,12),shape(0xffffffff,12)));
+        list.addView(protectedArchives,p(-1,-2));
         protectedArchives.setOnClickListener(v->startActivity(new Intent(this,ProtectedArchiveActivity.class)));
         JSONArray trash=chatTrash();
         if(trash==null||trash.length()>0){
