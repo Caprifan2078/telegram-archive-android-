@@ -6529,7 +6529,7 @@ public class MainActivity extends Activity {
               });
           }).setNegativeButton("Отмена",null).show();
     }
-    private void mediaActions(MessageDb.Attachment a){
+    private AlertDialog mediaActions(MessageDb.Attachment a){
         boolean round="round".equals(a.kind);
         MediaSavePolicy.Spec spec=MediaSavePolicy.plan(a.path,a.kind,false);
         ArrayList<String> names=new ArrayList<>();ArrayList<Runnable> actions=new ArrayList<>();
@@ -6554,7 +6554,7 @@ public class MainActivity extends Activity {
             toggleMediaSelection(a);screen="media";showPage();
         });
         names.add("Добавить в коллекцию");actions.add(()->addMediaToCollection(java.util.Collections.singletonList(a)));
-        new FontDialog.Builder(this).setTitle(mediaLabel(a.kind)+" · "+day(a.date))
+        return new FontDialog.Builder(this).setTitle(mediaLabel(a.kind)+" · "+day(a.date))
             .setItems(names.toArray(new String[0]),(dlg,which)->actions.get(which).run())
             .setNegativeButton("Закрыть",null).show();
     }
