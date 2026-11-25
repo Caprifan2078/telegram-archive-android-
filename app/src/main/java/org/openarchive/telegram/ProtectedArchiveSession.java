@@ -30,6 +30,8 @@ final class ProtectedArchiveSession implements AutoCloseable {
     private final char[] password;
     private final String format;
     private final Map<String,Entry> entries=new LinkedHashMap<>();
+    private ZipFile zipReader;
+    private final Map<String,net.lingala.zip4j.model.FileHeader> zipHeaders=new HashMap<>();
     private boolean closed;
 
     static ProtectedArchiveSession open(Context context,Uri uri,String format,char[] secret)throws Exception{
@@ -68,7 +70,7 @@ final class ProtectedArchiveSession implements AutoCloseable {
         }
         ProtectedArchiveSession result=new ProtectedArchiveSession(source,temporary,retained,format,secret);
         try{result.index();return result;}
-        catch(Exception ex){result.close();throw ex;}
+        catch(Exception|OutOfMemoryError ex){result.close();throw ex;}
     }
     private ProtectedArchiveSession(File file,boolean temporary,ParcelFileDescriptor retained,String format,char[] secret){
         this.file=file;this.temporary=temporary;this.retainedDescriptor=retained;this.format=format;
@@ -108,11 +110,14 @@ final class ProtectedArchiveSession implements AutoCloseable {
     }
     private void index()throws Exception{
         if("zip".equals(format)){
-            try(ZipFile zip=new ZipFile(file,password)){
-                if(zip.isSplitArchive())throw new IOException("Многотомный ZIP не поддерживается");
-                for(net.lingala.zip4j.model.FileHeader header:zip.getFileHeaders()){
-                    checkCancelled();
-                    if(!header.isDirectory())add(header.getFileName(),header.getUncompressedSize(),header.isEncrypted());
+            zipReader=new ZipFile(file,password);
+            if(zipReader.isSplitArchive())throw new IOException("Многотомный ZIP не поддерживается");
+            for(net.lingala.zip4j.model.FileHeader header:zipReader.getFileHeaders()){
+                checkCancelled();
+                String name=normalized(header.getFileName());
+                if(!header.isDirectory()&&name!=null){
+                    add(header.getFileName(),header.getUncompressedSize(),header.isEncrypted());
+                    zipHeaders.put(name,header);
                 }
             }
         }else{
@@ -139,16 +144,13 @@ final class ProtectedArchiveSession implements AutoCloseable {
         if(limit<0||entry.size<0||entry.size>limit)throw new IOException("Вложение превышает лимит чтения");
         if(entry.encrypted&&password.length==0)throw new IOException("Требуется пароль");
         if("zip".equals(format)){
-            try(ZipFile zip=new ZipFile(file,password)){
-                for(net.lingala.zip4j.model.FileHeader h:zip.getFileHeaders()){
-                    if(h.isDirectory()||!entry.name.equals(normalized(h.getFileName())))continue;
-                    try(InputStream in=zip.getInputStream(h)){
-                        if(transfer(in,destination,limit)!=entry.size)
-                            throw new IOException("Размер ZIP-вложения не совпадает");
-                    }
-                    return;
-                }
+            net.lingala.zip4j.model.FileHeader h=zipHeaders.get(entry.name);
+            if(h==null)throw new FileNotFoundException("Вложение отсутствует");
+            try(InputStream in=zipReader.getInputStream(h)){
+                if(transfer(in,destination,limit)!=entry.size)
+                    throw new IOException("Размер ZIP-вложения не совпадает");
             }
+            return;
         }else{
             try(Archive rar=openRar()){
                 for(FileHeader h:rar.getFileHeaders()){
@@ -181,7 +183,8 @@ final class ProtectedArchiveSession implements AutoCloseable {
     synchronized boolean usesContainerCopy(){return temporary;}
     @Override public synchronized void close(){
         if(closed)return;
-        closed=true;Arrays.fill(password,'\0');entries.clear();
+        closed=true;Arrays.fill(password,'\0');entries.clear();zipHeaders.clear();
+        if(zipReader!=null){try{zipReader.close();}catch(IOException ignored){}zipReader=null;}
         if(retainedDescriptor!=null)try{retainedDescriptor.close();}catch(IOException ignored){}
         if(temporary)file.delete();
     }
