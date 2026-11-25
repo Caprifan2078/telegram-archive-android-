@@ -1258,10 +1258,10 @@ public class MainActivity extends Activity {
             case "serif":chosen=Typeface.SERIF;break;
             case "mono":chosen=Typeface.MONOSPACE;break;
             case "sans":chosen=Typeface.SANS_SERIF;break;
-            case "condensed":chosen=Typeface.create("sans-serif-condensed",0);break;
-            case "casual":chosen=Typeface.create("casual",0);break;
-            case "light":chosen=Typeface.create("sans-serif-light",0);break;
-            case "medium":chosen=Typeface.create("sans-serif-medium",0);break;
+            case "condensed":chosen=Typeface.create("sans-serif-condensed",Typeface.NORMAL);break;
+            case "casual":chosen=Typeface.create("casual",Typeface.NORMAL);break;
+            case "light":chosen=Typeface.create("sans-serif-light",Typeface.NORMAL);break;
+            case "medium":chosen=Typeface.create("sans-serif-medium",Typeface.NORMAL);break;
             case "custom":chosen=Typeface.createFromFile(FontManager.customFile(this));break;
             default:chosen=Typeface.DEFAULT;
         }
@@ -3916,8 +3916,8 @@ public class MainActivity extends Activity {
                 fmtPct(r.meanSwitchMinutes)+" минут · пар сообщений: "+r.switchCount,FG,14);
             analyticsText(response,"Учитываются соседние сообщения разных отправителей с датой и перерывом до 24 часов. Это приблизительная оценка темпа общения, а не подтверждённое время ответа на конкретное сообщение. В группах точность особенно ограничена.",SUB,11);
         }else analyticsText(response,"Не удалось собрать подходящие пары сообщений.",SUB,12);
-            renderParticipantComparison(r);
-            return;
+        renderParticipantComparison(r);
+        return;
         }
         if("content".equals(analyticsSection)){
             analyticsSectionHeading("О чём переписка","Фотографии, видео, голосовые, частые слова и активные даты.");
