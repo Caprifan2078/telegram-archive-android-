@@ -4682,7 +4682,7 @@ public class MainActivity extends Activity {
         // refreshing the header they still display stale "Мои переписки" and
         // its home subtitle while showing an unrelated workspace.
         refreshTabs();
-        title.setText("Хронология");
+        title.setText("dual_compare".equals(screen)||"dual_memories".equals(screen)?"Сравнение переписок":"Хронология");
         subtitle.setText("relationships".equals(screen)?"Личные события и инструменты":heading);
         if(scheduledPrefetch!=null){handler.removeCallbacks(scheduledPrefetch);scheduledPrefetch=null;}
         bottomNav.setVisibility(View.GONE);pinnedBar.removeAllViews();
@@ -4813,19 +4813,19 @@ public class MainActivity extends Activity {
         });
         TextView events=secondaryDisclosure(historyEventsExpanded?
             "01 · События переписки  ▴":"01 · События переписки  ▾");
-        list.addView(events,p(-1,44));
+        list.addView(events,p(-1,48));
         events.setContentDescription("События: личные отметки, привязанные к сообщениям");
         events.setOnClickListener(v->{
             historyEventsExpanded=!historyEventsExpanded;
             renderRelationshipsPage();
         });
-        TextView stages=secondaryDisclosure("02 · Этапы переписки  ›");list.addView(stages,p(-1,44));
+        TextView stages=secondaryDisclosure("02 · Этапы переписки  ›");list.addView(stages,p(-1,48));
         stages.setContentDescription("Этапы: от одного сообщения до другого");
         stages.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="stages";screen="chronology";showPage();});
-        TextView calendar=secondaryDisclosure("03 · Периоды по датам  ›");list.addView(calendar,p(-1,44));
+        TextView calendar=secondaryDisclosure("03 · Периоды по датам  ›");list.addView(calendar,p(-1,48));
         calendar.setContentDescription("Периоды по датам: личные даты, даже за пределами переписки");
         calendar.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="calendar";screen="chronology";showPage();});
-        TextView charts=secondaryDisclosure("04 · Сравнение этапов  ›");list.addView(charts,p(-1,44));
+        TextView charts=secondaryDisclosure("04 · Сравнение этапов  ›");list.addView(charts,p(-1,48));
         charts.setContentDescription("Сравнение этапов: число сообщений и вложений в отмеченных этапах");
         charts.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="chart";screen="chronology";showPage();});
         TextView memories=secondaryDisclosure("05 · В этот день  ›");list.addView(memories,p(-1,48));
@@ -4834,7 +4834,8 @@ public class MainActivity extends Activity {
         Button backToChat=btn("+ Отметить событие в переписке");list.addView(backToChat,p(-1,46));
         backToChat.setOnClickListener(v->{screen="chat";showPage();
             toast("Удерживай важное сообщение и выбери «Добавить событие истории»");});
-        analyticsText(list,"Все отметки личные: оригинальные сообщения и файлы не изменяются.",SUB,12);
+        analyticsText(list,"Событие — одно сообщение. Этап — между двумя сообщениями. Период — любые даты.",SUB,12);
+        analyticsText(list,"Личные отметки не меняют оригиналы.",SUB,12);
         TextView more=secondaryDisclosure("Другие инструменты истории  ▾");
         list.addView(more,p(-1,44));
         LinearLayout advanced=column();advanced.setVisibility(View.GONE);list.addView(advanced,p(-1,-2));
@@ -5100,11 +5101,11 @@ public class MainActivity extends Activity {
         if(first.equals(second)||!canOpenQuoteArchive(first)||!canOpenQuoteArchive(second)){
             toast("Выбери две разные зарегистрированные переписки");screen="relationships";showPage();return;
         }
-        prepareRelationshipScreen(isTimeline?"◷ Воспоминания двух переписок":"⇄ Сравнение диалогов",
-            "Две локальные базы. Сообщения, личности и медиа не объединяются, в интернет ничего не отправляется.");
-        Button back=btn("‹ К разделу «Хронология»");list.addView(back,p(-1,45));
-        back.setOnClickListener(v->{screen="relationships";showPage();});
-        Button other=btn("⇄ Сменить вторую переписку");list.addView(other,p(-1,45));
+        prepareRelationshipScreen(isTimeline?"Общая история":"Статистика двух чатов",
+            "Сравнение локальных архивов без изменения сообщений.");
+        TextView pair=text(activeName+"  /  "+dualSecondName,15,FG);
+        pair.setPadding(px(8),px(9),px(8),px(9));pair.setMaxLines(3);list.addView(pair,p(-1,-2));
+        Button other=btn("Выбрать второй чат");list.addView(other,p(-1,48));
         other.setOnClickListener(v->chooseDualChat(mode));
         LinearLayout modes=row();list.addView(modes,p(-1,48));
         Button metrics=btn("Статистика");Button timeline=btn("Общая история");
@@ -5113,11 +5114,12 @@ public class MainActivity extends Activity {
         metrics.setEnabled(isTimeline);timeline.setEnabled(!isTimeline);
         metrics.setOnClickListener(v->{screen="dual_compare";showPage();});
         timeline.setOnClickListener(v->{screen="dual_memories";showPage();});
-        Button yearButton=btn("Год: "+year+"  ▾");list.addView(yearButton,p(-1,45));
+        LinearLayout dates=row();list.addView(dates,p(-1,48));
+        Button yearButton=btn("Год: "+year+"  ▾");dates.addView(yearButton,new LinearLayout.LayoutParams(0,-1,1));
         yearButton.setOnClickListener(v->chooseDualYear());
         if(isTimeline){
-            Button monthButton=btn("Период: "+(month==0?"весь год":String.format(Locale.ROOT,"%02d",month))+"  ▾");
-            list.addView(monthButton,p(-1,45));monthButton.setOnClickListener(v->chooseDualMonth());
+            Button monthButton=btn(month==0?"Весь год  ▾":String.format(Locale.ROOT,"%02d · месяц ▾",month));
+            dates.addView(monthButton,new LinearLayout.LayoutParams(0,-1,1));monthButton.setOnClickListener(v->chooseDualMonth());
         }
         TextView progress=text("Сверяю локальные базы в режиме чтения…",13,SUB);list.addView(progress,p(-1,-2));
         final String firstName=activeName,secondName=dualSecondName;
@@ -5155,8 +5157,8 @@ public class MainActivity extends Activity {
     }
     private void renderDualComparison(DualChatRepository.Snapshot a,DualChatRepository.Snapshot b,
                                       String firstName,String secondName){
-        LinearLayout summary=relationshipCard(list,"Два диалога · общие показатели");
-        analyticsText(summary,"A: "+firstName+"    Б: "+secondName,FG,13);
+        LinearLayout summary=relationshipCard(list,"За всё время");
+        analyticsText(summary,"Первый чат / второй чат",SUB,12);
         analyticsText(summary,"Сообщения: "+a.messages+" / "+b.messages,FG,14);
         analyticsText(summary,"С текстом: "+a.withText+" / "+b.withText,FG,13);
         analyticsText(summary,"Участники (в каждом чате отдельно): "+a.participants+" / "+b.participants,FG,13);
@@ -5172,11 +5174,11 @@ public class MainActivity extends Activity {
                 " записей на чат). Полные счётчики выше не ограничены.",0xffffc377,12);
         analyticsText(yearCard,"График по месяцам · A синий, Б оранжевый. Шкала общая.",SUB,12);
         drawDualMonthlyBars(yearCard,a.calendar.counts(),b.calendar.counts());
-        LinearLayout media=relationshipCard(list,"Медиа по категориям");
+        LinearLayout media=relationshipCard(list,"Вложения за всё время");
         java.util.TreeSet<String> kinds=new java.util.TreeSet<>();
         kinds.addAll(a.mediaTypes.keySet());kinds.addAll(b.mediaTypes.keySet());
         if(kinds.isEmpty())analyticsText(media,"В этих чатах вложения пока не индексированы.",SUB,12);
-        for(String kind:kinds)analyticsText(media,kind+": "+a.mediaTypes.getOrDefault(kind,0L)+
+        for(String kind:kinds)analyticsText(media,mediaLabel(kind)+": "+a.mediaTypes.getOrDefault(kind,0L)+
             " / "+b.mediaTypes.getOrDefault(kind,0L),FG,12);
         status.setText("Сравнение двух диалогов · без изменения данных");
     }
