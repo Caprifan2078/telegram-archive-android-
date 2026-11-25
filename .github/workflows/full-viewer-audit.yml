@@ -1,9 +1,9 @@
 name: Full Viewer regression audit
 on:
   push:
-    branches: [qa/full-viewer-audit-20261126]
+    branches: [qa/full-viewer-audit-20261126, qa/unified-feature-navigation-20261126]
   pull_request:
-    branches: [qa/protected-video-regression-20261125]
+    branches: [qa/protected-video-regression-20261125, qa/protected-player-lifecycle-20261126]
     paths:
       - 'app/**'
       - '.github/workflows/full-viewer-audit.yml'
