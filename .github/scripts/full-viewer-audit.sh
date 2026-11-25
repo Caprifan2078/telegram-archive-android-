@@ -19,5 +19,10 @@ mkdir -p app/build/ui-audit
 adb logcat -d -t 5000 > app/build/ui-audit/logcat.txt || true
 if [[ "${1:-}" == navigation ]]; then
   adb pull /sdcard/Download/ app/build/ui-audit/ || true
+  adb pull /sdcard/Pictures/TelegramViewerVisualAudit/ app/build/ui-audit/ || true
+  if ! find app/build/ui-audit -name "05-chat*.png" -print -quit | grep -q .; then
+    echo "Missing synthetic chat screenshots from visual audit" >&2
+    if [[ "$result" == 0 ]]; then result=4; fi
+  fi
 fi
 exit "$result"
