@@ -224,7 +224,10 @@ public final class ProtectedArchiveSessionTest {
         String old=prefs.getString("items",null);
         android.app.Activity activity=null;
         try{
-            Files.write(html.toPath(),("<html><body><div class=\"history\"><div class=\"message default\" id=\"message7\"><div class=\"body\"><div class=\"from_name\">Test</div><div class=\"text\">"+marker+"</div></div></div></div></body></html>").getBytes(StandardCharsets.UTF_8));
+            Files.write(html.toPath(),("<html><body><div class=\"history\">"+
+                "<div class=\"message default\" id=\"message7\"><div class=\"body\"><div class=\"from_name\">Test</div><div class=\"text\">"+marker+"</div><a href=\"photos/example.jpg\">Photo</a></div></div>"+
+                "<div class=\"message default\" id=\"message8\"><div class=\"body\"><div class=\"from_name\">Test</div><div class=\"text\">SecondarySyntheticMessage</div><a href=\"round_video/example.mp4\">Round</a></div></div>"+
+                "</div></body></html>").getBytes(StandardCharsets.UTF_8));
             try(ZipFile writer=new ZipFile(zip,password)){
                 ZipParameters p=new ZipParameters();p.setFileNameInZip("messages.html");
                 p.setEncryptFiles(true);p.setEncryptionMethod(EncryptionMethod.AES);
@@ -286,6 +289,33 @@ public final class ProtectedArchiveSessionTest {
                 .perform(androidx.test.espresso.action.ViewActions.click());
             android.view.View message=awaitText(screen,marker,15000);
             assertNotNull("Message appears after correct password",message);
+            assertNotNull("Second message is visible",awaitText(screen,"SecondarySyntheticMessage",5000));
+            android.view.View media=awaitText(screen,"Медиа · 2",5000);
+            assertNotNull("Indexed media count",media);
+            instrumentation.runOnMainSync(media::performClick);
+            android.view.View photos=awaitText(screen,"Фото 1",5000);
+            assertNotNull("Indexed photo category",photos);
+            assertNotNull("Indexed round-video category",awaitText(screen,"Кружки 1",5000));
+            instrumentation.runOnMainSync(photos::performClick);
+            assertNotNull("Filtered photo is visible",awaitText(screen,"example.jpg",5000));
+            instrumentation.runOnMainSync(()->assertNull("Round excluded from photos",
+                findText(screen.getWindow().getDecorView(),"example.mp4")));
+            instrumentation.runOnMainSync(screen::onBackPressed);
+            assertNotNull("Back returns to chat",awaitText(screen,marker,5000));
+            androidx.test.espresso.Espresso.onView(
+                androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom(android.widget.EditText.class))
+                .perform(androidx.test.espresso.action.ViewActions.replaceText(marker),
+                    androidx.test.espresso.action.ViewActions.closeSoftKeyboard());
+            long searchDeadline=android.os.SystemClock.uptimeMillis()+5000;
+            java.util.concurrent.atomic.AtomicBoolean filtered=new java.util.concurrent.atomic.AtomicBoolean();
+            do{
+                instrumentation.runOnMainSync(()->filtered.set(
+                    findText(screen.getWindow().getDecorView(),"SecondarySyntheticMessage")==null));
+                if(filtered.get())break;
+                android.os.SystemClock.sleep(100);
+            }while(android.os.SystemClock.uptimeMillis()<searchDeadline);
+            assertTrue("Search removes nonmatching rows",filtered.get());
+            assertNotNull("Search retains matching message",awaitText(screen,marker,5000));
             android.view.View lock=awaitText(screen,"Заблокировать",5000);
             assertNotNull("Lock action available",lock);
             instrumentation.runOnMainSync(lock::performClick);
