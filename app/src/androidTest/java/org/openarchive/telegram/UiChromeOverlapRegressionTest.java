@@ -251,4 +251,47 @@ public final class UiChromeOverlapRegressionTest {
             });
         }
     }
+    @Test public void pinnedBarLoadsForCurrentPageAndRejectsPreviousChatRequests()throws Exception{
+        MainActivity a=rule.getActivity();idle(a);
+        String key="qa_pins_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb synthetic=new MessageDb(a,key);
+        SQLiteDatabase sql=synthetic.getWritableDatabase();
+        long id=synthetic.stage(sql,"Synthetic","2026-11-01 12:00","QA_PINNED",null,"");
+        synthetic.publishStaged(sql);synthetic.togglePinned(id);
+        Object oldDb=get(a,"db"),oldKey=get(a,"activeKey"),oldName=get(a,"activeName"),
+            oldHome=get(a,"home"),oldScreen=get(a,"screen");
+        try{
+            inst.runOnMainSync(()->{
+                try{
+                    put(a,"db",synthetic);put(a,"activeKey",key);put(a,"activeName","QA pins");
+                    put(a,"home",false);put(a,"screen","chat");call(a,"showPage");
+                }catch(Exception e){throw new AssertionError(e);}
+            });
+            idle(a);
+            inst.runOnMainSync(()->{
+                try{
+                    LinearLayout pinned=(LinearLayout)get(a,"pinnedBar");
+                    assertTrue("Current chat must actually display its pin",pinned.getChildCount()>0);
+                    int generation=(Integer)get(a,"loadToken");
+                    Method guard=MainActivity.class.getDeclaredMethod("sameScreenRequest",MessageDb.class,String.class,int.class);
+                    guard.setAccessible(true);
+                    assertEquals(true,guard.invoke(a,synthetic,key,generation));
+                    assertEquals(false,guard.invoke(a,synthetic,key,generation-1));
+                    assertEquals(false,guard.invoke(a,synthetic,"another-chat",generation));
+                    put(a,"screen","media");call(a,"showPage");
+                    assertEquals("Leaving chat clears pin overlay",0,pinned.getChildCount());
+                    assertEquals(false,guard.invoke(a,synthetic,key,generation));
+                }catch(Exception e){throw new AssertionError(e);}
+            });
+        }finally{
+            idle(a);
+            inst.runOnMainSync(()->{
+                try{
+                    put(a,"db",oldDb);put(a,"activeKey",oldKey);put(a,"activeName",oldName);
+                    put(a,"home",oldHome);put(a,"screen",oldScreen);call(a,"showPage");
+                }catch(Exception e){throw new AssertionError(e);}
+            });
+            synthetic.close();a.deleteDatabase("telegram_"+key+".db");
+        }
+    }
 }
