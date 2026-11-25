@@ -58,7 +58,7 @@ public final class ProtectedArchiveActivity extends Activity {
     private void library(){
         body.removeAllViews();
         title("Защищённые архивы · экспериментально");
-        label("ZIP / RAR · HTML Telegram. Сохраняется только ссылка на файл. Пароль нужен при каждом открытии.");
+        label("ZIP / RAR · HTML и JSON Telegram. Сохраняется только ссылка на файл. Пароль нужен при каждом открытии.");
         button("Добавить архив",()->{
             Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE)
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
@@ -119,7 +119,9 @@ public final class ProtectedArchiveActivity extends Activity {
             .setNegativeButton("Отмена",(d,w)->field.getText().clear())
             .setPositiveButton("Открыть",(d,w)->{
                 char[] password=new char[field.length()];field.getText().getChars(0,field.length(),password,0);
-                field.getText().clear();open(uri,name,password);
+                field.getText().clear();
+                if(password.length==0){Toast.makeText(this,"Введи пароль защищённого архива",Toast.LENGTH_SHORT).show();return;}
+                open(uri,name,password);
             }).create();
         prompt.setOnDismissListener(d->field.getText().clear());prompt.show();
     }
@@ -134,18 +136,33 @@ public final class ProtectedArchiveActivity extends Activity {
                 opened=ProtectedArchiveSession.open(this,uri,format,password);
                 List<ProtectedArchiveSession.Entry> parts=new ArrayList<>();
                 String selectedRoot=null;
+                ProtectedArchiveSession.Entry jsonPart=null;boolean multipleJson=false;
                 for(ProtectedArchiveSession.Entry e:opened.list()){
                     String base=e.name.substring(e.name.lastIndexOf('/')+1);
+                    if("result.json".equalsIgnoreCase(base)){
+                        if(jsonPart!=null)multipleJson=true;
+                        jsonPart=e;
+                    }
                     if(!base.matches("(?i)^messages\\d*\\.html$"))continue;
                     String parent=e.name.substring(0,e.name.length()-base.length());
                     if(selectedRoot==null)selectedRoot=parent;
                     else if(!selectedRoot.equals(parent))throw new IOException("В архиве несколько чатов");
                     parts.add(e);
                 }
-                if(parts.isEmpty())throw new IOException("Нет HTML Telegram");
+                if(parts.isEmpty()&&(jsonPart==null||multipleJson))throw new IOException("Нет одиночного HTML или JSON чата Telegram");
                 parts.sort(Comparator.comparingInt(e->DocumentFolder.partNo(e.name.substring(e.name.lastIndexOf('/')+1))));
                 ArrayList<Line> messages=new ArrayList<>();long characters=0;String previousAuthor="";
+                if(parts.isEmpty()){
+                    if(!jsonPart.encrypted)throw new IOException("JSON не защищён паролем. Используй обычный импорт.");
+                    selectedRoot=jsonPart.name.substring(0,jsonPart.name.lastIndexOf('/')+1);
+                    byte[] json=opened.read(jsonPart.name,HTML_LIMIT);
+                    try{
+                        for(ProtectedJsonChat.Message m:ProtectedJsonChat.parse(new ByteArrayInputStream(json)))
+                            messages.add(new Line(m.display,m.media));
+                    }finally{Arrays.fill(json,(byte)0);}
+                }
                 for(ProtectedArchiveSession.Entry part:parts){
+                    if(!part.encrypted)throw new IOException("Часть сообщений не защищена паролем. Используй обычный импорт.");
                     if(Thread.currentThread().isInterrupted())throw new InterruptedIOException();
                     byte[] html=opened.read(part.name,HTML_LIMIT);
                     try(TelegramHtmlStream stream=new TelegramHtmlStream(new ByteArrayInputStream(html))){
@@ -185,7 +202,7 @@ public final class ProtectedArchiveActivity extends Activity {
                     if(token!=generation||isFinishing()||isDestroyed())return;
                     library();
                     new AlertDialog.Builder(this).setTitle("Не удалось открыть")
-                        .setMessage("Проверь пароль, формат и свободное место. Эта версия поддерживает один HTML-чат; некоторые архивы могут не поддерживаться.")
+                        .setMessage("Проверь пароль, формат и свободное место. Поддерживается один зашифрованный HTML или JSON чат; многотомные и некоторые RAR архивы могут не открываться.")
                         .setNegativeButton("Закрыть",null).setPositiveButton("Повторить",(d,w)->ask(uri,name)).show();
                 });
             }finally{Arrays.fill(password,'\0');if(opened!=null)opened.close();}
@@ -196,9 +213,16 @@ public final class ProtectedArchiveActivity extends Activity {
         label(lines.size()+" сообщений · пароль только в памяти");
         button("Заблокировать",()->{lock();library();});
         ListView list=new ListView(this);
-        list.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_list_item_1,lines));
+        ArrayAdapter<Line> adapter=new ArrayAdapter<>(this,android.R.layout.simple_list_item_1,new ArrayList<>(lines));
+        list.setAdapter(adapter);
+        EditText search=new EditText(this);search.setSingleLine(true);search.setSaveEnabled(false);search.setHint("Поиск по переписке");
+        search.addTextChangedListener(new android.text.TextWatcher(){
+            @Override public void beforeTextChanged(CharSequence s,int start,int count,int after){}
+            @Override public void onTextChanged(CharSequence s,int start,int before,int count){adapter.getFilter().filter(s);}
+            @Override public void afterTextChanged(android.text.Editable e){}
+        });body.addView(search);
         list.setOnItemClickListener((a,v,position,id)->{
-            Line line=lines.get(position);if(line.media.isEmpty())return;
+            Line line=adapter.getItem(position);if(line==null||line.media.isEmpty())return;
             String[] names=new String[line.media.size()];
             for(int j=0;j<names.length;j++)names[j]=line.media.get(j).path;
             prompt=new AlertDialog.Builder(this).setItems(names,(d,w)->preview(line.media.get(w))).create();prompt.show();
