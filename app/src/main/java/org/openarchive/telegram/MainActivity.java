@@ -3511,7 +3511,7 @@ public class MainActivity extends Activity {
         archivePassword.setTextColor(FG);
         archivePassword.setHintTextColor(SUB);
         archivePassword.setPadding(px(18),px(10),px(18),px(10));
-        new FontDialog.Builder(this).setTitle("Этот архив защищён паролем")
+        android.app.AlertDialog passwordDialog=new FontDialog.Builder(this).setTitle("Этот архив защищён паролем")
             .setMessage("Введи пароль для открытия "+displayName+". Пароль не сохраняется.")
             .setView(archivePassword).setNegativeButton("Отмена",null)
             .setPositiveButton("Открыть",(d,w)->{
@@ -3522,7 +3522,13 @@ public class MainActivity extends Activity {
                     toast("Пароль не указан");return;
                 }
                 importCompressed(source,ext,displayName,password);
-            }).show();
+            }).create();
+        passwordDialog.setOnDismissListener(d->archivePassword.getText().clear());
+        if(passwordDialog.getWindow()!=null)
+            passwordDialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
+        passwordDialog.show();
+        if(passwordDialog.getWindow()!=null)
+            passwordDialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
     }
     private void importCompressed(Uri source,String extension,String label,char[] password){
         if(importing){if(password!=null)java.util.Arrays.fill(password,'\0');return;}
@@ -6343,7 +6349,29 @@ public class MainActivity extends Activity {
                 holder.setScaleX(zoom);holder.setScaleY(zoom);return true;
             }
         });
-        holder.setOnTouchListener((v,e)->{videoZoom.onTouchEvent(e);return e.getPointerCount()>1;});
+        holder.setOnTouchListener(new View.OnTouchListener(){
+            private boolean pinch;
+            @Override public boolean onTouch(View v,MotionEvent e){
+                int action=e.getActionMasked();
+                if(action==MotionEvent.ACTION_DOWN)pinch=false;
+                videoZoom.onTouchEvent(e);
+                if(e.getPointerCount()>1||action==MotionEvent.ACTION_POINTER_DOWN){
+                    if(!pinch){v.cancelLongPress();v.setPressed(false);}
+                    pinch=true;
+                }
+                if(pinch){
+                    if(action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL){
+                        pinch=false;v.cancelLongPress();v.setPressed(false);
+                        MotionEvent cancel=MotionEvent.obtain(e);
+                        cancel.setAction(MotionEvent.ACTION_CANCEL);
+                        try{v.onTouchEvent(cancel);}finally{cancel.recycle();}
+                    }
+                    return true;
+                }
+                // Normal tap/long press uses the View's standard accessible click handling.
+                return false;
+            }
+        });
         holder.setTag(controls);
         holder.setOnClickListener(v->{
             if(chatCircle){
