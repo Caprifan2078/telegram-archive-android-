@@ -27,6 +27,8 @@ public final class ProtectedArchiveActivity extends Activity {
     private ProtectedArchiveSession session;
     private Future<?> task;
     private char[] pendingPassword;
+    private ProtectedMediaPlayer mediaPlayer;
+    private int previewGeneration;
     private int generation;
     private AlertDialog prompt;
     private ArrayList<Line> lines;
@@ -205,8 +207,12 @@ public final class ProtectedArchiveActivity extends Activity {
     }
     private void preview(TelegramImporter.Media media){
         if(session==null)return;
-        if(!"image".equals(media.kind)){Toast.makeText(this,"В экспериментальном режиме пока доступны текст и фото",Toast.LENGTH_SHORT).show();return;}
-        final ProtectedArchiveSession current=session;final int token=generation;
+        if(!"image".equals(media.kind)){
+            boolean video="video".equals(media.kind)||"round".equals(media.kind)||"gif".equals(media.kind)&&media.path.toLowerCase(Locale.ROOT).matches(".*\\.(mp4|webm|m4v)([?#].*)?");
+            if(video||"audio".equals(media.kind)||"voice".equals(media.kind)){playMedia(media,video);return;}
+            Toast.makeText(this,"Этот тип вложения пока не поддерживается в защищённом режиме",Toast.LENGTH_SHORT).show();return;
+        }
+        cancelPreview();final ProtectedArchiveSession current=session;final int token=generation,previewToken=previewGeneration;
         String raw=media.path.split("[?#]",2)[0];
         String path=root+Uri.decode(raw);
         task=reader.submit(()->{
@@ -221,17 +227,48 @@ public final class ProtectedArchiveActivity extends Activity {
                 opts.inJustDecodeBounds=false;Bitmap bitmap=BitmapFactory.decodeByteArray(data,0,data.length,opts);
                 if(bitmap==null)throw new IOException("Некорректное фото");
                 runOnUiThread(()->{
-                    if(token!=generation||isFinishing()||isDestroyed()){bitmap.recycle();return;}
+                    if(token!=generation||previewToken!=previewGeneration||isFinishing()||isDestroyed()){bitmap.recycle();return;}
                     ImageView image=new ImageView(this);image.setImageBitmap(bitmap);image.setAdjustViewBounds(true);
                     prompt=new AlertDialog.Builder(this).setView(image).setPositiveButton("Закрыть",null).create();
                     prompt.setOnDismissListener(d->{image.setImageDrawable(null);bitmap.recycle();});prompt.show();
                 });
-            }catch(Exception e){runOnUiThread(()->{if(token==generation)Toast.makeText(this,"Фото не прочитано",Toast.LENGTH_SHORT).show();});}
+            }catch(Exception e){runOnUiThread(()->{if(token==generation&&previewToken==previewGeneration)Toast.makeText(this,"Фото не прочитано",Toast.LENGTH_SHORT).show();});}
             finally{if(data!=null)Arrays.fill(data,(byte)0);}
         });
     }
+    private void cancelPreview(){
+        previewGeneration++;
+        if(mediaPlayer!=null){mediaPlayer.close();mediaPlayer=null;}
+        if(task!=null){task.cancel(true);task=null;}
+    }
+    private void playMedia(TelegramImporter.Media media,boolean video){
+        cancelPreview();
+        final ProtectedArchiveSession current=session;final int token=generation,previewToken=previewGeneration;
+        final String path=root+Uri.decode(media.path.split("[?#]",2)[0]);
+        Runtime runtime=Runtime.getRuntime();
+        long headroom=runtime.maxMemory()-(runtime.totalMemory()-runtime.freeMemory());
+        final long limit=Math.min(64L*1024*1024,Math.max(0,headroom/3));
+        if(limit<1024*1024){Toast.makeText(this,"Недостаточно оперативной памяти для медиа",Toast.LENGTH_SHORT).show();return;}
+        Toast.makeText(this,"Читаю выбранное вложение…",Toast.LENGTH_SHORT).show();
+        task=reader.submit(()->{
+            ProtectedMediaSource source=null;
+            try{
+                source=ProtectedMediaSource.load(current,path,limit);
+                final ProtectedMediaSource ready=source;
+                source=null;
+                runOnUiThread(()->{
+                    if(token!=generation||previewToken!=previewGeneration||isFinishing()||isDestroyed()){ready.close();return;}
+                    try{mediaPlayer=new ProtectedMediaPlayer(this,ready,video);}
+                    catch(RuntimeException e){ready.close();Toast.makeText(this,"Плеер не открылся",Toast.LENGTH_SHORT).show();}
+                });
+            }catch(Exception|OutOfMemoryError e){
+                runOnUiThread(()->{if(token==generation&&previewToken==previewGeneration)
+                    Toast.makeText(this,"Вложение не прочитано или превышает лимит "+(limit/(1024*1024))+" МБ",Toast.LENGTH_LONG).show();});
+            }finally{if(source!=null)source.close();}
+        });
+    }
     private void lock(){
-        generation++;
+        generation++;cancelPreview();
         if(prompt!=null){prompt.dismiss();prompt=null;}
         if(task!=null){task.cancel(true);task=null;}
         if(pendingPassword!=null){Arrays.fill(pendingPassword,'\0');pendingPassword=null;}
