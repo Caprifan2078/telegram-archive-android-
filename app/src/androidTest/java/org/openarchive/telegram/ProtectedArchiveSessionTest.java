@@ -102,4 +102,28 @@ public final class ProtectedArchiveSessionTest {
             assertArrayEquals(TEXT,output);
         }finally{zip.delete();Arrays.fill(secret,'\0');}
     }
+    @Test public void largeEncryptedCacheSupportsSeekingAndIsDeletedWhenLocked()throws Exception{
+        int block=ProtectedEncryptedMediaSource.BLOCK;
+        byte[] input=new byte[block+1000];new java.util.Random(19).nextBytes(input);
+        ProtectedEncryptedMediaSource cache=new ProtectedEncryptedMediaSource(context.getCacheDir(),input.length);
+        File file=cache.cacheFileForTest();
+        try{
+            cache.sink().write(input);cache.seal();
+            assertEquals(input.length,cache.getSize());
+            byte[] onDisk=Files.readAllBytes(file.toPath());
+            assertEquals(input.length+2*ProtectedEncryptedMediaSource.TAG,onDisk.length);
+            assertFalse(Arrays.equals(Arrays.copyOf(input,128),Arrays.copyOf(onDisk,128)));
+            byte[] actual=new byte[1500];
+            assertEquals(1500,cache.readAt(block-500,actual,0,1500));
+            assertArrayEquals(Arrays.copyOfRange(input,block-500,block+1000),actual);
+            try(RandomAccessFile edit=new RandomAccessFile(file,"rw")){
+                edit.seek(0);edit.write(onDisk[0]^1);
+            }
+            // The last cached block is block 1; reading block 0 must authenticate again.
+            try{cache.readAt(0,new byte[16],0,16);fail("Modified ciphertext must fail authentication");}
+            catch(IOException expected){}
+        }finally{cache.close();}
+        assertFalse(file.exists());
+        try{cache.getSize();fail("Locked cache readable");}catch(IOException expected){}
+    }
 }
