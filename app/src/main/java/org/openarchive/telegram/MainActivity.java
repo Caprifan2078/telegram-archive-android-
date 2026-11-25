@@ -3676,6 +3676,14 @@ public class MainActivity extends Activity {
         }
         final String tab=screen,kind=mediaKind,search=q,who=byAuthor;
         final int requested=getOffset();final boolean deepMode=deep,hasMedia=onlyMedia;
+        if("media".equals(tab)){
+            // Never expose the previous category/chat beneath the new filter.
+            // Keep the requested source offset, but invalidate all old pages.
+            mediaTotal=0;mediaLoaded=0;mediaWindowStart=0;
+            mediaAppending=false;mediaPrepending=false;
+            mediaFastScroller.setVisibility(View.GONE);
+            mediaAdapter.reset();
+        }
         backPage.setEnabled(false);nextPage.setEnabled(false);status.setVisibility(View.VISIBLE);status.setText("Загружаю…");
         worker.execute(()->{
             try{
@@ -5965,17 +5973,16 @@ public class MainActivity extends Activity {
             try{earlier=source.mediaPage(kind,start,amount);}
             catch(Exception error){
                 runOnUiThread(()->{
-                    mediaPrepending=false;
-                    if(token==loadToken&&"media".equals(screen))
+                    if(token==loadToken&&db==source&&"media".equals(screen)&&kind.equals(mediaKind)){
+                        mediaPrepending=false;
                         status.setText("Не удалось загрузить более ранние файлы");
+                    }
                 });return;
             }
             final List<MessageDb.Attachment> prior=earlier;
             runOnUiThread(()->{
                 if(isFinishing()||isDestroyed()||token!=loadToken||db!=source||
-                    !archive.equals(activeKey)||!"media".equals(screen)||!kind.equals(mediaKind)){
-                    mediaPrepending=false;return;
-                }
+                    !archive.equals(activeKey)||!"media".equals(screen)||!kind.equals(mediaKind))return;
                 mediaPrepending=false;
                 if(prior.isEmpty())return;
                 int firstVisible=Math.max(0,mediaLayout.findFirstVisibleItemPosition());
@@ -5997,7 +6004,7 @@ public class MainActivity extends Activity {
     /** Fetch only the next 30 from SQLite; never reset scroll when the next page arrives. */
     private void maybeAppendMedia(){
         if(mediaRecycler==null||mediaLayout==null||mediaAppending
-            ||!"media".equals(screen)||home||importing||db==null
+            ||mediaPrepending||!"media".equals(screen)||home||importing||db==null
             ||mediaLoaded>=mediaTotal||mediaAdapter.getItemCount()==0)return;
         int last=mediaLayout.findLastVisibleItemPosition();
         if(last<mediaAdapter.getItemCount()-10)return;
@@ -6010,13 +6017,14 @@ public class MainActivity extends Activity {
             try{next=source.mediaPage(filter,from,MediaGalleryState.PAGE_SIZE);}
             catch(Exception error){
                 runOnUiThread(()->{
-                    if(token==loadToken&&"media".equals(screen))status.setText("Не удалось догрузить медиа. Прокрути ещё раз.");
-                    mediaAppending=false;
+                    if(token==loadToken&&db==source&&"media".equals(screen)&&filter.equals(mediaKind)){
+                        mediaAppending=false;status.setText("Не удалось догрузить медиа. Прокрути ещё раз.");
+                    }
                 });return;
             }
             runOnUiThread(()->{
                 if(isFinishing()||token!=loadToken||db!=source||!archive.equals(activeKey)
-                    ||!"media".equals(screen)||!filter.equals(mediaKind)){mediaAppending=false;return;}
+                    ||!"media".equals(screen)||!filter.equals(mediaKind))return;
                 mediaAdapter.append(next);
                 mediaLoaded+=next.size();
                 if(next.isEmpty())mediaLoaded=mediaTotal;
