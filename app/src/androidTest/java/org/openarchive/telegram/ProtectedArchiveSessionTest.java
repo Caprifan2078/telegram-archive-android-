@@ -72,4 +72,34 @@ public final class ProtectedArchiveSessionTest {
             }
         }finally{zip.delete();Arrays.fill(secret,'\0');}
     }
+    @Test public void ramMediaSupportsRandomAccessAndRefusesReadsAfterLock()throws Exception{
+        byte[] input=new byte[600000];
+        new java.util.Random(71).nextBytes(input);
+        ProtectedMediaSource source=new ProtectedMediaSource(input.length);
+        try{
+            try{source.getSize();fail("Unsealed source must not be readable");}catch(IOException expected){}
+            OutputStream out=source.sink();out.write(input);
+            try{out.write(1);fail("Limit must be enforced");}catch(IOException expected){}
+            source.seal();assertEquals(input.length,source.getSize());
+            byte[] actual=new byte[330000];
+            int count=source.readAt(250000,actual,7,300000);
+            assertEquals(300000,count);
+            assertArrayEquals(Arrays.copyOfRange(input,250000,550000),Arrays.copyOfRange(actual,7,300007));
+            assertEquals(10,source.readAt(input.length-10,actual,0,20));
+            assertEquals(-1,source.readAt(input.length,actual,0,1));
+            assertEquals(0,source.readAt(input.length,actual,0,0));
+        }finally{source.close();}
+        try{source.readAt(0,new byte[1],0,1);fail("Locked source must refuse reads");}catch(IOException expected){}
+        source.close();
+    }
+
+    @Test public void encryptedArchiveAttachmentCanFeedSeekableMediaWithoutPlaintextFile()throws Exception{
+        char[] secret="synthetic-password".toCharArray();File zip=createZip(secret);
+        try(ProtectedArchiveSession session=ProtectedArchiveSession.open(context,Uri.fromFile(zip),"zip",secret);
+            ProtectedMediaSource media=ProtectedMediaSource.load(session,"Chat/photos/photo.jpg",1024)){
+            byte[] output=new byte[TEXT.length];
+            assertEquals(TEXT.length,media.readAt(0,output,0,output.length));
+            assertArrayEquals(TEXT,output);
+        }finally{zip.delete();Arrays.fill(secret,'\0');}
+    }
 }
