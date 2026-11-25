@@ -65,7 +65,7 @@ final class ProtectedMediaPlayer implements AutoCloseable {
         dialog=new AlertDialog.Builder(context).setTitle(video?"Видео":"Аудио")
             .setView(box).setPositiveButton("Закрыть",null).create();
         dialog.setOnDismissListener(d->close());
-        dialog.getWindow(); // window becomes available after show
+        if(dialog.getWindow()!=null)dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         dialog.show();
         if(dialog.getWindow()!=null)dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         if(!video)start(null);
