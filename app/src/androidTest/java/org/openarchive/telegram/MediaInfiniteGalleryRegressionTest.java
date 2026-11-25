@@ -89,6 +89,9 @@ public final class MediaInfiniteGalleryRegressionTest {
                     activity.getPreferences(Context.MODE_PRIVATE).edit()
                         .putBoolean("gallery_grid_round",true).commit();
                     invoke(activity,"showPage",new Class<?>[0]);
+                    RecyclerView.Adapter<?> current=gallery.getAdapter();
+                    assertNotNull("Gallery adapter",current);
+                    assertEquals("Old category must disappear immediately while new media is loading",0,current.getItemCount());
                 }catch(Exception e){throw new AssertionError(e);}
             });
             // The old mixed gallery already has >= 90 attachments. A count-only
