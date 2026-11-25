@@ -252,6 +252,32 @@ public final class ProtectedArchiveSessionTest {
             androidx.test.espresso.Espresso.onView(
                 androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom(android.widget.EditText.class))
                 .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                .perform(androidx.test.espresso.action.ViewActions.replaceText("wrong-password"),
+                    androidx.test.espresso.action.ViewActions.closeSoftKeyboard());
+            androidx.test.espresso.Espresso.onView(
+                androidx.test.espresso.matcher.ViewMatchers.withText("Открыть"))
+                .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                .perform(androidx.test.espresso.action.ViewActions.click());
+            // The error dialog is produced by an archive worker; wait for it
+            // using Espresso's real dialog root rather than disabling FLAG_SECURE.
+            long retryUntil=android.os.SystemClock.uptimeMillis()+15000;
+            boolean retried=false;
+            while(!retried&&android.os.SystemClock.uptimeMillis()<retryUntil){
+                try{
+                    androidx.test.espresso.Espresso.onView(
+                        androidx.test.espresso.matcher.ViewMatchers.withText("Повторить"))
+                        .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                        .perform(androidx.test.espresso.action.ViewActions.click());
+                    retried=true;
+                }catch(androidx.test.espresso.NoMatchingViewException|androidx.test.espresso.NoMatchingRootException e){
+                    android.os.SystemClock.sleep(100);
+                }
+            }
+            assertTrue("Wrong password must show a retry dialog",retried);
+            instrumentation.runOnMainSync(()->assertNull(findText(screen.getWindow().getDecorView(),marker)));
+            androidx.test.espresso.Espresso.onView(
+                androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom(android.widget.EditText.class))
+                .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
                 .perform(androidx.test.espresso.action.ViewActions.replaceText("protected-ui-test"),
                     androidx.test.espresso.action.ViewActions.closeSoftKeyboard());
             androidx.test.espresso.Espresso.onView(
@@ -340,5 +366,50 @@ public final class ProtectedArchiveSessionTest {
                     &&android.graphics.Color.green(color)<80&&android.graphics.Color.blue(color)<80);
             }finally{frame.recycle();}
         }finally{retriever.release();}
+    }
+    @Test public void corruptArchiveAndMissingEntriesFailWithoutPublishingData()throws Exception{
+        char[] secret="synthetic-password".toCharArray();File valid=createZip(secret);
+        File broken=File.createTempFile("protected-truncated-",".zip",context.getCacheDir());
+        try{
+            byte[] bytes=Files.readAllBytes(valid.toPath());
+            Files.write(broken.toPath(),Arrays.copyOf(bytes,Math.min(30,bytes.length)));
+            boolean rejected=false;
+            try(ProtectedArchiveSession invalid=ProtectedArchiveSession.open(context,Uri.fromFile(broken),"zip",secret)){
+                invalid.read("Chat/messages.html",1024);
+            }catch(Exception expected){rejected=true;}
+            assertTrue("Truncated ZIP must be rejected",rejected);
+            try(ProtectedArchiveSession session=ProtectedArchiveSession.open(context,Uri.fromFile(valid),"zip",secret)){
+                assertEquals(TEXT.length,session.entrySize("Chat/messages.html"));
+                for(String invalid:new String[]{"Chat/missing.jpg","../Chat/messages.html","/Chat/messages.html","Chat//messages.html"}){
+                    try{session.entrySize(invalid);fail("Invalid entry unexpectedly resolved");}catch(IOException expected){}
+                }
+                assertArrayEquals(TEXT,session.read("Chat/messages.html",TEXT.length));
+                try{session.read("Chat/messages.html",TEXT.length-1);fail("Entry over limit");}catch(IOException expected){}
+            }
+            assertArrayEquals(bytes,Files.readAllBytes(valid.toPath()));
+        }finally{valid.delete();broken.delete();Arrays.fill(secret,'\0');}
+    }
+    @Test public void cancellationDiscardsEncryptedCacheAndSessionRemainsUsable()throws Exception{
+        char[] secret="synthetic-password".toCharArray();File zip=createZip(secret);
+        java.util.Set<String> before=protectedMediaCaches();
+        try(ProtectedArchiveSession session=ProtectedArchiveSession.open(context,Uri.fromFile(zip),"zip",secret)){
+            java.util.concurrent.atomic.AtomicReference<Throwable> failure=new java.util.concurrent.atomic.AtomicReference<>();
+            Thread cancelled=new Thread(()->{
+                Thread.currentThread().interrupt();
+                try(ProtectedEncryptedMediaSource result=ProtectedEncryptedMediaSource.load(
+                    context,session,"Chat/photos/photo.jpg",1024)){
+                    failure.set(new AssertionError("Cancelled read published cache"));
+                }catch(Exception expected){}catch(Throwable unexpected){failure.set(unexpected);}
+            },"synthetic-cancelled-protected-reader");
+            cancelled.start();cancelled.join(10000);
+            assertFalse("Cancelled reader must finish",cancelled.isAlive());
+            assertNull(failure.get());
+            assertEquals(before,protectedMediaCaches());
+            assertArrayEquals(TEXT,session.read("Chat/messages.html",1024));
+        }finally{zip.delete();Arrays.fill(secret,'\0');}
+    }
+    private java.util.Set<String> protectedMediaCaches(){
+        String[] names=context.getCacheDir().list((dir,name)->name.startsWith("protected-media-")&&name.endsWith(".enc"));
+        return names==null?new java.util.HashSet<>():new java.util.HashSet<>(Arrays.asList(names));
     }
 }
