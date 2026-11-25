@@ -252,6 +252,32 @@ public final class ProtectedArchiveSessionTest {
             androidx.test.espresso.Espresso.onView(
                 androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom(android.widget.EditText.class))
                 .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                .perform(androidx.test.espresso.action.ViewActions.replaceText("wrong-password"),
+                    androidx.test.espresso.action.ViewActions.closeSoftKeyboard());
+            androidx.test.espresso.Espresso.onView(
+                androidx.test.espresso.matcher.ViewMatchers.withText("Открыть"))
+                .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                .perform(androidx.test.espresso.action.ViewActions.click());
+            // The error dialog is produced by an archive worker; wait for it
+            // using Espresso's real dialog root rather than disabling FLAG_SECURE.
+            long retryUntil=android.os.SystemClock.uptimeMillis()+15000;
+            boolean retried=false;
+            while(!retried&&android.os.SystemClock.uptimeMillis()<retryUntil){
+                try{
+                    androidx.test.espresso.Espresso.onView(
+                        androidx.test.espresso.matcher.ViewMatchers.withText("Повторить"))
+                        .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                        .perform(androidx.test.espresso.action.ViewActions.click());
+                    retried=true;
+                }catch(androidx.test.espresso.NoMatchingViewException|androidx.test.espresso.NoMatchingRootException e){
+                    android.os.SystemClock.sleep(100);
+                }
+            }
+            assertTrue("Wrong password must show a retry dialog",retried);
+            instrumentation.runOnMainSync(()->assertNull(findText(screen.getWindow().getDecorView(),marker)));
+            androidx.test.espresso.Espresso.onView(
+                androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom(android.widget.EditText.class))
+                .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
                 .perform(androidx.test.espresso.action.ViewActions.replaceText("protected-ui-test"),
                     androidx.test.espresso.action.ViewActions.closeSoftKeyboard());
             androidx.test.espresso.Espresso.onView(
@@ -296,5 +322,94 @@ public final class ProtectedArchiveSessionTest {
             }
         }
         return null;
+    }
+    // Synthetic one-second, 32x32 red H.264 MP4; generated with FFmpeg,
+    // not taken from a user archive. Validated by ffprobe and a full decode.
+    private static final String VIDEO_FIXTURE="AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAN1bW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAA+gAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAqB0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAA+gAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAACAAAAAgAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAPoAAAQAAABAAAAAAIYbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAAoAAAAKABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABw21pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAYNzdGJsAAAAv3N0c2QAAAAAAAAAAQAAAK9hdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAACAAIABIAAAASAAAAAAAAAABFUxhdmM2MS4xOS4xMDEgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAANWF2Y0MBZAAK/+EAGGdkAAqs2UlsBEAAAAMAQAAAAwKDxIllgAEABmjr48siwP34+AAAAAAQcGFzcAAAAAEAAAABAAAAFGJ0cnQAAAAAAAAYCAAAAAAAAAAYc3R0cwAAAAAAAAABAAAABQAACAAAAAAUc3RzcwAAAAAAAAABAAAAAQAAADhjdHRzAAAAAAAAAAUAAAABAAAQAAAAAAEAACgAAAAAAQAAEAAAAAABAAAAAAAAAAEAAAgAAAAAHHN0c2MAAAAAAAAAAQAAAAEAAAAFAAAAAQAAAChzdHN6AAAAAAAAAAAAAAAFAAAC0AAAAA0AAAAMAAAADAAAAAwAAAAUc3RjbwAAAAAAAAABAAADpQAAAGF1ZHRhAAAAWW1ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAG1kaXJhcHBsAAAAAAAAAAAAAAAALGlsc3QAAAAkqXRvbwAAABxkYXRhAAAAAQAAAABMYXZmNjEuNy4xMDMAAAAIZnJlZQAAAwltZGF0AAACrQYF//+p3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE2NCByMzEwOCAzMWUxOWY5IC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAyMyAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTEgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MzoweDExMyBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MSBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tMiB0aHJlYWRzPTEgbG9va2FoZWFkX3RocmVhZHM9MSBzbGljZWRfdGhyZWFkcz0wIG5yPTAgZGVjaW1hdGU9MSBpbnRlcmxhY2VkPTAgYmx1cmF5X2NvbXBhdD0wIGNvbnN0cmFpbmVkX2ludHJhPTAgYmZyYW1lcz0zIGJfcHlyYW1pZD0yIGJfYWRhcHQ9MSBiX2JpYXM9MCBkaXJlY3Q9MSB3ZWlnaHRiPTEgb3Blbl9nb3A9MCB3ZWlnaHRwPTIga2V5aW50PTI1MCBrZXlpbnRfbWluPTUgc2NlbmVjdXQ9NDAgaW50cmFfcmVmcmVzaD0wIHJjX2xvb2thaGVhZD00MCByYz1jcmYgbWJ0cmVlPTEgY3JmPTIzLjAgcWNvbXA9MC42MCBxcG1pbj0wIHFwbWF4PTY5IHFwc3RlcD00IGlwX3JhdGlvPTEuNDAgYXE9MToxLjAwAIAAAAAbZYiEABL//ujJ/MsrL+PUN7NGKbNJpxuwcC/hAAAACUGaJGxD//6rgAAAAAhBnkJ4gh81IQAAAAgBnmF0Q/9EQAAAAAgBnmNqQ/9EQQ==";
+    @Test public void protectedVideoDecodesFromEncryptedArchiveAndEncryptedCache()throws Exception{
+        byte[] mp4=android.util.Base64.decode(VIDEO_FIXTURE,android.util.Base64.DEFAULT);
+        assertEquals(1702,mp4.length);
+        File input=File.createTempFile("synthetic-protected-video-",".mp4",context.getCacheDir());
+        File zip=File.createTempFile("synthetic-protected-video-",".zip",context.getCacheDir());
+        assertTrue(zip.delete());
+        char[] secret="synthetic-video-password".toCharArray();
+        try{
+            Files.write(input.toPath(),mp4);
+            try(ZipFile writer=new ZipFile(zip,secret)){
+                ZipParameters p=new ZipParameters();p.setFileNameInZip("Chat/video_files/test.mp4");
+                p.setEncryptFiles(true);p.setEncryptionMethod(EncryptionMethod.AES);
+                p.setAesKeyStrength(AesKeyStrength.KEY_STRENGTH_256);writer.addFile(input,p);
+            }
+            assertTrue(input.delete()); // no plaintext fixture remains during decode
+            try(ProtectedArchiveSession session=ProtectedArchiveSession.open(context,Uri.fromFile(zip),"zip",secret)){
+                try(ProtectedMediaSource ram=ProtectedMediaSource.load(session,"Chat/video_files/test.mp4",4096)){
+                    verifyDecodedFrame(ram);
+                }
+                try(ProtectedEncryptedMediaSource encrypted=ProtectedEncryptedMediaSource.load(context,session,"Chat/video_files/test.mp4",4096)){
+                    verifyDecodedFrame(encrypted);
+                }
+            }
+        }finally{input.delete();zip.delete();Arrays.fill(secret,'\0');Arrays.fill(mp4,(byte)0);}
+    }
+    private static void verifyDecodedFrame(android.media.MediaDataSource source)throws Exception{
+        android.media.MediaMetadataRetriever retriever=new android.media.MediaMetadataRetriever();
+        try{
+            retriever.setDataSource(source);
+            assertEquals("32",retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH));
+            assertEquals("32",retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT));
+            android.graphics.Bitmap frame=retriever.getFrameAtTime(400000,
+                android.media.MediaMetadataRetriever.OPTION_CLOSEST);
+            assertNotNull("H.264 decoder must return an actual frame",frame);
+            try{
+                int color=frame.getPixel(frame.getWidth()/2,frame.getHeight()/2);
+                assertTrue("Expected red synthetic frame",android.graphics.Color.red(color)>180
+                    &&android.graphics.Color.green(color)<80&&android.graphics.Color.blue(color)<80);
+            }finally{frame.recycle();}
+        }finally{retriever.release();}
+    }
+    @Test public void corruptArchiveAndMissingEntriesFailWithoutPublishingData()throws Exception{
+        char[] secret="synthetic-password".toCharArray();File valid=createZip(secret);
+        File broken=File.createTempFile("protected-truncated-",".zip",context.getCacheDir());
+        try{
+            byte[] bytes=Files.readAllBytes(valid.toPath());
+            Files.write(broken.toPath(),Arrays.copyOf(bytes,Math.min(30,bytes.length)));
+            boolean rejected=false;
+            try(ProtectedArchiveSession invalid=ProtectedArchiveSession.open(context,Uri.fromFile(broken),"zip",secret)){
+                invalid.read("Chat/messages.html",1024);
+            }catch(Exception expected){rejected=true;}
+            assertTrue("Truncated ZIP must be rejected",rejected);
+            try(ProtectedArchiveSession session=ProtectedArchiveSession.open(context,Uri.fromFile(valid),"zip",secret)){
+                assertEquals(TEXT.length,session.entrySize("Chat/messages.html"));
+                for(String invalid:new String[]{"Chat/missing.jpg","../Chat/messages.html","/Chat/messages.html","Chat//messages.html"}){
+                    try{session.entrySize(invalid);fail("Invalid entry unexpectedly resolved");}catch(IOException expected){}
+                }
+                assertArrayEquals(TEXT,session.read("Chat/messages.html",TEXT.length));
+                try{session.read("Chat/messages.html",TEXT.length-1);fail("Entry over limit");}catch(IOException expected){}
+            }
+            assertArrayEquals(bytes,Files.readAllBytes(valid.toPath()));
+        }finally{valid.delete();broken.delete();Arrays.fill(secret,'\0');}
+    }
+    @Test public void cancellationDiscardsEncryptedCacheAndSessionRemainsUsable()throws Exception{
+        char[] secret="synthetic-password".toCharArray();File zip=createZip(secret);
+        java.util.Set<String> before=protectedMediaCaches();
+        try(ProtectedArchiveSession session=ProtectedArchiveSession.open(context,Uri.fromFile(zip),"zip",secret)){
+            java.util.concurrent.atomic.AtomicReference<Throwable> failure=new java.util.concurrent.atomic.AtomicReference<>();
+            Thread cancelled=new Thread(()->{
+                Thread.currentThread().interrupt();
+                try(ProtectedEncryptedMediaSource result=ProtectedEncryptedMediaSource.load(
+                    context,session,"Chat/photos/photo.jpg",1024)){
+                    failure.set(new AssertionError("Cancelled read published cache"));
+                }catch(Exception expected){}catch(Throwable unexpected){failure.set(unexpected);}
+            },"synthetic-cancelled-protected-reader");
+            cancelled.start();cancelled.join(10000);
+            assertFalse("Cancelled reader must finish",cancelled.isAlive());
+            assertNull(failure.get());
+            assertEquals(before,protectedMediaCaches());
+            assertArrayEquals(TEXT,session.read("Chat/messages.html",1024));
+        }finally{zip.delete();Arrays.fill(secret,'\0');}
+    }
+    private java.util.Set<String> protectedMediaCaches(){
+        String[] names=context.getCacheDir().list((dir,name)->name.startsWith("protected-media-")&&name.endsWith(".enc"));
+        return names==null?new java.util.HashSet<>():new java.util.HashSet<>(Arrays.asList(names));
     }
 }

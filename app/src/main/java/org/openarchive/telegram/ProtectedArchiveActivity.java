@@ -24,6 +24,11 @@ public final class ProtectedArchiveActivity extends Activity {
     private static final int PICK=81, HTML_LIMIT=32*1024*1024, IMAGE_LIMIT=16*1024*1024;
     private static final java.util.concurrent.atomic.AtomicBoolean ORPHANS_SCANNED=new java.util.concurrent.atomic.AtomicBoolean();
     private final ExecutorService reader=Executors.newSingleThreadExecutor();
+    private final ExecutorService searchWorker=Executors.newSingleThreadExecutor();
+    private final android.os.Handler searchHandler=new android.os.Handler(android.os.Looper.getMainLooper());
+    private Future<?> searchTask;
+    private Runnable pendingSearch;
+    private int searchGeneration;
     private LinearLayout body;
     private ProtectedArchiveSession session;
     private Future<?> task;
@@ -31,7 +36,7 @@ public final class ProtectedArchiveActivity extends Activity {
     private ProtectedMediaPlayer mediaPlayer;
     private int previewGeneration;
     private int generation;
-    private AlertDialog prompt;
+    private AlertDialog prompt,loadingDialog;
     private ArrayList<Line> lines;
     private String openedName="";
     private boolean showingMedia;
@@ -232,19 +237,20 @@ public final class ProtectedArchiveActivity extends Activity {
                         for(TelegramImporter.Media attachment:lines.get(index).media)mediaRows.add(new MediaRow(attachment,index));
                     showChat(name);
                 });
-            }catch(Exception e){
+            }catch(Exception|OutOfMemoryError e){
                 runOnUiThread(()->{
                     if(token!=generation||isFinishing()||isDestroyed())return;
-                    library();
-                    new AlertDialog.Builder(this).setTitle("Не удалось открыть")
+                    lock();library();
+                    prompt=new AlertDialog.Builder(this).setTitle("Не удалось открыть")
                         .setMessage("Проверь пароль, формат и свободное место. Поддерживается один зашифрованный HTML или JSON чат; многотомные и некоторые RAR архивы могут не открываться.")
-                        .setNegativeButton("Закрыть",null).setPositiveButton("Повторить",(d,w)->ask(uri,name)).show();
+                        .setNegativeButton("Закрыть",null).setPositiveButton("Повторить",(d,w)->ask(uri,name)).create();
+                    secureShow(prompt);
                 });
             }finally{Arrays.fill(password,'\0');if(opened!=null)opened.close();}
         });
     }
     private void sessionHeader(String name,String detail,Runnable toggle,String toggleLabel){
-        detachPrivateViews();body.removeAllViews();title(name);label(detail);
+        cancelPreview();detachPrivateViews();body.removeAllViews();title(name);label(detail);
         LinearLayout controls=new LinearLayout(this);
         Button change=new Button(this);change.setText(toggleLabel);
         controls.addView(change,new LinearLayout.LayoutParams(0,-2,1));change.setOnClickListener(v->toggle.run());
@@ -255,7 +261,10 @@ public final class ProtectedArchiveActivity extends Activity {
     }
     private void rememberPosition(){
         if(chatList==null)return;
-        chatPosition=chatList.getFirstVisiblePosition();
+        int visiblePosition=chatList.getFirstVisiblePosition();
+        Object first=chatList.getItemAtPosition(visiblePosition);
+        int originalPosition=lines==null?-1:lines.indexOf(first);
+        chatPosition=originalPosition>=0?originalPosition:0;
         chatTop=chatList.getChildCount()==0?0:chatList.getChildAt(0).getTop();
     }
     private void configureList(ListView list){
@@ -280,15 +289,7 @@ public final class ProtectedArchiveActivity extends Activity {
             @Override public void beforeTextChanged(CharSequence s,int start,int count,int after){}
             @Override public void onTextChanged(CharSequence s,int start,int before,int count){
                 if(lines==null||activeSearch!=search||activeList!=list)return;
-                String q=s.toString().toLowerCase(Locale.ROOT);
-                adapter.setNotifyOnChange(false);adapter.clear();
-                for(int i=0;i<lines.size();i++){
-                    Line line=lines.get(i);
-                    if(q.isEmpty()||line.text.toLowerCase(Locale.ROOT).contains(q)){
-                        adapter.add(line);
-                    }
-                }
-                adapter.notifyDataSetChanged();
+                filterChat(s.toString(),list,adapter);
             }
             @Override public void afterTextChanged(android.text.Editable e){}
         });body.addView(search);
@@ -301,6 +302,41 @@ public final class ProtectedArchiveActivity extends Activity {
         });
         body.addView(list,new LinearLayout.LayoutParams(-1,0,1));
         list.setSelectionFromTop(Math.min(chatPosition,Math.max(0,lines.size()-1)),chatTop);
+    }
+    private void cancelSearch(){
+        searchGeneration++;
+        if(pendingSearch!=null){searchHandler.removeCallbacks(pendingSearch);pendingSearch=null;}
+        if(searchTask!=null){searchTask.cancel(true);searchTask=null;}
+    }
+    private void filterChat(String query,ListView list,ArrayAdapter<Line> adapter){
+        cancelSearch();
+        if(lines==null)return;
+        final int token=generation,searchToken=searchGeneration;
+        final String needle=query.toLowerCase(Locale.ROOT);
+        if(needle.isEmpty()){
+            adapter.setNotifyOnChange(false);adapter.clear();adapter.addAll(lines);adapter.notifyDataSetChanged();
+            return;
+        }
+        // Capture references, not a second copy of message strings. Never read
+        // the mutable activity list from the background thread after locking.
+        final ArrayList<Line> snapshot=new ArrayList<>(lines);
+        pendingSearch=()->{
+            pendingSearch=null;
+            if(token!=generation||searchToken!=searchGeneration||activeList!=list)return;
+            searchTask=searchWorker.submit(()->{
+                ArrayList<Line> matches=new ArrayList<>();
+                for(Line line:snapshot){
+                    if(Thread.currentThread().isInterrupted())return;
+                    if(line.text.toLowerCase(Locale.ROOT).contains(needle))matches.add(line);
+                }
+                runOnUiThread(()->{
+                    if(token!=generation||searchToken!=searchGeneration||activeList!=list||lines==null)return;
+                    adapter.setNotifyOnChange(false);adapter.clear();adapter.addAll(matches);
+                    adapter.notifyDataSetChanged();
+                });
+            });
+        };
+        searchHandler.postDelayed(pendingSearch,180);
     }
     private static final String[] MEDIA_KEYS={"all","image","video","round","voice","audio","gif","sticker","file"};
     private static final String[] MEDIA_NAMES={"Все","Фото","Видео","Кружки","Голосовые","Музыка","GIF","Стикеры","Файлы"};
@@ -343,14 +379,19 @@ public final class ProtectedArchiveActivity extends Activity {
     }
     private void preview(TelegramImporter.Media media){
         if(session==null)return;
-        if(!"image".equals(media.kind)){
-            boolean video="video".equals(media.kind)||"round".equals(media.kind)||"gif".equals(media.kind)&&media.path.toLowerCase(Locale.ROOT).matches(".*\\.(mp4|webm|m4v)([?#].*)?");
+        String extension=media.path.toLowerCase(Locale.ROOT).split("[?#]",2)[0];
+        boolean picture="image".equals(media.kind)||
+            ("gif".equals(media.kind)||"sticker".equals(media.kind))&&
+            extension.matches(".*\\.(gif|webp|png|jpg|jpeg|bmp)");
+        if(!picture){
+            boolean video="video".equals(media.kind)||"round".equals(media.kind)||("gif".equals(media.kind)||"sticker".equals(media.kind))&&extension.matches(".*\\.(mp4|webm|m4v)");
             if(video||"audio".equals(media.kind)||"voice".equals(media.kind)){playMedia(media,video);return;}
             Toast.makeText(this,"Этот тип вложения пока не поддерживается в защищённом режиме",Toast.LENGTH_SHORT).show();return;
         }
         cancelPreview();final ProtectedArchiveSession current=session;final int token=generation,previewToken=previewGeneration;
         String raw=media.path.split("[?#]",2)[0];
-        String path=root+Uri.decode(raw);
+        String path=mediaPath(raw);
+        showLoading("Читаю фотографию…");
         task=reader.submit(()->{
             byte[] data=null;
             try{
@@ -364,36 +405,50 @@ public final class ProtectedArchiveActivity extends Activity {
                 if(bitmap==null)throw new IOException("Некорректное фото");
                 runOnUiThread(()->{
                     if(token!=generation||previewToken!=previewGeneration||isFinishing()||isDestroyed()){bitmap.recycle();return;}
+                    hideLoading();
                     ImageView image=new ImageView(this);image.setImageBitmap(bitmap);image.setAdjustViewBounds(true);
                     prompt=new AlertDialog.Builder(this).setView(image).setPositiveButton("Закрыть",null).create();
                     prompt.setOnDismissListener(d->{image.setImageDrawable(null);bitmap.recycle();});secureShow(prompt);
                 });
-            }catch(Exception e){runOnUiThread(()->{if(token==generation&&previewToken==previewGeneration)Toast.makeText(this,"Фото не прочитано",Toast.LENGTH_SHORT).show();});}
+            }catch(Exception|OutOfMemoryError e){runOnUiThread(()->{if(token==generation&&previewToken==previewGeneration){hideLoading();Toast.makeText(this,"Фото не прочитано",Toast.LENGTH_SHORT).show();}});}
             finally{if(data!=null)Arrays.fill(data,(byte)0);}
         });
     }
     private static void closeMediaSource(android.media.MediaDataSource source){try{source.close();}catch(IOException ignored){}}
+    private String mediaPath(String raw){
+        String path=Uri.decode(raw).replace('\\','/');
+        while(path.startsWith("./"))path=path.substring(2);
+        return root+path;
+    }
+    private void showLoading(String message){
+        hideLoading();
+        loadingDialog=new AlertDialog.Builder(this).setTitle(message)
+            .setMessage("Читается только выбранное вложение")
+            .setNegativeButton("Отмена",(d,w)->cancelPreview()).create();
+        loadingDialog.setOnCancelListener(d->cancelPreview());secureShow(loadingDialog);
+    }
+    private void hideLoading(){
+        AlertDialog old=loadingDialog;loadingDialog=null;if(old!=null)old.dismiss();
+    }
     private void cancelPreview(){
-        previewGeneration++;
+        previewGeneration++;hideLoading();
         if(mediaPlayer!=null){mediaPlayer.close();mediaPlayer=null;}
         if(task!=null){task.cancel(true);task=null;}
     }
     private void playMedia(TelegramImporter.Media media,boolean video){
         cancelPreview();
         final ProtectedArchiveSession current=session;final int token=generation,previewToken=previewGeneration;
-        final String path=root+Uri.decode(media.path.split("[?#]",2)[0]);
+        final String path=mediaPath(media.path.split("[?#]",2)[0]);
         Runtime runtime=Runtime.getRuntime();
         long headroom=runtime.maxMemory()-(runtime.totalMemory()-runtime.freeMemory());
         final long limit=Math.min(64L*1024*1024,Math.max(0,headroom/3));
 
-        Toast.makeText(this,"Читаю выбранное вложение…",Toast.LENGTH_SHORT).show();
+        showLoading("Читаю выбранное вложение…");
         task=reader.submit(()->{
             android.media.MediaDataSource source=null;
             try{
-                long size=-1;
-                String wanted=path.replace('\\','/');
-                for(ProtectedArchiveSession.Entry e:current.list())if(e.name.equals(wanted)){size=e.size;break;}
-                if(size<0)throw new FileNotFoundException("Вложение отсутствует");
+                long size=current.entrySize(path);
+                if(size<0)throw new IOException("Некорректный размер вложения");
                 if(size<=limit&&limit>0)source=ProtectedMediaSource.load(current,path,limit);
                 else{
                     long free=ArchiveFileImport.maxTemporaryCopyForFreeBytes(getCacheDir().getUsableSpace());
@@ -405,16 +460,18 @@ public final class ProtectedArchiveActivity extends Activity {
                 source=null;
                 runOnUiThread(()->{
                     if(token!=generation||previewToken!=previewGeneration||isFinishing()||isDestroyed()){closeMediaSource(ready);return;}
+                    hideLoading();
                     try{mediaPlayer=new ProtectedMediaPlayer(this,ready,video);}
                     catch(RuntimeException e){closeMediaSource(ready);Toast.makeText(this,"Плеер не открылся",Toast.LENGTH_SHORT).show();}
                 });
             }catch(Exception|OutOfMemoryError e){
-                runOnUiThread(()->{if(token==generation&&previewToken==previewGeneration)
-                    Toast.makeText(this,"Вложение не прочитано: проверь формат и свободное место",Toast.LENGTH_LONG).show();});
+                runOnUiThread(()->{if(token==generation&&previewToken==previewGeneration){
+                    hideLoading();Toast.makeText(this,"Вложение не прочитано: проверь формат и свободное место",Toast.LENGTH_LONG).show();}});
             }finally{if(source!=null)closeMediaSource(source);}
         });
     }
     private void detachPrivateViews(){
+        cancelSearch();
         if(activeList!=null){
             android.widget.ListAdapter old=activeList.getAdapter();
             activeList.setOnItemClickListener(null);activeList.setOnItemLongClickListener(null);
@@ -436,5 +493,5 @@ public final class ProtectedArchiveActivity extends Activity {
         root="";body.removeAllViews();
     }
     @Override protected void onStop(){lock();library();super.onStop();}
-    @Override protected void onDestroy(){lock();reader.shutdown();super.onDestroy();}
+    @Override protected void onDestroy(){lock();reader.shutdown();searchWorker.shutdownNow();super.onDestroy();}
 }
