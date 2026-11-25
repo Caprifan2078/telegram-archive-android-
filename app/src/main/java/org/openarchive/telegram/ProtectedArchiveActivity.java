@@ -43,7 +43,22 @@ public final class ProtectedArchiveActivity extends Activity {
     private int chatPosition,chatTop;
     private ListView chatList,activeList;
     private EditText activeSearch;
-    private final ArrayList<MediaRow> mediaRows=new ArrayList<>();
+    private Map<String,List<MediaRow>> mediaIndex=Collections.emptyMap();
+    private int mediaCount(){return mediaIndex.getOrDefault("all",Collections.emptyList()).size();}
+    private static Map<String,List<MediaRow>> buildMediaIndex(List<Line> messages)throws InterruptedIOException{
+        Map<String,List<MediaRow>> index=new HashMap<>();
+        List<MediaRow> all=new ArrayList<>();index.put("all",all);
+        for(int i=0;i<messages.size();i++){
+            if(Thread.currentThread().isInterrupted())throw new InterruptedIOException();
+            for(TelegramImporter.Media attachment:messages.get(i).media){
+                MediaRow row=new MediaRow(attachment,i);all.add(row);
+                String key=attachment.kind;
+                if(key==null||"all".equals(key))key="file";
+                index.computeIfAbsent(key,k->new ArrayList<>()).add(row);
+            }
+        }
+        return index;
+    }
     private static final class MediaRow {
         final TelegramImporter.Media attachment; final int message;
         MediaRow(TelegramImporter.Media a,int m){attachment=a;message=m;}
@@ -84,14 +99,26 @@ public final class ProtectedArchiveActivity extends Activity {
         try{return new JSONArray(pins().getString("items","[]"));}
         catch(JSONException e){return new JSONArray();}
     }
-    private void title(String s){TextView t=new TextView(this);t.setTextSize(21);t.setText(s);body.addView(t);}
-    private void label(String s){TextView t=new TextView(this);t.setText(s);body.addView(t);}
+    private int dp(int value){return Math.round(value*getResources().getDisplayMetrics().density);}
+    private void title(String s){
+        TextView t=new TextView(this);t.setTextSize(21);t.setText(s);
+        t.setTypeface(t.getTypeface(),android.graphics.Typeface.BOLD);
+        t.setMaxLines(2);t.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        t.setContentDescription(s);t.setPadding(0,dp(4),0,dp(8));body.addView(t);
+    }
+    private void label(String s){
+        TextView t=new TextView(this);t.setText(s);t.setTextSize(14);t.setPadding(0,dp(2),0,dp(6));body.addView(t);
+    }
+    private Button actionButton(String name){
+        Button b=new Button(this);b.setAllCaps(false);b.setText(name);
+        b.setMinHeight(dp(48));b.setMinimumHeight(dp(48));return b;
+    }
     private void button(String title,Runnable action){
-        Button b=new Button(this);b.setText(title);b.setOnClickListener(v->action.run());body.addView(b);
+        Button b=actionButton(title);b.setOnClickListener(v->action.run());body.addView(b);
     }
     private void library(){
         body.removeAllViews();
-        title("Защищённые архивы · экспериментально");
+        title("Защищённые переписки");
         label("ZIP / RAR · HTML и JSON Telegram. Сохраняется только ссылка на файл. Пароль нужен при каждом открытии.");
         button("Добавить архив",()->{
             Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE)
@@ -104,10 +131,11 @@ public final class ProtectedArchiveActivity extends Activity {
         for(int j=0;j<list.length();j++){
             JSONObject item=list.optJSONObject(j);if(item==null)continue;
             String name=item.optString("name","Архив");Uri uri=Uri.parse(item.optString("uri"));
-            Button b=new Button(this);b.setText("🔒 "+name);pinList.addView(b);
+            Button b=actionButton("🔒 "+name);b.setMaxLines(2);b.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            b.setContentDescription("Открыть защищённую переписку "+name);pinList.addView(b);
             b.setOnClickListener(v->ask(uri,name));
             b.setOnLongClickListener(v->{
-                new AlertDialog.Builder(this).setTitle("Убрать из списка?")
+                new FontDialog.Builder(this).setTitle("Убрать из списка?")
                     .setMessage("Исходный архив останется на телефоне.")
                     .setNegativeButton("Отмена",null)
                     .setPositiveButton("Убрать",(d,w)->{unpin(uri);library();}).show();
@@ -145,14 +173,14 @@ public final class ProtectedArchiveActivity extends Activity {
         try{
             getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);
             pin(uri,name);library();ask(uri,name);
-        }catch(Exception e){new AlertDialog.Builder(this).setMessage("Android не предоставил постоянный доступ. Выбери локальный файл через системный проводник.").setPositiveButton("OK",null).show();}
+        }catch(Exception e){new FontDialog.Builder(this).setMessage("Android не предоставил постоянный доступ. Выбери локальный файл через системный проводник.").setPositiveButton("OK",null).show();}
     }
     private void ask(Uri uri,String name){
         EditText field=new EditText(this);field.setSingleLine(true);
         field.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
         field.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO);
         field.setSaveEnabled(false);field.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);field.setHint("Пароль архива");
-        prompt=new AlertDialog.Builder(this).setTitle(name).setView(field)
+        prompt=new FontDialog.Builder(this).setTitle(name).setView(field)
             .setNegativeButton("Отмена",(d,w)->field.getText().clear())
             .setPositiveButton("Открыть",(d,w)->{
                 char[] password=new char[field.length()];field.getText().getChars(0,field.length(),password,0);
@@ -228,20 +256,20 @@ public final class ProtectedArchiveActivity extends Activity {
                     }finally{Arrays.fill(html,(byte)0);}
                 }
                 if(messages.isEmpty())throw new IOException("Сообщения не найдены");
+                final Map<String,List<MediaRow>> index=buildMediaIndex(messages);
                 final ProtectedArchiveSession ready=opened;final String prefix=selectedRoot;
                 opened=null;
                 runOnUiThread(()->{
                     if(token!=generation||isFinishing()||isDestroyed()){ready.close();return;}
                     session=ready;lines=messages;root=prefix;openedName=name;
-                    mediaRows.clear();for(int index=0;index<lines.size();index++)
-                        for(TelegramImporter.Media attachment:lines.get(index).media)mediaRows.add(new MediaRow(attachment,index));
+                    mediaIndex=index;
                     showChat(name);
                 });
             }catch(Exception|OutOfMemoryError e){
                 runOnUiThread(()->{
                     if(token!=generation||isFinishing()||isDestroyed())return;
                     lock();library();
-                    prompt=new AlertDialog.Builder(this).setTitle("Не удалось открыть")
+                    prompt=new FontDialog.Builder(this).setTitle("Не удалось открыть")
                         .setMessage("Проверь пароль, формат и свободное место. Поддерживается один зашифрованный HTML или JSON чат; многотомные и некоторые RAR архивы могут не открываться.")
                         .setNegativeButton("Закрыть",null).setPositiveButton("Повторить",(d,w)->ask(uri,name)).create();
                     secureShow(prompt);
@@ -252,9 +280,9 @@ public final class ProtectedArchiveActivity extends Activity {
     private void sessionHeader(String name,String detail,Runnable toggle,String toggleLabel){
         cancelPreview();detachPrivateViews();body.removeAllViews();title(name);label(detail);
         LinearLayout controls=new LinearLayout(this);
-        Button change=new Button(this);change.setText(toggleLabel);
+        Button change=actionButton(toggleLabel);
         controls.addView(change,new LinearLayout.LayoutParams(0,-2,1));change.setOnClickListener(v->toggle.run());
-        Button lockButton=new Button(this);lockButton.setText("🔒 Заблокировать");
+        Button lockButton=actionButton("🔒 Заблокировать");
         controls.addView(lockButton,new LinearLayout.LayoutParams(0,-2,1));
         lockButton.setOnClickListener(v->{lock();library();});
         body.addView(controls);
@@ -278,7 +306,7 @@ public final class ProtectedArchiveActivity extends Activity {
         showingMedia=false;
         sessionHeader(name,lines.size()+" сообщений · защищённый сеанс",()->{
             rememberPosition();showMedia("all");
-        },"Медиа · "+mediaRows.size());
+        },"Медиа · "+mediaCount());
         ListView list=new ListView(this);chatList=list;configureList(list);
         final ArrayAdapter<Line> adapter=new ArrayAdapter<>(this,android.R.layout.simple_list_item_1,new ArrayList<>());
         adapter.addAll(lines);list.setAdapter(adapter);
@@ -298,7 +326,7 @@ public final class ProtectedArchiveActivity extends Activity {
             if(line.media.size()==1){preview(line.media.get(0));return;}
             String[] names=new String[line.media.size()];
             for(int j=0;j<names.length;j++)names[j]=line.media.get(j).path;
-            prompt=new AlertDialog.Builder(this).setItems(names,(d,w)->preview(line.media.get(w))).create();secureShow(prompt);
+            prompt=new FontDialog.Builder(this).setItems(names,(d,w)->preview(line.media.get(w))).create();secureShow(prompt);
         });
         body.addView(list,new LinearLayout.LayoutParams(-1,0,1));
         list.setSelectionFromTop(Math.min(chatPosition,Math.max(0,lines.size()-1)),chatTop);
@@ -343,18 +371,16 @@ public final class ProtectedArchiveActivity extends Activity {
     private void showMedia(String category){
         if(session==null||lines==null)return;
         showingMedia=true;chatList=null;
-        sessionHeader(openedName,"Медиатека · "+mediaRows.size()+" вложений",()->showChat(openedName),"Переписка");
+        sessionHeader(openedName,"Медиатека · "+mediaCount()+" вложений",()->showChat(openedName),"Переписка");
         HorizontalScrollView scroll=new HorizontalScrollView(this);
         LinearLayout categories=new LinearLayout(this);
         for(int i=0;i<MEDIA_KEYS.length;i++){
-            final String key=MEDIA_KEYS[i];int count=0;
-            for(MediaRow row:mediaRows)if("all".equals(key)||key.equals(row.attachment.kind))count++;
-            Button chip=new Button(this);chip.setText(MEDIA_NAMES[i]+" "+count);
+            final String key=MEDIA_KEYS[i];int count=mediaIndex.getOrDefault(key,Collections.emptyList()).size();
+            Button chip=actionButton(MEDIA_NAMES[i]+" "+count);
             chip.setEnabled(!key.equals(category));chip.setOnClickListener(v->showMedia(key));categories.addView(chip);
         }
         scroll.addView(categories);body.addView(scroll);
-        ArrayList<MediaRow> filtered=new ArrayList<>();
-        for(MediaRow row:mediaRows)if("all".equals(category)||category.equals(row.attachment.kind))filtered.add(row);
+        ArrayList<MediaRow> filtered=new ArrayList<>(mediaIndex.getOrDefault(category,Collections.emptyList()));
         if(filtered.isEmpty()){label("В этой категории нет вложений");return;}
         ListView list=new ListView(this);configureList(list);
         ArrayAdapter<MediaRow> adapter=new ArrayAdapter<>(this,android.R.layout.simple_list_item_1,filtered);
@@ -407,7 +433,7 @@ public final class ProtectedArchiveActivity extends Activity {
                     if(token!=generation||previewToken!=previewGeneration||isFinishing()||isDestroyed()){bitmap.recycle();return;}
                     hideLoading();
                     ImageView image=new ImageView(this);image.setImageBitmap(bitmap);image.setAdjustViewBounds(true);
-                    prompt=new AlertDialog.Builder(this).setView(image).setPositiveButton("Закрыть",null).create();
+                    prompt=new FontDialog.Builder(this).setView(image).setPositiveButton("Закрыть",null).create();
                     prompt.setOnDismissListener(d->{image.setImageDrawable(null);bitmap.recycle();});secureShow(prompt);
                 });
             }catch(Exception|OutOfMemoryError e){runOnUiThread(()->{if(token==generation&&previewToken==previewGeneration){hideLoading();Toast.makeText(this,"Фото не прочитано",Toast.LENGTH_SHORT).show();}});}
@@ -422,7 +448,7 @@ public final class ProtectedArchiveActivity extends Activity {
     }
     private void showLoading(String message){
         hideLoading();
-        loadingDialog=new AlertDialog.Builder(this).setTitle(message)
+        loadingDialog=new FontDialog.Builder(this).setTitle(message)
             .setMessage("Читается только выбранное вложение")
             .setNegativeButton("Отмена",(d,w)->cancelPreview()).create();
         loadingDialog.setOnCancelListener(d->cancelPreview());secureShow(loadingDialog);
@@ -489,7 +515,7 @@ public final class ProtectedArchiveActivity extends Activity {
         if(old!=null)reader.execute(old::close);
         if(lines!=null){lines.clear();lines=null;}
         detachPrivateViews();chatList=null;
-        mediaRows.clear();showingMedia=false;openedName="";chatPosition=chatTop=0;
+        mediaIndex=Collections.emptyMap();showingMedia=false;openedName="";chatPosition=chatTop=0;
         root="";body.removeAllViews();
     }
     @Override protected void onStop(){lock();library();super.onStop();}
