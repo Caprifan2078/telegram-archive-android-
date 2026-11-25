@@ -64,7 +64,7 @@ public class RoundPlayerActivity extends Activity {
     }
     private Button button(String title,int width){
         Button b=new Button(this);b.setText(title);b.setTextSize(17);b.setAllCaps(false);
-        b.setTextColor(Color.WHITE);b.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));
+        b.setTextColor(Color.WHITE);b.setTypeface(android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.NORMAL));
         b.setBackground(new RippleDrawable(ColorStateList.valueOf(0x3c7ad2ff),glass(14),null));
         b.setElevation(0);b.setStateListAnimator(null);
         b.setMinWidth(0);b.setMinimumWidth(0);b.setPadding(dp(8),0,dp(8),0);
@@ -121,7 +121,7 @@ public class RoundPlayerActivity extends Activity {
         back.setOnClickListener(v->finish());
         TextView title=new TextView(this);title.setText("Видеосообщение");title.setTextColor(Color.WHITE);title.setTextSize(16);
         title.setGravity(Gravity.CENTER_VERTICAL);title.setPadding(dp(14),0,0,0);
-        title.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));
+        title.setTypeface(android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.NORMAL));
         topBar.addView(title,new LinearLayout.LayoutParams(0,-1,1));
         Button speedButton=button("1×",54);speedButton.setContentDescription("Скорость видео");topBar.addView(speedButton);
         speedButton.setOnClickListener(v->chooseSpeed(speedButton));
