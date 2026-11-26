@@ -26,6 +26,7 @@ public final class RealLocalModelSmokeTest {
             AtomicBoolean cancel=new AtomicBoolean(false);
             AnalystModelCatalog.Model spec=AnalystModelCatalog.MODELS[0];
             assertEquals("qwen06",spec.key);
+            android.util.Log.i("ModelSmoke","Stage: downloading pinned weights");
             AnalystModelDownload.fetch(spec,model,cancel,n->{
                 if(n/(64*1024*1024)!=(n-2*1024*1024)/(64*1024*1024))
                     android.util.Log.i("ModelSmoke","Downloaded "+n+" bytes");
@@ -33,10 +34,12 @@ public final class RealLocalModelSmokeTest {
             assertTrue("Verified model file missing",model.isFile());
             assertEquals("Model byte length differs",spec.size,model.length());
             assertTrue("Pinned file failed preflight recheck",AnalystModelDownload.matches(model,spec.size,spec.sha,cancel));
+            android.util.Log.i("ModelSmoke","Stage: verified weights, retrieving evidence");
             DeepChatContext selected=DeepChatContext.read(context.getDatabasePath(DeepChatContext.dbName(key)),"Встреча",cancel);
             assertTrue("Actual evidence missing from prompt",selected.sources.stream().anyMatch(x->x.id==evidence));
             String prompt=selected.prompt("Во сколько назначили встречу? Укажи время цифрами и номер источника.");
             assertTrue(DeepChatContext.sentSource(prompt,evidence));
+            android.util.Log.i("ModelSmoke","Stage: first native generation");
             String answer=(String)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
                 .getMethod("generate",String.class,String.class).invoke(null,model.getAbsolutePath(),prompt);
             assertNotNull("Native model returned null",answer);
@@ -54,6 +57,7 @@ public final class RealLocalModelSmokeTest {
             DualAnalystContext dual=DualAnalystContext.combine("a",new DeepChatContext(a,1,"Одно сообщение","QA"),
                 "b",new DeepChatContext(b,1,"Одно сообщение","QA"));
             String comparisonPrompt=dual.prompt("Назови время встречи в А и Б цифрами, со ссылками [#1] и [#2].");
+            android.util.Log.i("ModelSmoke","Stage: second native generation");
             String comparison=(String)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
                 .getMethod("generate",String.class,String.class).invoke(null,model.getAbsolutePath(),comparisonPrompt);
             assertNotNull(comparison);

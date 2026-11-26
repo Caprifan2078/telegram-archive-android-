@@ -3917,14 +3917,14 @@ public class MainActivity extends Activity {
         for(int i=0;i<ChatQuestionAnalyst.PRESETS.length;i++){
             String[] group=ChatQuestionAnalyst.PRESETS[i];
             LinearLayout card=column();card.setPadding(px(10),px(6),px(10),px(8));
-            card.setBackground(ViewerUi.surface(this,colors[i],ViewerUi.CARD,themeIndex==2,false));
+            card.setBackground(ViewerUi.surface(this,colors[i%colors.length],ViewerUi.CARD,themeIndex==2,false));
             LinearLayout.LayoutParams gap=p(-1,-2);gap.topMargin=px(7);categories.addView(card,gap);
             TextView heading=text(group[0],15,FG);heading.setTypeface(null,Typeface.BOLD);card.addView(heading,p(-1,-2));
             for(int j=1;j<group.length;j++){
                 final String preset=group[j];
                 TextView chip=text(preset,14,FG);chip.setPadding(px(8),px(10),px(8),px(10));
                 chip.setMinHeight(px(44));chip.setGravity(Gravity.CENTER_VERTICAL);
-                chip.setBackground(ViewerUi.control(this,colors[i],ViewerUi.CONTROL,themeIndex==2));
+                chip.setBackground(ViewerUi.control(this,colors[i%colors.length],ViewerUi.CONTROL,themeIndex==2));
                 chip.setContentDescription("Готовый вопрос: "+preset);
                 chip.setFocusable(true);card.addView(chip,p(-1,-2));
                 chip.setOnClickListener(v->{if(!ask.isEnabled())return;question.setText(preset);question.setSelection(question.length());
@@ -3952,7 +3952,7 @@ public class MainActivity extends Activity {
             if(query.kind==ChatQuestionAnalyst.Kind.UNKNOWN){
                 result.removeAllViews();analyticsText(result,"Для смыслового вопроса нужен локальный ИИ. Переписка не передаётся в интернет.",SUB,13);
                 Button semantic=btn("Ответить локальным ИИ");result.addView(semantic,p(-1,48));
-                semantic.setOnClickListener(v->deepModel.performClick());return;
+                semantic.setOnClickListener(semanticButton->deepModel.performClick());return;
             }
             categories.setVisibility(View.GONE);suggestions.setText("Готовые вопросы  ›");
             android.view.inputmethod.InputMethodManager ime=(android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);

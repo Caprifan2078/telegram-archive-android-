@@ -47,4 +47,21 @@ public class DeepChatContextIntegrationTest {
             assertEquals(3,db.totalMessages());
         }finally{db.close();c.deleteDatabase(DeepChatContext.dbName(key));}
     }
+
+    @Test public void temporalQuestionGetsBeginningMiddleAndEndWithoutLexicalMatches(){
+        Context c=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key="deep_time_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb db=new MessageDb(c,key);
+        try{
+            SQLiteDatabase sql=db.getWritableDatabase();
+            long[] ids=new long[101];
+            for(int i=0;i<ids.length;i++)ids[i]=db.stage(sql,"QA","2026-01-01","Запись "+i,null,"");
+            db.publishStaged(sql);
+            DeepChatContext context=DeepChatContext.read(c.getDatabasePath(DeepChatContext.dbName(key)),"Как менялось общение со временем?",new AtomicBoolean());
+            for(int i:new int[]{0,25,50,75,100})assertTrue("Timeline sample missing "+i,context.sources.stream().anyMatch(x->x.id==ids[i]));
+            assertTrue(context.sources.size()<=DeepChatContext.MAX_SOURCES);
+            assertTrue(context.method.contains("порядку импорта"));
+            assertEquals(101,db.totalMessages());
+        }finally{db.close();c.deleteDatabase(DeepChatContext.dbName(key));}
+    }
 }

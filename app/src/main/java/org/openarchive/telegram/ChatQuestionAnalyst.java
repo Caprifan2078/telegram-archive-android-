@@ -8,7 +8,7 @@ import java.text.Normalizer;
 
 /** Deterministic question answering over a single imported chat. No network or model. */
 final class ChatQuestionAnalyst {
-    enum Kind { FIRST, LAST, TOTAL, MOST, TOPIC, FIRST_TOPIC, LAST_TOPIC, DAY, ACTIVE_DAYS, BUSIEST_DAY, LONGEST_GAP, QUESTIONS, AUTHOR_COUNT, UNKNOWN }
+    enum Kind { FIRST, LAST, TOTAL, MOST, TOPIC, FIRST_TOPIC, LAST_TOPIC, DAY, ACTIVE_DAYS, BUSIEST_DAY, LONGEST_GAP, QUESTIONS, AUTHOR_COUNT, PARTICIPANTS, LEAST, TEXT_COUNT, LONGEST_TEXT, AVG_LENGTH, AVG_DAY, PEAK_HOUR, WEEKEND, UNKNOWN }
     static final String HELP="Примеры: Кто первый написал? · Кто написал последним? · Сколько сообщений? · Кто больше всего писал? · Найди «встреча» · Когда впервые упоминали «встреча»? · Что писали 01.02.2026?";
     static final class Query {
         final Kind kind; final String phrase; final LocalDate day;
@@ -18,7 +18,9 @@ final class ChatQuestionAnalyst {
         {"Начало и история","Кто первый написал?","Кто написал последним?"},
         {"Активность","Сколько сообщений?","Кто больше всего писал?","Сколько дней общались?"},
         {"Ритм общения","Самый активный день?","Самый долгий перерыв?"},
-        {"Содержание","Сколько сообщений с вопросами?","Найди «встреча»","Когда впервые упоминали «встреча»?"}
+        {"Содержание","Сколько сообщений с вопросами?","Найди «встреча»","Когда впервые упоминали «встреча»?","Когда последний раз упоминали «встреча»?"},
+        {"Участники и привычки","Сколько участников?","Кто меньше всего писал?","Сколько сообщений с текстом?","Самое длинное сообщение?","Средняя длина сообщения?"},
+        {"Распорядок общения","Сколько сообщений в активный день?","Самый активный час?","Сколько сообщений по выходным?"}
     };
     private static String fold(String s){
         return Normalizer.normalize(s==null?"":s,Normalizer.Form.NFKC).toLowerCase(Locale.ROOT).replace('ё','е');
@@ -33,6 +35,14 @@ final class ChatQuestionAnalyst {
         if(q.matches("самый активный день|когда было больше всего сообщений|в какой день больше всего писали"))return new Query(Kind.BUSIEST_DAY,"",null);
         if(q.matches("самый долгий перерыв|самый длинный перерыв|когда дольше всего не общались"))return new Query(Kind.LONGEST_GAP,"",null);
         if(q.matches("сколько сообщений с вопросами|сколько сообщений содержат вопросы"))return new Query(Kind.QUESTIONS,"",null);
+        if(q.matches("сколько участников|сколько отправителей"))return new Query(Kind.PARTICIPANTS,"",null);
+        if(q.matches("кто меньше всего писал|кто написал меньше всего сообщений"))return new Query(Kind.LEAST,"",null);
+        if(q.matches("сколько сообщений с текстом|сколько текстовых сообщений"))return new Query(Kind.TEXT_COUNT,"",null);
+        if(q.matches("самое длинное сообщение|кто написал самое длинное сообщение"))return new Query(Kind.LONGEST_TEXT,"",null);
+        if(q.matches("средняя длина сообщения|средняя длина текста"))return new Query(Kind.AVG_LENGTH,"",null);
+        if(q.matches("сколько сообщений в активный день|среднее число сообщений в активный день"))return new Query(Kind.AVG_DAY,"",null);
+        if(q.matches("самый активный час|в какой час больше всего сообщений"))return new Query(Kind.PEAK_HOUR,"",null);
+        if(q.matches("сколько сообщений по выходным|сколько сообщений в выходные"))return new Query(Kind.WEEKEND,"",null);
         Matcher m=Pattern.compile("^сколько сообщений (написал|написала) [«\"]([^»\"]{1,160})[»\"]$").matcher(q);
         if(m.matches())return new Query(Kind.AUTHOR_COUNT,m.group(2).trim(),null);
         m=Pattern.compile("^(найди|найти|сколько раз упоминали|когда впервые упоминали|кто первым упомянул|когда последний раз упоминали) [«\"]([^»\"]{1,160})[»\"]$").matcher(q);
@@ -79,6 +89,8 @@ final class ChatQuestionAnalyst {
         final Map<String,Long> authors=new HashMap<>();
         final TreeMap<LocalDate,Long> days=new TreeMap<>();
         final List<Evidence> examples=new ArrayList<>();
+        final long[] hours=new long[24];
+        long textChars,longestChars;Evidence longest;
         boolean capped,firstTie,lastTie,firstIncomplete,lastIncomplete;
         Evidence first,last;
         Accumulator(Query q){query=q;}
@@ -91,6 +103,24 @@ final class ChatQuestionAnalyst {
         void add(long id,String author,String date,String body){
             total++;
             if(query.kind==Kind.TOTAL||query.kind==Kind.UNKNOWN)return;
+            if(query.kind==Kind.TEXT_COUNT||query.kind==Kind.LONGEST_TEXT||query.kind==Kind.AVG_LENGTH){
+                if(body!=null&&!body.trim().isEmpty()){
+                    matched++;int chars=body.codePointCount(0,body.length());textChars+=chars;
+                    if(query.kind==Kind.LONGEST_TEXT&&chars>longestChars){
+                        longestChars=chars;longest=new Evidence(id,author,date,body,ChatTrends.parse(date),"");
+                    }
+                }
+                return;
+            }
+            if(query.kind==Kind.PEAK_HOUR||query.kind==Kind.WEEKEND){
+                ChatTrends.Moment stamp=ChatTrends.parse(date);
+                if(stamp==null){unknownDate++;return;}
+                if(query.kind==Kind.PEAK_HOUR){
+                    if(stamp.clock==null){unknownTime++;return;}
+                    hours[stamp.clock.getHour()]++;matched++;
+                }else if(stamp.day.getDayOfWeek().getValue()>=6)matched++;
+                return;
+            }
             if(query.kind==Kind.QUESTIONS){
                 if(body!=null&&(body.indexOf('?')>=0||body.indexOf('？')>=0)){
                     matched++;if(examples.size()<8)examples.add(new Evidence(id,author,date,body,ChatTrends.parse(date),""));
@@ -103,7 +133,7 @@ final class ChatQuestionAnalyst {
                 }
                 return;
             }
-            if(query.kind==Kind.ACTIVE_DAYS||query.kind==Kind.BUSIEST_DAY||query.kind==Kind.LONGEST_GAP){
+            if(query.kind==Kind.ACTIVE_DAYS||query.kind==Kind.BUSIEST_DAY||query.kind==Kind.LONGEST_GAP||query.kind==Kind.AVG_DAY){
                 ChatTrends.Moment stamp=ChatTrends.parse(date);
                 if(stamp==null){unknownDate++;return;}
                 if(days.containsKey(stamp.day)||days.size()<100000)
@@ -111,7 +141,7 @@ final class ChatQuestionAnalyst {
                 else capped=true;
                 return;
             }
-            if(query.kind==Kind.MOST){
+            if(query.kind==Kind.MOST||query.kind==Kind.LEAST||query.kind==Kind.PARTICIPANTS){
                 String key=author==null||author.trim().isEmpty()?"Неизвестный отправитель":author.trim();
                 if(authors.containsKey(key)||authors.size()<10000)authors.put(key,authors.getOrDefault(key,0L)+1);
                 else capped=true;
@@ -155,15 +185,30 @@ final class ChatQuestionAnalyst {
             String scope="\nТолько импортированная переписка; отсутствующие или удалённые сообщения не учитываются.";
             if(query.kind==Kind.UNKNOWN)return new Answer("Этот вопрос пока не поддерживается. "+HELP,Collections.emptyList());
             if(query.kind==Kind.TOTAL)return new Answer("Всего сообщений: "+total+"."+scope,Collections.emptyList());
+            if(query.kind==Kind.TEXT_COUNT)return new Answer("Сообщений с непустым текстом: "+matched+" из "+total+"."+scope,Collections.emptyList());
+            if(query.kind==Kind.AVG_LENGTH)return new Answer(matched==0?"Нет непустых текстов."+scope:
+                "Средняя длина непустого текста: "+String.format(Locale.ROOT,"%.1f",(double)textChars/matched)+" символов Unicode."+scope,Collections.emptyList());
+            if(query.kind==Kind.LONGEST_TEXT)return new Answer(longest==null?"Нет непустых текстов."+scope:
+                "Самое длинное найденное сообщение: "+longest.author+" · "+longestChars+" символов Unicode. При равенстве показан первый вариант в порядке импорта."+scope,
+                longest==null?Collections.emptyList():Collections.singletonList(longest));
+            if(query.kind==Kind.WEEKEND)return new Answer("Сообщений по субботам и воскресеньям: "+matched+". Без даты: "+unknownDate+"."+scope,Collections.emptyList());
+            if(query.kind==Kind.PEAK_HOUR){
+                long max=0;for(long n:hours)max=Math.max(max,n);
+                if(max==0)return new Answer("Нет сообщений с точным временем."+scope,Collections.emptyList());
+                List<String> best=new ArrayList<>();
+                for(int h=0;h<24;h++)if(hours[h]==max)best.add(String.format(Locale.ROOT,"%02d:00",h));
+                return new Answer("Максимум за час суток: "+max+". Часы: "+String.join(", ",best)+". Время как в экспорте. Без даты или времени: "+(unknownDate+unknownTime)+"."+scope,Collections.emptyList());
+            }
             if(query.kind==Kind.QUESTIONS||query.kind==Kind.AUTHOR_COUNT){
                 String label=query.kind==Kind.QUESTIONS?"Сообщений со знаком вопроса":"Сообщений от имени «"+query.phrase+"»";
                 return new Answer(label+": "+matched+" из "+total+". "+(query.kind==Kind.QUESTIONS?"Это признак по пунктуации, а не распознавание смысла.":"Совпадение имени без учёта регистра; одинаковые имена не различаются.")+scope,examples);
             }
-            if(query.kind==Kind.ACTIVE_DAYS||query.kind==Kind.BUSIEST_DAY||query.kind==Kind.LONGEST_GAP){
+            if(query.kind==Kind.ACTIVE_DAYS||query.kind==Kind.BUSIEST_DAY||query.kind==Kind.LONGEST_GAP||query.kind==Kind.AVG_DAY){
                 if(capped)return new Answer("Слишком много разных дат для точного расчёта.",Collections.emptyList());
                 if(days.isEmpty())return new Answer("Нет сообщений с распознанной датой."+scope,Collections.emptyList());
                 String missing=unknownDate>0?" Сообщений с неизвестной датой: "+unknownDate+"; они не учтены.":"";
                 if(query.kind==Kind.ACTIVE_DAYS)return new Answer("Дней с сообщениями: "+days.size()+". Период: "+days.firstKey()+" — "+days.lastKey()+"."+missing+scope,Collections.emptyList());
+                if(query.kind==Kind.AVG_DAY)return new Answer("Среднее в активный день: "+String.format(Locale.ROOT,"%.1f",(double)(total-unknownDate)/days.size())+" сообщений."+missing+scope,Collections.emptyList());
                 if(query.kind==Kind.BUSIEST_DAY){
                     long peak=Collections.max(days.values());List<String> dates=new ArrayList<>();int ties=0;
                     for(Map.Entry<LocalDate,Long> e:days.entrySet())if(e.getValue()==peak){ties++;if(dates.size()<8)dates.add(e.getKey().toString());}
@@ -177,14 +222,15 @@ final class ChatQuestionAnalyst {
                 String result=gap==0?"Между известными активными днями нет полных пустых дней.":"Самый длинный промежуток без сообщений: "+gap+" полных календарных дней между "+from+" и "+to+".";
                 return new Answer(result+" Это не доказательство отсутствия общения вне архива."+missing+scope,Collections.emptyList());
             }
-            if(query.kind==Kind.MOST){
+            if(query.kind==Kind.MOST||query.kind==Kind.LEAST||query.kind==Kind.PARTICIPANTS){
                 if(authors.isEmpty())return new Answer("Сообщений нет.",Collections.emptyList());
                 if(capped)return new Answer("Слишком много различных имён для точного рейтинга. Результат не определён.",Collections.emptyList());
-                long max=Collections.max(authors.values());List<String> leaders=new ArrayList<>();
+                if(query.kind==Kind.PARTICIPANTS)return new Answer("Различных имён отправителей: "+authors.size()+". Одинаковые имена не различаются; неизвестный отправитель учитывается отдельно."+scope,Collections.emptyList());
+                long max=query.kind==Kind.LEAST?Collections.min(authors.values()):Collections.max(authors.values());List<String> leaders=new ArrayList<>();
                 for(Map.Entry<String,Long> e:authors.entrySet())if(e.getValue()==max)leaders.add(e.getKey());
                 Collections.sort(leaders);int n=leaders.size();
                 String names=String.join(", ",leaders.subList(0,Math.min(8,n)));
-                return new Answer((n>1?"Одинаковый максимум: ":"Больше всего сообщений: ")+names+" — по "+max+" из "+total+(n>8?" (всего лидеров: "+n+")":"")+". Учитываются имена из экспорта, не идентификаторы людей."+scope,Collections.emptyList());
+                return new Answer((query.kind==Kind.LEAST?(n>1?"Одинаковый минимум: ":"Меньше всего сообщений: "):(n>1?"Одинаковый максимум: ":"Больше всего сообщений: "))+names+" — по "+max+" из "+total+(n>8?" (всего лидеров: "+n+")":"")+". Учитываются имена из экспорта, не идентификаторы людей."+scope,Collections.emptyList());
             }
             if(matched==0)return new Answer("Подходящих сообщений не найдено. Проверено: "+total+"."+(query.kind==Kind.DAY&&unknownDate>0?" Сообщений с неизвестной датой: "+unknownDate+".":"")+scope,Collections.emptyList());
             if(query.kind==Kind.DAY||query.kind==Kind.TOPIC){
