@@ -192,9 +192,8 @@ public final class DeepAnalystActivity extends Activity {
     private void updateAsk(){
         if(ask==null||question==null)return;
         boolean exact=factualQuestion();
-        ask.setText(exact?"Ответить по фактам":"Спросить ИИ");
-        ask.setEnabled(!busy&&!question.getText().toString().trim().isEmpty()&&
-            (exact||(runtimeAvailable()&&AnalystModelCatalog.installed(model,selectedModel))));
+        ask.setText(exact?"Ответить по фактам":runtimeAvailable()&&AnalystModelCatalog.installed(model,selectedModel)?"Спросить ИИ":"Найти источники");
+        ask.setEnabled(!busy&&!question.getText().toString().trim().isEmpty());
     }
     private void analyzeFacts(String q){
         busy("Проверяю факты по всей переписке…");results.removeAllViews();
@@ -362,9 +361,46 @@ public final class DeepAnalystActivity extends Activity {
             finally{MODEL_BUSY.set(false);}
         });
     }
+    /** Useful evidence retrieval even on lightweight builds or phones without downloaded weights. */
+    private void findEvidence(String q){
+        busy("Подбираю источники из локального архива…");results.removeAllViews();
+        worker.execute(()->{
+            try{
+                DeepChatContext first=DeepChatContext.read(getDatabasePath(DeepChatContext.dbName(archive)),q,taskCancel);
+                final DualAnalystContext dual;
+                if(compareArchive!=null&&!taskCancel.get()){
+                    DeepChatContext second=DeepChatContext.read(getDatabasePath(DeepChatContext.dbName(compareArchive)),q,taskCancel);
+                    dual=DualAnalystContext.combine(archive,first,compareArchive,second);
+                }else dual=null;
+                DeepChatContext context=dual==null?first:dual.context;
+                runOnUiThread(()->{
+                    if(stopped.get())return;busy=false;refresh();
+                    if(taskCancel.get()){status.setText("Операция отменена.");return;}
+                    results.addView(text("Подборка источников · без нейросети",18));
+                    results.addView(text("Это найденные сообщения, а не готовый смысловой вывод. Проверь контекст каждой цитаты.",14));
+                    results.addView(text(context.method+" · "+context.sources.size()+" выдержек из "+context.total+" сообщений",13));
+                    if(context.sources.isEmpty())results.addView(text("Подходящих сообщений нет.",14));
+                    for(DeepChatContext.Source src:context.sources){
+                        Button source=button(src.author+" · "+src.date+"\n"+src.body);
+                        source.setGravity(android.view.Gravity.START|android.view.Gravity.CENTER_VERTICAL);
+                        source.setAllCaps(false);results.addView(source);
+                        source.setOnClickListener(v->{
+                            DualAnalystContext.Link link=dual==null?null:dual.links.get(src.id);
+                            setResult(RESULT_OK,new Intent().putExtra("archive",link==null?archive:link.archive)
+                                .putExtra("message",link==null?src.id:link.messageId));finish();
+                        });
+                    }
+                });
+            }catch(Exception failure){runOnUiThread(()->{
+                if(stopped.get())return;busy=false;refresh();
+                status.setText(taskCancel.get()?"Операция отменена.":"Не удалось подобрать сообщения.");
+            });}
+        });
+    }
     private void analyze(){
         String q=question.getText().toString().trim();if(q.isEmpty()||busy)return;
         if(factualQuestion()){analyzeFacts(q);return;}
+        if(!runtimeAvailable()||!AnalystModelCatalog.installed(model,selectedModel)){findEvidence(q);return;}
         if(!canStartModel())return;
         if(!MODEL_BUSY.compareAndSet(false,true)){status.setText("Предыдущий запрос ещё завершает работу.");return;}
         busy("Подбираю сообщения, затем запускаю модель…");results.removeAllViews();
