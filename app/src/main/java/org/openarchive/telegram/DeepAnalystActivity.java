@@ -85,19 +85,7 @@ public final class DeepAnalystActivity extends Activity {
         question.setText(getIntent().getStringExtra("question"));LinearLayout.LayoutParams qlp=new LinearLayout.LayoutParams(-1,-2);qlp.topMargin=dp(12);qlp.bottomMargin=dp(8);panel.addView(question,qlp);
         ask=button("Спросить");ViewerUi.styleButton(ask,palette.chip,palette.accent,palette.light);panel.addView(ask);
         Button presets=button("Идеи вопросов  ›");panel.addView(presets);
-        presets.setOnClickListener(v->{
-            if(busy)return;
-            String[] examples=compareArchive==null?new String[]{
-                "Кто первый написал?","Сколько сообщений?","Кто больше всего писал?",
-                "Как менялось общение со временем?","В каких ситуациях участники поддерживали друг друга?",
-                "Из-за чего возникали конфликты и как они разрешались?",
-                "Какие повторяющиеся модели поведения видны?","Какие обещания и договорённости обсуждали?"}:
-                new String[]{"Чем отличается манера общения в А и Б?","Сравни взаимную поддержку и реакцию на конфликты.",
-                    "Как менялось общение со временем в каждом чате?","Сравни инициативу и взаимность, приведи конкретные цитаты."};
-            new FontDialog.Builder(this).setTitle("Выбери вопрос").setItems(examples,(d,i)->{
-                if(!busy){question.setText(examples[i]);question.setSelection(question.length());}
-            }).setNegativeButton("Закрыть",null).show();
-        });
+        presets.setOnClickListener(v->showQuestionLibrary());
         question.addTextChangedListener(new android.text.TextWatcher(){
             public void beforeTextChanged(CharSequence s,int start,int count,int after){}
             public void onTextChanged(CharSequence s,int start,int before,int count){updateAsk();}
@@ -132,6 +120,28 @@ public final class DeepAnalystActivity extends Activity {
                 .setNegativeButton("Отмена",null).setPositiveButton("Скачать",(d,n)->downloadModel(spec)).show();
         });
         refresh();
+    }
+    private void showQuestionLibrary(){
+        if(busy)return;
+        final String[][] semantic=compareArchive==null?AnalystQuestionLibrary.SINGLE:AnalystQuestionLibrary.DUAL;
+        final String[][] exact=compareArchive==null?ChatQuestionAnalyst.PRESETS:new String[0][];
+        final java.util.ArrayList<String[]> groups=new java.util.ArrayList<>();
+        final java.util.ArrayList<String> labels=new java.util.ArrayList<>();
+        for(String[] group:exact){groups.add(group);labels.add("Факты · "+group[0]+" ("+(group.length-1)+")");}
+        for(String[] group:semantic){groups.add(group);labels.add("ИИ · "+group[0]+" ("+(group.length-1)+")");}
+        new FontDialog.Builder(this).setTitle("Библиотека вопросов")
+            .setItems(labels.toArray(new String[0]),(d,which)->{
+                if(busy)return;
+                String[] group=groups.get(which);
+                String[] items=java.util.Arrays.copyOfRange(group,1,group.length);
+                new FontDialog.Builder(this).setTitle(group[0]).setItems(items,(dialog,index)->{
+                    if(busy)return;
+                    String value=items[index];question.setText(value);
+                    int term=value.indexOf("«встреча»");
+                    if(term>=0){question.requestFocus();question.setSelection(term+1,term+8);}
+                    else question.setSelection(question.length());
+                }).setNegativeButton("Назад",(dialog,index)->showQuestionLibrary()).show();
+            }).setNegativeButton("Закрыть",null).show();
     }
     private void showModelPicker(){
         if(busy)return;
