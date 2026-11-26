@@ -1,13 +1,13 @@
-name: Real Qwen native crash diagnostic
+name: Real Qwen minified JNI recovery
 on:
   pull_request:
-    branches: [qa/focused-analyst-experience-20261126]
+    branches: [qa/analyst-question-library-20261126]
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   real_model:
-    if: github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || github.head_ref == 'qa/analyst-question-library-20261126')
+    if: github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || github.head_ref == 'qa/native-analyst-jni-recovery-20261127')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -37,7 +37,7 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: pixel_2
-          ram-size: 4096M
+          ram-size: 5120M
           disk-size: 6144M
           disable-animations: true
           emulator-boot-timeout: 420
