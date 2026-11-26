@@ -26,7 +26,9 @@ public final class RealLocalModelSmokeTest {
             AtomicBoolean cancel=new AtomicBoolean(false);
             AnalystModelCatalog.Model spec=AnalystModelCatalog.MODELS[0];
             assertEquals("qwen06",spec.key);
-            android.util.Log.i("ModelSmoke","Stage: downloading pinned weights");
+            Class<?> sampler=Class.forName("com.google.ai.edge.litertlm.SamplerConfig");
+            assertEquals("Minified APK must keep the native sampler getter",int.class,sampler.getMethod("getTopK").getReturnType());
+            android.util.Log.i("ModelSmoke","Stage: JNI ABI verified; downloading pinned weights");
             AnalystModelDownload.fetch(spec,model,cancel,n->{
                 if(n/(64*1024*1024)!=(n-2*1024*1024)/(64*1024*1024))
                     android.util.Log.i("ModelSmoke","Downloaded "+n+" bytes");
