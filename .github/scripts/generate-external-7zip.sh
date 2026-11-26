@@ -39,3 +39,14 @@ for config in solid-header solid-data nonsolid-header; do
     "$seven" t -pqa-layout-secret "$archive"
     "$seven" l -slt -pqa-layout-secret "$archive" | grep -E '^(Solid|Blocks|Files|Folders) ='
 done
+
+# Reproduce reported archive-inside-archive, using the same synthetic 20-page layout.
+"$seven" a -t7z -ms=on "$tmp/inner-plain.7z" .
+"$seven" a -tzip "$tmp/inner-plain.zip" .
+cd "$tmp"
+"$seven" a -t7z -mhe=on -pqa-layout-secret "$dest/wrapped-plain-7z.7z" inner-plain.7z
+"$seven" a -t7z -mhe=on -pqa-layout-secret "$dest/wrapped-plain-zip.7z" inner-plain.zip
+cp "$dest/layout-solid-header.7z" "$tmp/inner-encrypted.7z"
+"$seven" a -t7z -mhe=on -pqa-layout-secret "$dest/wrapped-same-password.7z" inner-encrypted.7z
+"$seven" a -t7z "$dest/wrapped-inner-password.7z" inner-encrypted.7z
+for f in "$dest"/wrapped-*.7z; do "$seven" t -pqa-layout-secret "$f"; done

@@ -49,6 +49,37 @@ public class External7ZipRegressionTest {
             }
         }
     }
+    @Test public void encryptedArchiveContainingExactlyOneArchiveImportsAllPages()throws Exception{
+        Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context test=InstrumentationRegistry.getInstrumentation().getContext();
+        for(String mode:new String[]{"plain-7z","plain-zip","same-password","inner-password"}){
+            File archive=File.createTempFile("wrapped-layout-", ".7z",ctx.getCacheDir());
+            String key=UUID.randomUUID().toString().replace("-","");
+            File staging=new File(new File(ctx.getFilesDir(),"telegram_imports"),key);
+            char[] secret="qa-layout-secret".toCharArray();
+            try{
+                try(InputStream in=test.getAssets().open("external7zip/wrapped-"+mode+".7z");OutputStream out=new FileOutputStream(archive)){
+                    byte[] buf=new byte[8192];int n;while((n=in.read(buf))!=-1)out.write(buf,0,n);
+                }
+                byte[] before=java.nio.file.Files.readAllBytes(archive.toPath());
+                Uri uri=Uri.fromFile(archive);
+                try{ArchiveFileImport.extract(ctx,uri,"7z",key,null,p->{});fail("Missing password accepted: "+mode);}
+                catch(ArchiveFileImport.PasswordRequired expected){}
+                assertFalse(staging.exists());
+                File root=ArchiveFileImport.extract(ctx,uri,"7z",key,secret,p->{});
+                assertTrue(mode,new File(root,"messages20.html").isFile());
+                String[] files=new File(root,"round_video_messages").list();
+                assertNotNull(files);assertEquals(834,files.length);
+                MessageDb db=new MessageDb(ctx,key);
+                try{assertEquals(20,TelegramImporter.importFiles(ctx.getContentResolver(),new DocumentFolder(ctx.getContentResolver(),root),db,p->{}));}
+                finally{db.close();}
+                try(java.util.stream.Stream<java.nio.file.Path> paths=java.nio.file.Files.walk(staging.toPath())){
+                    assertFalse("Intermediate archive must not remain",paths.anyMatch(p->p.getFileName().toString().startsWith("inner-")&&java.nio.file.Files.isRegularFile(p)));
+                }
+                assertArrayEquals(before,java.nio.file.Files.readAllBytes(archive.toPath()));
+            }finally{java.util.Arrays.fill(secret,'\0');ArchiveFileImport.deleteTree(staging);ctx.deleteDatabase("telegram_"+key+".db");archive.delete();}
+        }
+    }
     @Test public void realSevenZipArchivesPromptRejectAndOpen()throws Exception{
         Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
         Context test=InstrumentationRegistry.getInstrumentation().getContext();
