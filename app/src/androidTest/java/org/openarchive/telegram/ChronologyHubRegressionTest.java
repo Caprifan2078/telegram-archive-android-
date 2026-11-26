@@ -34,7 +34,15 @@ public final class ChronologyHubRegressionTest {
         Method m=MainActivity.class.getDeclaredMethod(method);m.setAccessible(true);m.invoke(a);
     }
     private View find(View node,String label){
-        if(node instanceof TextView&&label.equals(((TextView)node).getText().toString()))return node;
+        if(node instanceof TextView&&label.equals(((TextView)node).getText().toString())){
+            View current=node;
+            while(current.getParent() instanceof View&&!current.isClickable()){
+                View parent=(View)current.getParent();
+                if(parent instanceof android.widget.ScrollView)break;
+                current=parent;
+            }
+            return current.isClickable()?current:node;
+        }
         if(node instanceof ViewGroup){
             ViewGroup group=(ViewGroup)node;
             for(int i=0;i<group.getChildCount();i++){
@@ -65,19 +73,19 @@ public final class ChronologyHubRegressionTest {
                 put(activity,"screen","relationships");put(activity,"historyEventsExpanded",false);
                 put(activity,"chronologySection","overview");
                 call(activity,"renderRelationshipsPage");
-                assertNotNull(find(activity.getWindow().getDecorView(),"01 · События переписки  ▾"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"События переписки ▾"));
                 assertNull("Event list must be lazy",find(activity.getWindow().getDecorView(),"Лента событий  ·  0"));
-                assertNotNull(find(activity.getWindow().getDecorView(),"02 · Этапы переписки  ›"));
-                assertNotNull(find(activity.getWindow().getDecorView(),"03 · Периоды по датам  ›"));
-                assertNotNull(find(activity.getWindow().getDecorView(),"04 · Сравнение этапов  ›"));
-                assertNotNull(find(activity.getWindow().getDecorView(),"05 · В этот день  ›"));
-                find(activity.getWindow().getDecorView(),"01 · События переписки  ▾").performClick();
+                assertNotNull(find(activity.getWindow().getDecorView(),"Этапы переписки"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"Периоды по датам"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"Сравнение этапов"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"В этот день"));
+                find(activity.getWindow().getDecorView(),"События переписки ▾").performClick();
             }catch(Exception e){throw new AssertionError(e);}});
             idle(activity);
             inst.runOnMainSync(()->{
-                assertNotNull(find(activity.getWindow().getDecorView(),"01 · События переписки  ▴"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"События переписки ▴"));
                 assertNotNull("Events appear only on request",find(activity.getWindow().getDecorView(),"Лента событий  ·  0"));
-                find(activity.getWindow().getDecorView(),"03 · Периоды по датам  ›").performClick();
+                find(activity.getWindow().getDecorView(),"Периоды по датам").performClick();
                 assertNull("Direct access must skip the redundant periods hub",
                     find(activity.getWindow().getDecorView(),"01 · Этапы переписки  ›"));
                 assertNotNull(find(activity.getWindow().getDecorView(),"+ Добавить период по датам"));
@@ -95,10 +103,10 @@ public final class ChronologyHubRegressionTest {
                     find(activity.getWindow().getDecorView(),"01 · Этапы переписки  ›"));
                 find(activity.getWindow().getDecorView(),"‹ К хронологии").performClick();
                 assertNotNull("Back must return to the direct chronology menu",
-                    find(activity.getWindow().getDecorView(),"02 · Этапы переписки  ›"));
-                assertNotNull(find(activity.getWindow().getDecorView(),"04 · Сравнение этапов  ›"));
-                assertNotNull(find(activity.getWindow().getDecorView(),"05 · В этот день  ›"));
-                find(activity.getWindow().getDecorView(),"02 · Этапы переписки  ›").performClick();
+                    find(activity.getWindow().getDecorView(),"Этапы переписки"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"Сравнение этапов"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"В этот день"));
+                find(activity.getWindow().getDecorView(),"Этапы переписки").performClick();
                 assertNotNull(find(activity.getWindow().getDecorView(),"+ Отметить начало периода в переписке"));
                 assertNotNull(find(activity.getWindow().getDecorView(),"‹ К хронологии"));
             });

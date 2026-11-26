@@ -43,6 +43,12 @@ public class RelationshipAnalyticsExplanationUiTest {
         }
         return false;
     }
+    private static View findText(View root,String value){
+        if(root instanceof TextView && ((TextView)root).getText().toString().contains(value))return root;
+        if(root instanceof ViewGroup){ViewGroup group=(ViewGroup)root;
+            for(int i=0;i<group.getChildCount();i++){View found=findText(group.getChildAt(i),value);if(found!=null)return found;}}
+        return null;
+    }
     @Test public void chronologyShowsReasonsForCurrentDestinations()throws Exception {
         Instrumentation inst=InstrumentationRegistry.getInstrumentation();
         Context ctx=inst.getTargetContext();
@@ -67,6 +73,10 @@ public class RelationshipAnalyticsExplanationUiTest {
             assertTrue("Relationships loading blocked",idle.await(8,TimeUnit.SECONDS));
             inst.waitForIdleSync();
             LinearLayout list=(LinearLayout)get(a,"list");
+            inst.runOnMainSync(()->{
+                View expand=findText(list,"Другие инструменты истории");
+                assertNotNull("Additional tools disclosure missing",expand);assertTrue(expand.performClick());
+            });
             for(String description:new String[]{
                 RelationshipFeatureGuide.STAGES,RelationshipFeatureGuide.ECHO,
                 RelationshipFeatureGuide.COMPARE,RelationshipFeatureGuide.MEMORIES,
