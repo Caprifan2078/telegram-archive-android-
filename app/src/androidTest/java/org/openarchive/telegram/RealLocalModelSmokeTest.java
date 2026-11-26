@@ -15,7 +15,11 @@ public final class RealLocalModelSmokeTest {
     @Test public void downloadedModelAnswersSyntheticChatQuestion() throws Exception {
         Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
         String key="model_smoke_"+UUID.randomUUID().toString().replace("-","");
-        File model=new File(context.getCacheDir(),"model-smoke-"+UUID.randomUUID()+".litertlm");
+        File modelDir=new File(context.getCacheDir(),"model-smoke-"+UUID.randomUUID());
+        assertTrue(modelDir.mkdirs());
+        String modelKey=InstrumentationRegistry.getArguments().getString("analystModel","qwen06");
+        assertTrue(modelKey.matches("[a-z0-9]+"));
+        File model=new File(modelDir,"analyst-"+modelKey+".litertlm");
         MessageDb db=new MessageDb(context,key);
         try {
             SQLiteDatabase sql=db.getWritableDatabase();
@@ -24,7 +28,7 @@ public final class RealLocalModelSmokeTest {
             db.stage(sql,"Аня","2026-02-01 10:03","Хорошо, до встречи.",null,"");
             db.publishStaged(sql);
             AtomicBoolean cancel=new AtomicBoolean(false);
-            String requested=InstrumentationRegistry.getArguments().getString("analystModel","qwen06");
+            String requested=modelKey;
             AnalystModelCatalog.Model chosen=null;
             for(AnalystModelCatalog.Model item:AnalystModelCatalog.MODELS)if(item.key.equals(requested))chosen=item;
             assertNotNull("Unknown pinned model: "+requested,chosen);
@@ -81,7 +85,7 @@ public final class RealLocalModelSmokeTest {
             android.util.Log.i("ModelSmoke","Quality defects: "+defects);
             assertTrue("Model quality gate: "+defects,defects.isEmpty());
         } finally {
-            db.close();context.deleteDatabase(DeepChatContext.dbName(key));model.delete();
+            db.close();context.deleteDatabase(DeepChatContext.dbName(key));model.delete();modelDir.delete();
         }
     }
 }
