@@ -21,6 +21,7 @@ case "${1:-}" in
   premium_players) classes=(MusicRecoveryRegressionTest RoundPlayerActivityTest PlaybackLifecycleTest MissingMediaPlaybackRegressionTest AttachmentPreviewScreenTest MediaFastScrollRegressionTest) ;;
   home_reading) classes=(Qa01ChatListSizeTest Qa01TwoChatsTest MultiConversationHomeRegressionTest Qa02ReadingPositionIsolationTest Qa02ReadingProgressIsolationTest QaUiChatNavigationRegressionTest) ;;
   interface_audit) classes=(InterfaceFunctionRegressionTest UiChromeOverlapRegressionTest QaUiChatNavigationRegressionTest MediaInfiniteGalleryRegressionTest MediaFastScrollRegressionTest SearchLifecycleRegressionTest ChronologyHubRegressionTest) ;;
+  current_help) classes=(Qa00HelpLifecycleTest Qa00MediaFilterTest Qa00NavigationCoreTest UiMenuTourRegressionTest Qa01TwoChatsTest ConversationPdfExporterTest) ;;
   *) echo "Unknown audit suite" >&2; exit 2 ;;
 esac
 qualified=()

@@ -31,6 +31,8 @@ public class Qa00HelpLifecycleTest {
     private void scrollDrawerToHelp(){
         for(int i=0;i<10;i++){
             UiObject2 item=device.findObject(By.textContains("Помощь и инструкция"));
+            UiObject2 section=device.findObject(By.textContains("Помощь и диагностика"));
+            if(item==null&&section!=null&&!section.getVisibleBounds().isEmpty()){section.click();device.waitForIdle();continue;}
             if(item!=null&&!item.getVisibleBounds().isEmpty()){item.click();device.waitForIdle();return;}
             UiObject2 scroll=device.findObject(By.clazz("android.widget.ScrollView"));
             assertNotNull("Drawer scroll area missing",scroll);Rect b=scroll.getVisibleBounds();
@@ -54,7 +56,7 @@ public class Qa00HelpLifecycleTest {
             assertTrue(prefs.edit().putString("archive_registry",chats.toString()).putString("active_archive",key).commit());
             try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
                 tap("QA Help Lifecycle");shown("QA help message");
-                tap("≡");tap("Все инструменты");scrollDrawerToHelp();shown("СПРАВОЧНИК");
+                tap("⋯");tap("Все инструменты");scrollDrawerToHelp();shown("СПРАВОЧНИК");
                 tap("Первые шаги");tap("Быстрый старт: первые три шага");shown("ИНСТРУКЦИЯ");
                 scenario.recreate();device.waitForIdle();shown("ИНСТРУКЦИЯ");
                 device.pressBack();device.waitForIdle();shown("РАЗДЕЛ");

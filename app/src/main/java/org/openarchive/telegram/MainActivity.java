@@ -1274,7 +1274,7 @@ public class MainActivity extends Activity {
         savedComposer.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
         playerStrip.setVisibility(View.GONE);pinnedBar.removeAllViews();
         filterBar.removeAllViews();searchArea.removeAllViews();
-        status.setText("Справочник не изменяет твои данные");
+        status.setText("");status.setVisibility(View.GONE);
         TextView crumb=text(helpChapter!=-1?"ИНСТРУКЦИЯ":helpShelf!=-1?"ПОДРАЗДЕЛ":helpCategory!=-1?"РАЗДЕЛ":"СПРАВОЧНИК",11,ACCENT);
         crumb.setTypeface(null,Typeface.BOLD);crumb.setPadding(px(12),px(16),0,px(5));list.addView(crumb);
         if(helpCategory!=-1){
@@ -3224,13 +3224,18 @@ public class MainActivity extends Activity {
         if(!returnScreen.isEmpty()){restoreReturn();return;}
         super.onBackPressed();
     }
+    private void showPdfStatus(String key,String message){
+        if(!home&&"chat".equals(screen)&&key.equals(activeKey)&&status!=null){
+            status.setText(message);status.setVisibility(View.VISIBLE);
+        }
+    }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
         if(request==SAVE_CONVERSATION_PDF_REQUEST){
             final String key=pendingPdfKey,name=pendingPdfName;pendingPdfKey=null;pendingPdfName=null;
             if(result==RESULT_OK&&data!=null&&data.getData()!=null&&key!=null){
                 final Uri destination=data.getData();
-                status.setText("Создаю PDF переписки…");
+                showPdfStatus(key,"Создаю PDF переписки…");
                 worker.execute(()->{
                     MessageDb source=new MessageDb(getApplicationContext(),key);
                     java.io.File temporary=null;
@@ -3247,10 +3252,10 @@ public class MainActivity extends Activity {
                             while((n=in.read(buffer))!=-1)out.write(buffer,0,n);
                             out.flush();
                         }
-                        runOnUiThread(()->{status.setText("PDF сохранён · страниц: "+pages);toast("PDF сохранён");});
+                        runOnUiThread(()->{if(!isDestroyed()&&!isFinishing()){showPdfStatus(key,"PDF сохранён · страниц: "+pages);toast("PDF сохранён");}});
                     }catch(Exception error){
                         // A document provider may return an existing document: never delete it on failure.
-                        runOnUiThread(()->{status.setText("Не удалось сохранить PDF; проверь выбранный файл");toast("Ошибка PDF: "+error.getMessage());});
+                        runOnUiThread(()->{if(!isDestroyed()&&!isFinishing()){showPdfStatus(key,"Не удалось сохранить PDF; проверь выбранный файл");toast("Ошибка PDF: "+error.getMessage());}});
                     }finally{source.close();if(temporary!=null)temporary.delete();}
                 });
             }

@@ -61,10 +61,10 @@ public class Qa00MediaFilterTest {
                     set(a,"folder",null);set(a,"home",false);set(a,"screen","chat");set(a,"mediaKind","all");show(a);
                 }catch(Exception e){throw new AssertionError(e);}
             });
-            tap("▦ Медиа");tap("Фото");filtered("Фото","Видео");
-            tap("💬 Переписка");tap("▦ Медиа");filtered("Фото","Видео");
+            tap("QA00 media filters");tap("Фото");filtered("Фото","Видео");
+            device.pressBack();device.waitForIdle();tap("QA00 media filters");filtered("Фото","Видео");
             tap("Видео");filtered("Видео","Фото");
-            tap("💬 Переписка");tap("▦ Медиа");filtered("Видео","Фото");
+            device.pressBack();device.waitForIdle();tap("QA00 media filters");filtered("Видео","Фото");
         }finally{
             CountDownLatch idle=new CountDownLatch(1);
             ((ExecutorService)field(a,"worker")).execute(idle::countDown);
