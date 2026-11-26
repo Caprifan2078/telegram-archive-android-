@@ -24,7 +24,10 @@ final class ChatSurfacePolicy {
         return AnalyticsContrastPolicy.readableTextColor(color,0xff000000,0xffffffff);
     }
     static int searchHighlight(ViewerPalette p,int background){
-        int tint=blend(background,p.light?0xffb26e08:0xffffca65,20);
-        return AnalyticsContrastPolicy.contrast(tint,p.text)>=4.5?tint:background;
+        for(int amount:new int[]{20,15,10,5}){
+            int tint=blend(background,p.light?0xffb26e08:0xffffca65,amount);
+            if(AnalyticsContrastPolicy.contrast(tint,p.text)>=4.5)return tint;
+        }
+        return background;
     }
 }
