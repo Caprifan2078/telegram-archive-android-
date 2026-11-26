@@ -231,12 +231,12 @@ public final class DeepAnalystActivity extends Activity {
         busy("Проверяю факты по всей переписке…");results.removeAllViews();
         worker.execute(()->{
             try{
-                ChatQuestionAnalyst.Answer answer=ChatQuestionAnalyst.readOnly(getDatabasePath(DeepChatContext.dbName(archive)),
-                    ChatQuestionAnalyst.parse(q),taskCancel);
+                ChatQuestionAnalyst.Query parsed=ChatQuestionAnalyst.parse(q);
+                ChatQuestionAnalyst.Answer answer=ChatQuestionAnalyst.readOnly(getDatabasePath(DeepChatContext.dbName(archive)),parsed,taskCancel);
                 runOnUiThread(()->{
                     if(stopped.get())return;busy=false;refresh();
                     if(answer==null||taskCancel.get()){status.setText("Операция отменена.");return;}
-                    results.addView(text("Точный расчёт по архиву · без нейросети",18));revealResults();
+                    results.addView(text(parsed.kind==ChatQuestionAnalyst.Kind.INSULT_PHRASES||parsed.kind==ChatQuestionAnalyst.Kind.APOLOGY_PHRASES?"Совпадения формулировок · без нейросети":"Точный расчёт по архиву · без нейросети",18));revealResults();
                     results.addView(text(answer.text,15));
                     for(ChatQuestionAnalyst.Evidence src:answer.sources){
                         Button link=button(src.author+" · "+src.date+"\n"+src.excerpt);
