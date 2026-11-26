@@ -6732,7 +6732,7 @@ public class MainActivity extends Activity {
             // selector. Only explicit pinned controls should select another pin.
             runOnUiThread(()->{
                 if(!requestedArchive.equals(activeKey)||db!=requestedDb||isFinishing()||requestedToken!=loadToken||!requestedScreen.equals(screen))return;
-                if(at<0){toast("Сообщение не найдено");return;}
+                if(at<0){toast("Сообщение не найдено");if("chat".equals(screen)&&list.getChildCount()==0){returnScreen=source;showPage();}return;}
                 home=false;autoLoaded=PAGE;
                 if(resultScroll>=0)searchReturnScroll=resultScroll;
                 if(analysisScroll>=0)analyticsReturnScroll=analysisScroll;
