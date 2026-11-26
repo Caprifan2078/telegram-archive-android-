@@ -57,21 +57,42 @@ final class DeepChatContext {
                     }
                 }
             }
+            // Some Android FTS versions differ in handling expanded expressions.
+            // Recover literal topic hits before resolving reply edges, rather than
+            // immediately falling back to unrelated first/last messages.
+            if(picked.isEmpty()&&!cancelled.get()){
+                LinkedHashSet<String> terms=new LinkedHashSet<>();
+                for(OfflineSynonymSearch.Plan plan:plans)terms.addAll(plan.terms);
+                int searched=0;
+                for(String term:terms){
+                    if(cancelled.get()||searched++>=4||picked.size()>=8)break;
+                    if(term.length()<3)continue;
+                    String sql="SELECT id,author,date_text,body FROM messages WHERE instr(COALESCE(body_fold,''),?)>0 OR instr(body,?)>0 ORDER BY id ";
+                    try(Cursor c=db.rawQuery(sql+"ASC LIMIT 2",new String[]{term,term})){add(c,picked,cancelled);}
+                    try(Cursor c=db.rawQuery(sql+"DESC LIMIT 2",new String[]{term,term})){add(c,picked,cancelled);}
+                }
+                if(!picked.isEmpty())method="Резервный буквальный поиск: ранние и поздние сообщения";
+            }
             // Restore explicit Telegram reply links before generic neighboring rows.
             // A quoted target can be thousands of messages away from a matching answer.
             List<Source> hits=new ArrayList<>(picked.values());
-            int links=0;
+            int links=0;boolean replyEvidence=false;
             for(Source hit:hits){
                 if(cancelled.get()||picked.size()>=MAX_SOURCES-2||links>=4)break;
                 int before=picked.size();
-                try(Cursor c=db.rawQuery("SELECT m.id,m.author,m.date_text,m.body FROM message_replies r JOIN messages m ON m.id=r.target_message_id WHERE r.message_id=? LIMIT 1",new String[]{Long.toString(hit.id)})){add(c,picked,cancelled);}
+                try(Cursor c=db.rawQuery("SELECT m.id,m.author,m.date_text,m.body FROM message_replies r JOIN messages m ON m.id=r.target_message_id WHERE r.message_id=? LIMIT 1",new String[]{Long.toString(hit.id)})){
+                    if(c.moveToFirst()){replyEvidence=true;long id=c.getLong(0);
+                        if(!cancelled.get()&&picked.size()<MAX_SOURCES&&!picked.containsKey(id))
+                            picked.put(id,new Source(id,c.getString(1),c.getString(2),c.getString(3)));
+                    }
+                }
                 if(picked.size()>before)links++;
                 if(picked.size()>=MAX_SOURCES-2||links>=4)break;
                 before=picked.size();
                 try(Cursor c=db.rawQuery("SELECT m.id,m.author,m.date_text,m.body FROM message_replies r JOIN messages m ON m.id=r.message_id WHERE r.target_message_id=? ORDER BY m.id LIMIT 1",new String[]{Long.toString(hit.id)})){add(c,picked,cancelled);}
                 if(picked.size()>before)links++;
             }
-            if(links>0)method+=" + связанные ответы Telegram";
+            if(links>0||replyEvidence)method+=" + связанные ответы Telegram";
             // Alternate across early/late hits rather than exhausting the context
             // around the first few messages only.
             hits.sort(Comparator.comparingLong(x->x.id));
