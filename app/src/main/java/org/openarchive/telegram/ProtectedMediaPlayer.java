@@ -36,10 +36,11 @@ final class ProtectedMediaPlayer implements AutoCloseable {
     };
     ProtectedMediaPlayer(Activity context,android.media.MediaDataSource source,boolean video){
         this.source=source;
+        ViewerPalette palette=ViewerUi.palette(context);
         LinearLayout box=new LinearLayout(context);box.setOrientation(LinearLayout.VERTICAL);
         int p=(int)(12*context.getResources().getDisplayMetrics().density);
         box.setPadding(p,p,p,p);
-        status=new TextView(context);status.setText("Подготовка защищённого медиа…");
+        status=new TextView(context);status.setText("Подготовка защищённого медиа…");status.setTextColor(palette.muted);status.setPadding(0,p,0,p);
         if(video){
             SurfaceView surface=new SurfaceView(context);surface.setSecure(true);
             box.addView(surface,new LinearLayout.LayoutParams(-1,p*22));
@@ -50,8 +51,8 @@ final class ProtectedMediaPlayer implements AutoCloseable {
             });
         }
         box.addView(status);
-        seek=new SeekBar(context);seek.setContentDescription("Перемотка защищённого медиа");seek.setEnabled(false);box.addView(seek);
-        play=new Button(context);play.setText("Воспроизвести");play.setEnabled(false);box.addView(play);
+        seek=new SeekBar(context);seek.setProgressTintList(android.content.res.ColorStateList.valueOf(palette.accent));seek.setThumbTintList(android.content.res.ColorStateList.valueOf(palette.accent));seek.setContentDescription("Перемотка защищённого медиа");seek.setEnabled(false);box.addView(seek);
+        play=new Button(context);play.setText("Воспроизвести");ViewerUi.styleButton(play,palette.raised,palette.text,palette.light);play.setEnabled(false);box.addView(play);
         play.setOnClickListener(v->{
             if(!ready||closed)return;
             try{if(player.isPlaying())player.pause();else player.start();}

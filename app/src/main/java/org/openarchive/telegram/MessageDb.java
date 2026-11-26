@@ -201,6 +201,20 @@ class MessageDb extends SQLiteOpenHelper {
         }
         return out;
     }
+    void updateRelationshipEvent(long id,String title,String note){
+        if(id<=0||title==null||title.trim().isEmpty()||title.trim().length()>90)
+            throw new IllegalArgumentException("Название события: 1–90 символов");
+        if(note!=null&&note.length()>2500)throw new IllegalArgumentException("Описание: до 2500 символов");
+        ContentValues v=new ContentValues();v.put("title",title.trim());v.put("note",note==null?"":note.trim());
+        if(getWritableDatabase().update("relationship_events",v,"id=?",new String[]{Long.toString(id)})!=1)
+            throw new IllegalArgumentException("Событие не найдено");
+    }
+    /** Remove only a personal annotation link, never an attachment or original file. */
+    void unlinkRelationshipMedia(long eventId,long attachmentId){
+        if(eventId==0||attachmentId<=0)throw new IllegalArgumentException("Неверная ссылка");
+        getWritableDatabase().delete("relationship_links","event_id=? AND attachment_id=?",
+            new String[]{Long.toString(eventId),Long.toString(attachmentId)});
+    }
     void removeRelationshipEvent(long id){
         SQLiteDatabase d=getWritableDatabase();d.beginTransaction();
         try{d.delete("relationship_links","event_id=?",new String[]{String.valueOf(id)});
@@ -209,7 +223,8 @@ class MessageDb extends SQLiteOpenHelper {
         }finally{d.endTransaction();}
     }
     void linkRelationshipMedia(long eventId,long attachmentId){
-        SQLiteDatabase d=getWritableDatabase();
+        SQLiteDatabase d=getWritableDatabase();d.beginTransaction();
+        try{
         if(eventId==0)throw new IllegalArgumentException("Неверная отметка");
         String table=eventId>0?"relationship_events":"conversation_periods";
         try(Cursor check=d.rawQuery("SELECT 1 FROM "+table+" WHERE id=?",
@@ -223,13 +238,17 @@ class MessageDb extends SQLiteOpenHelper {
         }
         ContentValues v=new ContentValues();v.put("event_id",eventId);v.put("attachment_id",attachmentId);v.put("path",path);
         d.insertWithOnConflict("relationship_links",null,v,SQLiteDatabase.CONFLICT_IGNORE);
+        d.setTransactionSuccessful();
+        }finally{d.endTransaction();}
     }
-    List<Attachment> relationshipMedia(long eventId){
+    List<Attachment> relationshipMedia(long eventId){return relationshipMediaPage(eventId,0,100);}
+    List<Attachment> relationshipMediaPage(long eventId,int offset,int limit){
+        if(offset<0||limit<1||limit>100)throw new IllegalArgumentException("Неверная страница вложений");
         ArrayList<Attachment> out=new ArrayList<>();
         String sql="SELECT a.id,a.message_id,a.path,a.kind FROM relationship_links l "+
             "INNER JOIN attachments a ON a.id=l.attachment_id AND a.path=l.path "+
-            "WHERE l.event_id=? ORDER BY a.id LIMIT 100";
-        try(Cursor c=getReadableDatabase().rawQuery(sql,new String[]{String.valueOf(eventId)})){
+            "WHERE l.event_id=? ORDER BY a.id LIMIT ? OFFSET ?";
+        try(Cursor c=getReadableDatabase().rawQuery(sql,new String[]{String.valueOf(eventId),Integer.toString(limit),Integer.toString(offset)})){
             while(c.moveToNext()){Attachment a=new Attachment();a.id=c.getLong(0);a.messageId=c.getLong(1);
                 a.path=c.getString(2);a.kind=c.getString(3);out.add(a);}
         }
@@ -385,6 +404,16 @@ class MessageDb extends SQLiteOpenHelper {
 
     /** Stream the current chat without loading message bodies or attachments into a list.
      * Read-only: no schema migration, no files, no network access. Run on worker thread. */
+    ChatQuestionAnalyst.Answer askChat(ChatQuestionAnalyst.Query query,java.util.concurrent.atomic.AtomicBoolean cancelled){
+        ChatQuestionAnalyst.Accumulator answer=new ChatQuestionAnalyst.Accumulator(query);
+        if(query.kind==ChatQuestionAnalyst.Kind.UNKNOWN)return answer.finish();
+        try(Cursor rows=getReadableDatabase().rawQuery("SELECT id,author,date_text,body FROM messages ORDER BY id",null)){
+            while(!cancelled.get()&&rows.moveToNext())
+                answer.add(rows.getLong(0),rows.getString(1),rows.getString(2),rows.getString(3));
+        }
+        return cancelled.get()?null:answer.finish();
+    }
+
     ChatAnalytics.Snapshot analytics(){
         SQLiteDatabase database=getReadableDatabase();
         ChatAnalytics.Accumulator stats=new ChatAnalytics.Accumulator();

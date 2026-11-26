@@ -58,21 +58,19 @@ public class RoundPlayerActivity extends Activity {
     }};
     private int dp(float n){return (int)(n*getResources().getDisplayMetrics().density+.5f);}
     private GradientDrawable glass(int radius){
-        GradientDrawable bg=new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-            new int[]{0xf121394d,0xf20c1727});
-        bg.setCornerRadius(dp(radius));bg.setStroke(dp(1),0x447fb3cd);return bg;
+        return ViewerUi.surface(this,0xf2172231,radius,false,true);
     }
     private Button button(String title,int width){
         Button b=new Button(this);b.setText(title);b.setTextSize(17);b.setAllCaps(false);
         b.setTextColor(Color.WHITE);b.setTypeface(android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.NORMAL));
-        b.setBackground(new RippleDrawable(ColorStateList.valueOf(0x3c7ad2ff),glass(14),null));
+        b.setBackground(ViewerUi.control(this,ViewerUi.RAISED,ViewerUi.CONTROL,false));
         b.setElevation(0);b.setStateListAnimator(null);
         b.setMinWidth(0);b.setMinimumWidth(0);b.setPadding(dp(8),0,dp(8),0);
         b.setLayoutParams(new LinearLayout.LayoutParams(dp(width),dp(46)));
         return b;
     }
     private static String clock(int ms){int v=Math.max(0,ms)/1000;return String.format(Locale.ROOT,"%02d:%02d",v/60,v%60);}
-    private int motionDuration(){return ValueAnimator.areAnimatorsEnabled()?170:0;}
+    private int motionDuration(){return ViewerUi.motionDuration(this,170);}
     private void toggleControls(){
         controlsVisible=!controlsVisible;
         animateControl(topBar,controlsVisible,-dp(8));

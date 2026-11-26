@@ -88,11 +88,60 @@ public class SevenZTelegramImportRegressionTest {
             assertTrue("Original must remain present",archive.isFile());
         }finally{prior.close();ctx.deleteDatabase("telegram_"+old+".db");java.util.Arrays.fill(password,'\0');archive.delete();ArchiveFileImport.deleteTree(existing);}
     }
+    @Test public void encryptedSevenZWithRenamedTelegramHtmlImportsSameAsStandalone()throws Exception{
+        char[] password="synthetic-7z-import".toCharArray();
+        String next=key();File archive=fixture("Export/Conversation.html",password);
+        byte[] original=java.nio.file.Files.readAllBytes(archive.toPath());
+        try{
+            File chat=ArchiveFileImport.extract(ctx,Uri.fromFile(archive),"7z",next,password,p->{});
+            assertTrue(new File(chat,"Conversation.html").isFile());
+            MessageDb db=new MessageDb(ctx,next);
+            try{
+                assertEquals(1,TelegramImporter.importFiles(ctx.getContentResolver(),
+                    new DocumentFolder(ctx.getContentResolver(),chat),db,p->{}));
+                assertEquals(1,db.totalMessages());
+                assertTrue(db.page(0,1,"",false,"",false,false).get(0).body.contains("Synthetic 7z chat"));
+            }finally{db.close();}
+            assertArrayEquals(original,java.nio.file.Files.readAllBytes(archive.toPath()));
+        }finally{java.util.Arrays.fill(password,'\0');archive.delete();ArchiveFileImport.deleteTree(directory(next));ctx.deleteDatabase("telegram_"+next+".db");}
+    }
+    @Test public void encryptedSevenZWithNonHtmlReportsDiscoveryNotPassword()throws Exception{
+        char[] password="synthetic-7z-import".toCharArray();
+        String next=key();File archive=fixture("Export/readme.txt",password);
+        try{
+            try{ArchiveFileImport.extract(ctx,Uri.fromFile(archive),"7z",next,password,p->{});fail("Non-HTML file was accepted");}
+            catch(ArchiveFileImport.ExportNotFound expected){
+                assertTrue(expected.getMessage().contains("Файлов: 1"));
+                assertTrue(expected.getMessage().contains("HTML: 0"));
+                assertFalse(ArchiveFileImport.isPasswordFailure(expected));
+            }
+            assertFalse(directory(next).exists());
+        }finally{java.util.Arrays.fill(password,'\0');archive.delete();ArchiveFileImport.deleteTree(directory(next));}
+    }
     @Test public void parentTraversalFailsAndRollsBackStaging()throws Exception{
         File archive=fixture("../messages.html",null);String next=key();
         try{
             try{ArchiveFileImport.extract(ctx,Uri.fromFile(archive),"7z",next,null,ignored->{});fail("Traversal must be rejected");}
             catch(Exception expected){assertFalse(directory(next).exists());}
         }finally{archive.delete();ArchiveFileImport.deleteTree(directory(next));}
+    }
+
+    @Test public void encryptedSevenZInsideZipWithMetadata()throws Exception{
+        String key=key();char[] password="synthetic-nested".toCharArray();
+        File inner=fixture("Export/messages.html",password);
+        File outer=File.createTempFile("7z-in-zip-", ".zip",ctx.getCacheDir());
+        try{
+            try(java.util.zip.ZipOutputStream zip=new java.util.zip.ZipOutputStream(new FileOutputStream(outer))){
+                zip.putNextEntry(new java.util.zip.ZipEntry("inner.7z"));
+                try(InputStream in=new FileInputStream(inner)){byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))!=-1)zip.write(buffer,0,n);}
+                zip.closeEntry();
+                zip.putNextEntry(new java.util.zip.ZipEntry("desktop.ini"));zip.write(new byte[]{1});zip.closeEntry();
+            }
+            byte[] before=java.nio.file.Files.readAllBytes(outer.toPath());
+            File chat=ArchiveFileImport.extract(ctx,Uri.fromFile(outer),"zip",key,password,ignored->{});
+            assertTrue(new File(chat,"messages.html").isFile());
+            assertTrue(new File(chat,"photos/example.txt").isFile());
+            assertArrayEquals(before,java.nio.file.Files.readAllBytes(outer.toPath()));
+        }finally{java.util.Arrays.fill(password,'\0');inner.delete();outer.delete();ArchiveFileImport.deleteTree(directory(key));}
     }
 }

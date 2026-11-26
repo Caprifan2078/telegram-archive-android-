@@ -52,4 +52,21 @@ public class MediaSaveIntegrationTest {
             fail("Missing media should fail");
         }catch(java.io.IOException expected){assertNotNull(expected.getMessage());}
     }
+
+    @Test public void identicalSourceAndDestinationCannotTruncateOriginal()throws Exception {
+        Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File source=File.createTempFile("ta-original-",".bin",ctx.getCacheDir());
+        byte[] expected={1,2,3,4,5,6};
+        try{
+            java.nio.file.Files.write(source.toPath(),expected);
+            Uri original=Uri.fromFile(source);
+            try{MediaSaver.copy(ctx,original,original);fail("Same URI must be rejected");}
+            catch(MediaSaver.SameSourceException good){}
+            assertArrayEquals(expected,java.nio.file.Files.readAllBytes(source.toPath()));
+            Uri alias=Uri.fromFile(new File(source.getParentFile(),"./"+source.getName()));
+            try{MediaSaver.copy(ctx,original,alias);fail("Canonical alias must be rejected");}
+            catch(MediaSaver.SameSourceException good){}
+            assertArrayEquals(expected,java.nio.file.Files.readAllBytes(source.toPath()));
+        }finally{source.delete();}
+    }
 }

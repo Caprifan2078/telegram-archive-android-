@@ -60,13 +60,14 @@ public class Qa01ChatListSizeTest {
                 .putString("active_archive",prefix+0).commit());
             try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
                 assertNotNull("Wrong chat count",device.wait(
-                    Until.findObject(By.text("Всего чатов: "+count)),8000));
+                    Until.findObject(By.desc("Всего чатов: "+count)),8000));
+                assertNotNull("Import must be visible above a long chat list",device.wait(Until.findObject(By.desc("Добавить переписку из экспорта Telegram")),5000));
                 String last=String.format(Locale.ROOT,"QA01 Size %03d",count-1);
                 UiObject2 card=findOrScroll(last);
                 assertNotNull("Last chat card unreachable for "+count,card);
                 card.click();device.waitForIdle();
                 assertNotNull("Last chat did not open",device.wait(
-                    Until.findObject(By.text("История сообщений · локально")),8000));
+                    Until.findObject(By.text("Медиа — по названию чата")),8000));
                 assertNotNull("Wrong chat heading",device.wait(Until.findObject(By.textContains(last)),8000));
                 assertNotNull("Empty chat must explain that it has no messages",
                     device.wait(Until.findObject(By.text("В этой переписке пока нет сообщений.")),8000));

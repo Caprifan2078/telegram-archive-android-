@@ -166,7 +166,7 @@ public class MissingMediaPlaybackRegressionTest {
         MainActivity a=activity.getActivity();String key=UUID.randomUUID().toString();
         File folder=new File(a.getCacheDir(),"duration-missing-"+key);assertTrue(folder.mkdirs());
         try{
-            awaitDuration(requestDuration(a,folder,"synthetic-"+key,"later.mp4"),"00:00");
+            awaitDuration(requestDuration(a,folder,"synthetic-"+key,"later.mp4"),"—");
             File media=new File(folder,"later.mp4");copyAsset("short-round.mp4",media);
             awaitDuration(requestDuration(a,folder,"synthetic-"+key,"later.mp4"),expectedDuration(media));
         }finally{ArchiveFileImport.deleteTree(folder);}

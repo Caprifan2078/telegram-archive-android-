@@ -217,7 +217,7 @@ android {
     buildTypes {
         protectedArchiveQa {
             initWith compactQa
-            applicationIdSuffix '.integrated20261126'
+            applicationIdSuffix (project.findProperty('qaLocalModel') == 'true' ? '.analyst20261126' : '.premium20261126')
             signingConfig signingConfigs.debug
         }
     }
@@ -229,7 +229,7 @@ android {
     }
 }
 
-dependencies { implementation 'androidx.recyclerview:recyclerview:1.4.0'; implementation 'androidx.core:core:1.15.0'; implementation 'com.airbnb.android:lottie:6.7.1'; implementation 'org.jsoup:jsoup:1.24.1'; implementation 'com.github.junrar:junrar:8.1.2'; implementation 'org.apache.commons:commons-compress:1.28.0'; implementation 'org.tukaani:xz:1.10'; implementation 'net.lingala.zip4j:zip4j:2.11.6'; testImplementation 'junit:junit:4.13.2'; androidTestImplementation 'androidx.test.ext:junit:1.2.1'; androidTestImplementation 'androidx.test:runner:1.6.2'; androidTestImplementation 'androidx.test:rules:1.6.1'; androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'; androidTestImplementation 'androidx.test.uiautomator:uiautomator:2.3.0' }
+dependencies { implementation 'androidx.recyclerview:recyclerview:1.4.0'; implementation 'androidx.core:core:1.15.0'; implementation 'com.airbnb.android:lottie:6.7.1'; implementation 'org.jsoup:jsoup:1.24.1'; implementation 'com.github.junrar:junrar:8.1.2'; implementation 'org.apache.commons:commons-compress:1.28.0'; implementation 'org.tukaani:xz:1.10'; implementation 'net.lingala.zip4j:zip4j:2.11.6'; implementation('ru.oleg-cherednik.zip4jvm:zip4jvm:1.13') { exclude group: 'com.github.luben', module: 'zstd-jni' }; testImplementation 'junit:junit:4.13.2'; androidTestImplementation 'androidx.test.ext:junit:1.2.1'; androidTestImplementation 'androidx.test:runner:1.6.2'; androidTestImplementation 'androidx.test:rules:1.6.1'; androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'; androidTestImplementation 'androidx.test.uiautomator:uiautomator:2.3.0' }
 
 // Converge Kotlin runtime artifacts when AndroidX FileProvider and legacy media
 // dependencies pull different jdk7/jdk8 shim versions.
@@ -246,4 +246,11 @@ gradle.taskGraph.whenReady { graph ->
         if (!missing.isEmpty()) throw new GradleException("Stable QA signing is not configured: " + missing.join(', '))
         if (!file(System.getenv('ARCHIVE_QA_KEYSTORE')).isFile()) throw new GradleException('Stable QA keystore file not found')
     }
+}
+
+// Explicit experimental opt-in: the normal lightweight Viewer does not carry a native LLM runtime.
+if (project.findProperty('qaLocalModel') == 'true') {
+    android.sourceSets.main.java.srcDir 'src/localModel/java'
+    android.sourceSets.main.manifest.srcFile 'src/localModel/AndroidManifest.xml'
+    dependencies { implementation 'com.google.ai.edge.litertlm:litertlm-android:0.18.0' }
 }

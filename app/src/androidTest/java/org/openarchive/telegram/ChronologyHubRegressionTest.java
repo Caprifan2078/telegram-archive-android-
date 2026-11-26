@@ -34,7 +34,15 @@ public final class ChronologyHubRegressionTest {
         Method m=MainActivity.class.getDeclaredMethod(method);m.setAccessible(true);m.invoke(a);
     }
     private View find(View node,String label){
-        if(node instanceof TextView&&label.equals(((TextView)node).getText().toString()))return node;
+        if(node instanceof TextView&&label.equals(((TextView)node).getText().toString())){
+            View current=node;
+            while(current.getParent() instanceof View&&!current.isClickable()){
+                View parent=(View)current.getParent();
+                if(parent instanceof android.widget.ScrollView)break;
+                current=parent;
+            }
+            return current.isClickable()?current:node;
+        }
         if(node instanceof ViewGroup){
             ViewGroup group=(ViewGroup)node;
             for(int i=0;i<group.getChildCount();i++){
@@ -53,7 +61,13 @@ public final class ChronologyHubRegressionTest {
         MainActivity activity=rule.getActivity();
         String key="qa_history_"+UUID.randomUUID().toString().replace("-","");
         MessageDb synthetic=new MessageDb(activity,key);
-        synthetic.getWritableDatabase();
+        android.database.sqlite.SQLiteDatabase sql=synthetic.getWritableDatabase();
+        long anchor=synthetic.stage(sql,"QA","2026-01-01 10:00","Synthetic stage",null,"");
+        for(int i=0;i<105;i++)synthetic.stageAttachment(sql,anchor,"photos/qa_"+i+".jpg","image");
+        synthetic.publishStaged(sql);
+        ConversationPeriods.Boundary boundary=new ConversationPeriods.Boundary(anchor,0);
+        long stage=synthetic.addPeriod("Большой этап","",boundary,boundary);
+        for(MessageDb.Attachment file:synthetic.attachmentsForMessage(anchor))synthetic.linkRelationshipMedia(-stage,file.id);
         Object oldDb=field(activity,"db"),oldKey=field(activity,"activeKey"),
             oldName=field(activity,"activeName"),oldHome=field(activity,"home"),
             oldScreen=field(activity,"screen"),oldOpen=field(activity,"historyEventsExpanded"),
@@ -65,19 +79,21 @@ public final class ChronologyHubRegressionTest {
                 put(activity,"screen","relationships");put(activity,"historyEventsExpanded",false);
                 put(activity,"chronologySection","overview");
                 call(activity,"renderRelationshipsPage");
-                assertNotNull(find(activity.getWindow().getDecorView(),"01 · События переписки  ▾"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"События переписки ▾"));
                 assertNull("Event list must be lazy",find(activity.getWindow().getDecorView(),"Лента событий  ·  0"));
-                assertNotNull(find(activity.getWindow().getDecorView(),"02 · Этапы переписки  ›"));
-                assertNotNull(find(activity.getWindow().getDecorView(),"03 · Периоды по датам  ›"));
-                assertNotNull(find(activity.getWindow().getDecorView(),"04 · Сравнение этапов  ›"));
-                assertNotNull(find(activity.getWindow().getDecorView(),"05 · В этот день  ›"));
-                find(activity.getWindow().getDecorView(),"01 · События переписки  ▾").performClick();
+                assertNotNull(find(activity.getWindow().getDecorView(),"Этапы переписки"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"Периоды по датам"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"Сравнение этапов"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"В этот день"));
+                find(activity.getWindow().getDecorView(),"События переписки ▾").performClick();
             }catch(Exception e){throw new AssertionError(e);}});
             idle(activity);
             inst.runOnMainSync(()->{
-                assertNotNull(find(activity.getWindow().getDecorView(),"01 · События переписки  ▴"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"События переписки ▴"));
                 assertNotNull("Events appear only on request",find(activity.getWindow().getDecorView(),"Лента событий  ·  0"));
-                find(activity.getWindow().getDecorView(),"03 · Периоды по датам  ›").performClick();
+                assertNull("The event feed must not repeat other chronology sections",find(activity.getWindow().getDecorView(),"Периоды по датам"));
+                find(activity.getWindow().getDecorView(),"События переписки ▴").performClick();
+                find(activity.getWindow().getDecorView(),"Периоды по датам").performClick();
                 assertNull("Direct access must skip the redundant periods hub",
                     find(activity.getWindow().getDecorView(),"01 · Этапы переписки  ›"));
                 assertNotNull(find(activity.getWindow().getDecorView(),"+ Добавить период по датам"));
@@ -95,13 +111,32 @@ public final class ChronologyHubRegressionTest {
                     find(activity.getWindow().getDecorView(),"01 · Этапы переписки  ›"));
                 find(activity.getWindow().getDecorView(),"‹ К хронологии").performClick();
                 assertNotNull("Back must return to the direct chronology menu",
-                    find(activity.getWindow().getDecorView(),"02 · Этапы переписки  ›"));
-                assertNotNull(find(activity.getWindow().getDecorView(),"04 · Сравнение этапов  ›"));
-                assertNotNull(find(activity.getWindow().getDecorView(),"05 · В этот день  ›"));
-                find(activity.getWindow().getDecorView(),"02 · Этапы переписки  ›").performClick();
+                    find(activity.getWindow().getDecorView(),"Этапы переписки"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"Сравнение этапов"));
+                assertNotNull(find(activity.getWindow().getDecorView(),"В этот день"));
+                find(activity.getWindow().getDecorView(),"Этапы переписки").performClick();
                 assertNotNull(find(activity.getWindow().getDecorView(),"+ Отметить начало периода в переписке"));
                 assertNotNull(find(activity.getWindow().getDecorView(),"‹ К хронологии"));
             });
+            idle(activity);
+            inst.runOnMainSync(()->{
+                View root=activity.getWindow().getDecorView();
+                assertNull("Collapsed stage must not pre-render media rows",find(root,"Показать ещё вложения"));
+                assertNotNull(find(root,"Подробнее об этапе  ▾"));
+                find(root,"Подробнее об этапе  ▾").performClick();
+            });
+            idle(activity);
+            for(int page=0;page<4;page++){
+                inst.runOnMainSync(()->{
+                    View more=find(activity.getWindow().getDecorView(),"Показать ещё вложения");
+                    assertNotNull("All 105 attachments must remain accessible in pages",more);
+                    more.performClick();
+                });
+                idle(activity);
+            }
+            inst.runOnMainSync(()->assertNull("No empty extra page",find(activity.getWindow().getDecorView(),"Показать ещё вложения")));
+            assertEquals(105,synthetic.attachmentsForMessage(anchor).size());
+            assertEquals(5,synthetic.relationshipMediaPage(-stage,100,25).size());
         }finally{
             idle(activity);
             inst.runOnMainSync(()->{try{

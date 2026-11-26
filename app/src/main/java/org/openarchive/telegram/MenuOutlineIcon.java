@@ -14,19 +14,19 @@ final class MenuOutlineIcon extends Drawable {
     private final int type;
     MenuOutlineIcon(String label,int color){
         String value=label==null?"":label.toLowerCase(Locale.ROOT);
-        if(value.contains("замет")||value.contains("шрифт"))type=1;
+        if(value.contains("замет"))type=1;
         else if(value.contains("резерв")||value.contains("архив")||value.contains("копи")||value.contains("корзин"))type=2;
         else if(value.contains("помощ")||value.contains("инструкц"))type=3;
         else if(value.contains("диагност")||value.contains("провер"))type=4;
         else if(value.contains("учебн"))type=5;
         else if(value.contains("все инструменты")||value.contains("инструменты переписки"))type=13;
         else if(value.contains("поиск")||value.contains("найти сообщение"))type=6;
-        else if(value.contains("дате")||value.contains("дата")||value.contains("календар"))type=11;
+        else if(value.contains("дате")||value.contains("дата")||value.contains("календар")||value.contains("этот день")||value.contains("период"))type=11;
         else if(value.contains("анализ")||value.contains("статистик"))type=12;
         else if(value.contains("управление")||value.contains("оформлен")||
                 value.contains("настрой")||value.contains("шрифт"))type=7;
         else if(value.contains("медиа")||value.contains("галере")||value.contains("кинолент"))type=8;
-        else if(value.contains("хронолог")||value.contains("истори"))type=9;
+        else if(value.contains("хронолог")||value.contains("истори")||value.contains("событи")||value.contains("этапы")||value.contains("пауз"))type=9;
         else if(value.contains("сравнен")||value.contains("двух"))type=10;
         else type=0;
         stroke.setColor(color);stroke.setStyle(Paint.Style.STROKE);

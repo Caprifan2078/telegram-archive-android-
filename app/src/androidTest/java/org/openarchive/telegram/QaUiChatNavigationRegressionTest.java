@@ -70,8 +70,7 @@ public final class QaUiChatNavigationRegressionTest {
                 assertTrue(add.performClick());
             });
             device.waitForIdle();
-            assertNotEquals("The system picker must open on the first tap",
-                a.getPackageName(),device.getCurrentPackageName());
+            assertTrue("The system document picker must open on the first tap",device.wait(Until.hasObject(By.pkg(java.util.regex.Pattern.compile(".*documentsui.*"))),12000));
             assertNull("No duplicate file/folder dialog may appear",
                 device.findObject(By.text("Импорт переписки")));
         }finally{

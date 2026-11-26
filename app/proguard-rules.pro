@@ -37,3 +37,13 @@
 -keep class org.apache.commons.compress.archivers.tar.TarArchiveOutputStream { *; }
 -keep class org.apache.commons.compress.archivers.tar.TarArchiveEntry { *; }
 -keep class net.lingala.zip4j.** { *; }
+
+# zip4jvm emits two JDK/Lombok build-time annotations absent on Android.
+# They are not decoder dependencies; suppress only these annotation diagnostics.
+-dontwarn java.beans.ConstructorProperties
+-dontwarn lombok.Generated
+
+# Native LiteRT-LM resolves Java getters and classes by literal JNI names.
+# Real minified APK crashed at SamplerConfig.getTopK()I (SIGABRT).
+# Keep this optional library's entire JNI-facing namespace; absent in light builds.
+-keep class com.google.ai.edge.litertlm.** { *; }

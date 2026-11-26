@@ -12,7 +12,8 @@ import java.io.OutputStream;
 
 /** Offline, text-only export. The cursor is streamed, not collected in memory. */
 final class ConversationPdfExporter {
-    private static final int WIDTH=595, HEIGHT=842, MARGIN=42, MAX_PAGES=250;
+    private static final int WIDTH=595, HEIGHT=842, MARGIN=42;
+    static final int MAX_PAGES=2000;
     private final PdfDocument document=new PdfDocument();
     private final TextPaint paint=new TextPaint(android.graphics.Paint.ANTI_ALIAS_FLAG);
     private PdfDocument.Page page;
@@ -20,7 +21,7 @@ final class ConversationPdfExporter {
 
     private void nextPage() throws IOException {
         if(page!=null){document.finishPage(page);page=null;}
-        if(pageCount>=MAX_PAGES)throw new IOException("Переписка слишком большая для одного PDF (более 250 страниц)");
+        if(pageCount>=MAX_PAGES)throw new IOException("Переписка слишком большая для одного PDF (более "+MAX_PAGES+" страниц)");
         page=document.startPage(new PdfDocument.PageInfo.Builder(WIDTH,HEIGHT,++pageCount).create());
         page.getCanvas().drawColor(Color.WHITE);y=MARGIN;
     }
@@ -82,9 +83,11 @@ final class ConversationPdfExporter {
             if(exporter.page!=null){exporter.document.finishPage(exporter.page);exporter.page=null;}
             exporter.document.writeTo(output);output.flush();
             return exporter.pageCount;
+        } catch(OutOfMemoryError memory){
+            throw new IOException("Недостаточно памяти для одного PDF. Исходная переписка сохранена.",memory);
         } finally {
-            if(exporter.page!=null)exporter.document.finishPage(exporter.page);
-            exporter.document.close();
+            try{if(exporter.page!=null)exporter.document.finishPage(exporter.page);}
+            finally{exporter.document.close();}
         }
     }
 }

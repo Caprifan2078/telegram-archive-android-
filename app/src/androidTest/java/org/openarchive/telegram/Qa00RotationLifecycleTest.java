@@ -30,10 +30,10 @@ public class Qa00RotationLifecycleTest {
     private void openAndCloseDrawer() {
         require("☰").click();
         device.waitForIdle();
-        require("TELEGRAM ARCHIVE");
+        assertNotNull("Drawer title missing",device.wait(Until.findObject(By.text("Telegram Archive")),8000));
         device.pressBack();
         device.waitForIdle();
-        assertNull("Back did not close drawer",device.wait(Until.findObject(By.text("TELEGRAM ARCHIVE")),1000));
+        assertNull("Back did not close drawer",device.wait(Until.findObject(By.text("Telegram Archive")),1000));
         require("Мои переписки");
     }
     @After public void restorePortrait()throws Exception {

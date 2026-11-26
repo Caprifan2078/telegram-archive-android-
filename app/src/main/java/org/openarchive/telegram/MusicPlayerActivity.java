@@ -37,7 +37,7 @@ import java.util.concurrent.Executors;
 public final class MusicPlayerActivity extends Activity {
     private final ExecutorService io=Executors.newSingleThreadExecutor();
     private final Handler ui=new Handler(Looper.getMainLooper());
-    private static final int BG=0xff081321, TEXT=0xfff5f8ff, MUTED=0xffb7ccdf, ACCENT=0xff77d5ff;
+    private int BG,TEXT,MUTED,ACCENT;private ViewerPalette palette;
     private static final float[] SPEEDS={0.25f,0.5f,0.75f,1f,1.25f,1.5f,2f};
     private MusicQueue queue;
     private int position=-1,serial=0;
@@ -79,7 +79,7 @@ public final class MusicPlayerActivity extends Activity {
         Button b=new Button(this);b.setText(text);b.setTextColor(TEXT);b.setTextSize(18);b.setAllCaps(false);
         b.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
         b.setMinWidth(0);b.setMinimumWidth(0);b.setPadding(dp(6),0,dp(6),0);
-        b.setBackground(new RippleDrawable(ColorStateList.valueOf(0x4496dffc),gradient(0xff233e59,0xff14283f,17),null));
+        ViewerUi.styleButton(b,palette.raised,TEXT,palette.light);
         b.setStateListAnimator(null);b.setElevation(0);
         b.setLayoutParams(new LinearLayout.LayoutParams(dp(width),dp(51)));return b;
     }
@@ -89,8 +89,8 @@ public final class MusicPlayerActivity extends Activity {
     }
     private void feedback(String message){notice.setText(message);}
     @Override public void onCreate(Bundle state){
-        super.onCreate(state);FontStyler.bind(this);
-        getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
+        ViewerUi.applyActivityTheme(this);super.onCreate(state);FontStyler.bind(this);
+        palette=ViewerUi.palette(this);BG=palette.background;TEXT=palette.text;MUTED=palette.muted;ACCENT=palette.accent;ViewerUi.systemBars(this,palette);
         chatKey=getIntent().getStringExtra("chat_key");
         String tree=getIntent().getStringExtra("tree");
         final long attachmentId=getIntent().getLongExtra("attachment_id",-1);
@@ -119,17 +119,20 @@ public final class MusicPlayerActivity extends Activity {
     private void buildUi(){
         android.widget.ScrollView screen=new android.widget.ScrollView(this);screen.setFillViewport(true);
         screen.setBackgroundColor(BG);setContentView(screen);
+        screen.setOnApplyWindowInsetsListener((v,insets)->{
+            if(android.os.Build.VERSION.SDK_INT>=30){android.graphics.Insets safe=insets.getInsets(android.view.WindowInsets.Type.systemBars()|android.view.WindowInsets.Type.displayCutout());screen.setPadding(safe.left,safe.top,safe.right,safe.bottom);}
+            else screen.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});screen.requestApplyInsets();
         LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setGravity(Gravity.CENTER_HORIZONTAL);
         panel.setPadding(dp(18),dp(18),dp(18),dp(24));screen.addView(panel,new android.widget.ScrollView.LayoutParams(-1,-1));
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
         panel.addView(header,new LinearLayout.LayoutParams(-1,dp(55)));
         Button back=control("‹",55);back.setContentDescription("Назад в медиатеку");header.addView(back);
         back.setOnClickListener(v->finish());
-        TextView heading=text("МУЗЫКА · ОФЛАЙН",15,ACCENT);heading.setTypeface(null,Typeface.BOLD);
+        TextView heading=text("Музыка · офлайн",16,TEXT);heading.setTypeface(null,Typeface.BOLD);
         header.addView(heading,new LinearLayout.LayoutParams(0,-1,1));
         Button settings=control("⚙",55);settings.setContentDescription("Настройки скорости музыки");header.addView(settings);
         settings.setOnClickListener(v->chooseSpeed());
-        FrameLayout artwork=new FrameLayout(this);artwork.setBackground(gradient(0xff2f5f79,0xff172e48,26));
+        FrameLayout artwork=new FrameLayout(this);artwork.setBackground(ViewerUi.surface(this,palette.surface,ViewerUi.HERO,palette.light,true));
         artwork.setClipToOutline(true);int screenWidth=getResources().getDisplayMetrics().widthPixels;
         int artworkHeight=Math.min(screenWidth-dp(36),dp(340));
         LinearLayout.LayoutParams artworkBox=new LinearLayout.LayoutParams(-1,artworkHeight);
@@ -138,14 +141,14 @@ public final class MusicPlayerActivity extends Activity {
         // On compact screens the cover remains responsive, while the controls stay readable.
         art=new ImageView(this);art.setScaleType(ImageView.ScaleType.CENTER_CROP);
         artwork.addView(art,new FrameLayout.LayoutParams(-1,-1));
-        TextView placeholder=text("♫",110,0xffa8e3ff);placeholder.setGravity(Gravity.CENTER);
+        TextView placeholder=text("♫",92,ACCENT);placeholder.setGravity(Gravity.CENTER);
         artwork.addView(placeholder,new FrameLayout.LayoutParams(-1,-1));
         art.setTag(placeholder);
         title=text("Загружаю треки…",21,TEXT);title.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
         title.setMaxLines(2);panel.addView(title,new LinearLayout.LayoutParams(-1,dp(61)));
         artist=text("Музыка из выбранной переписки",13,MUTED);panel.addView(artist,new LinearLayout.LayoutParams(-1,dp(30)));
         positionText=text("",12,ACCENT);panel.addView(positionText,new LinearLayout.LayoutParams(-1,dp(28)));
-        seek=new SeekBar(this);seek.setEnabled(false);seek.setContentDescription("Перемотка трека");
+        seek=new SeekBar(this);seek.setProgressTintList(ColorStateList.valueOf(ACCENT));seek.setThumbTintList(ColorStateList.valueOf(ACCENT));seek.setEnabled(false);seek.setContentDescription("Перемотка трека");
         panel.addView(seek,new LinearLayout.LayoutParams(-1,dp(54)));
         seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
             @Override public void onStartTrackingTouch(SeekBar b){scrubbing=true;}
@@ -162,7 +165,7 @@ public final class MusicPlayerActivity extends Activity {
         panel.addView(controls,new LinearLayout.LayoutParams(-1,dp(91)));
         previous=control("⏮",77);previous.setContentDescription("Предыдущий трек");controls.addView(previous);
         previous.setOnClickListener(v->skip(false));
-        toggle=control("▶",88);toggle.setEnabled(false);toggle.setContentDescription("Воспроизвести или поставить на паузу");
+        toggle=control("▶",88);ViewerUi.styleButton(toggle,ACCENT,palette.light?0xffffffff:palette.background,palette.light);toggle.setEnabled(false);toggle.setContentDescription("Воспроизвести или поставить на паузу");
         LinearLayout.LayoutParams playParams=(LinearLayout.LayoutParams)toggle.getLayoutParams();playParams.leftMargin=dp(9);playParams.rightMargin=dp(9);
         controls.addView(toggle,playParams);toggle.setOnClickListener(v->pauseOrPlay());
         next=control("⏭",77);next.setContentDescription("Следующий трек");controls.addView(next);

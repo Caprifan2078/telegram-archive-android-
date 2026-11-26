@@ -2,13 +2,31 @@
 set -euo pipefail
 case "${1:-}" in
   import) classes=(DrawerAesZipRegressionTest IndependentAesZipRegressionTest EncryptedTelegramImportRegressionTest ArchivePasswordOnDemandRegressionTest ArchivePasswordUiRegressionTest ArchiveReadOnlySafPipeRegressionTest SevenZTelegramImportRegressionTest RarCompatibilityRegressionTest ArchiveEndToEndRegressionTest) ;;
-  navigation) classes=(UiMenuTourRegressionTest UiChromeOverlapRegressionTest ChronologyHubRegressionTest ChatVisualConsistencyRegressionTest MultiConversationHomeRegressionTest HistoryEventSearchRegressionTest QaVisualAuditScreenshotsTest) ;;
+  navigation) classes=(ViewerThemeRegressionTest UiMenuTourRegressionTest UiChromeOverlapRegressionTest ChronologyHubRegressionTest ChatVisualConsistencyRegressionTest MultiConversationHomeRegressionTest HistoryEventSearchRegressionTest QaVisualAuditScreenshotsTest) ;;
   media) classes=(MediaFastScrollRegressionTest MediaInfiniteGalleryRegressionTest FloatingRoundReattachRegressionTest FloatingRoundLifecycleRegressionTest RoundPlayerActivityTest MediaPlaybackTest MediaUpgradeRegressionTest Qa00MediaLifecycleTest VoiceSeekUiRegressionTest MusicRecoveryRegressionTest PlaybackLifecycleTest) ;;
   protected) classes=(ProtectedArchiveSessionTest) ;;
   backup) classes=(BackupDryRunRegressionTest BackupIntegrityAndroid15RegressionTest BackupSafReadbackRegressionTest FullBackupCustomAssetSafetyRegressionTest FullBackupSourceAccessRegressionTest) ;;
   recovery) classes=(PortableRestoreRegressionTest RestoreRecoveryTest ImportRollbackRegressionTest DuplicateTelegramIdSafetyTest) ;;
   viewer) classes=(SearchLifecycleRegressionTest PerformanceRegressionTest) ;;
   documents) classes=(AttachmentPreviewScreenTest) ;;
+  analytics) classes=(DeepChatContextIntegrationTest ChatQuestionAnalystIntegrationTest RelationshipScanIntegrationTest AnalyticsIntegrationTest AnalyticsSectionNavigationRegressionTest LightAnalyticsVisualTest TrendsIntegrationTest RelationshipAnalyticsExplanationUiTest RelationshipPaginationRegressionTest) ;;
+  archive_deep) classes=(ArchiveIntegrationTest ArchivePreviewIntegrationTest LargeHtmlImportRegressionTest MultipleChatArchiveRegressionTest QaStandaloneHtmlImportRegressionTest RealTelegramExportStructureRegressionTest ZipFooterIntegrityRegressionTest) ;;
+  media_export) classes=(ExportMediaFilenameRegressionTest MediaSaveIntegrationTest MediaAssetsRegressionTest MediaClassifierTest MediaGridResponsiveAndroidTest MediaTabsIsolationTest MissingMediaPlaybackRegressionTest OpusSeekDiagnosticTest TgsRenderingIntegrationTest) ;;
+  chat_storage) classes=(CollectionsDatabaseTest CustomizationGroupTest MultiConversationRegistryRegressionTest QaTrashRestoreRegressionTest QuoteSavedStoreIntegrationTest TelegramReplyIntegrationTest) ;;
+  migrations) classes=(ConversationPeriodsMigrationTest LocalProfileMigrationTest RelationshipsMigrationTest SchemaCollisionMigrationTest) ;;
+  reading) classes=(PinnedFocusNavigationRegressionTest Qa01ChatListSizeTest Qa01ReadingPositionTest Qa01TwoChatsTest Qa02MissingAnchorTest Qa02ReadingPositionIsolationTest Qa02ReadingProgressIsolationTest) ;;
+  ui_legacy) classes=(InterfaceFunctionRegressionTest SavedWorkspaceRegressionTest Qa00HelpLifecycleTest Qa00MediaFilterTest Qa00NavigationCoreTest Qa00RotationLifecycleTest QaUiChatNavigationRegressionTest ReadableUiTest UiSmokeTest) ;;
+  history_export) classes=(ConversationPdfExporterTest GroupTimelineReadOnlyRegressionTest GroupTimelineScreenRegressionTest) ;;
+  premium_ui) classes=(UiMenuTourRegressionTest UiChromeOverlapRegressionTest ChronologyHubRegressionTest ChatVisualConsistencyRegressionTest MultiConversationHomeRegressionTest QaVisualAuditScreenshotsTest AnalyticsSectionNavigationRegressionTest LightAnalyticsVisualTest RelationshipAnalyticsExplanationUiTest ViewerThemeRegressionTest) ;;
+  premium_players) classes=(MusicRecoveryRegressionTest RoundPlayerActivityTest PlaybackLifecycleTest MissingMediaPlaybackRegressionTest AttachmentPreviewScreenTest MediaFastScrollRegressionTest) ;;
+  home_reading) classes=(Qa01ChatListSizeTest Qa01TwoChatsTest MultiConversationHomeRegressionTest Qa02ReadingPositionIsolationTest Qa02ReadingProgressIsolationTest QaUiChatNavigationRegressionTest) ;;
+  interface_audit) classes=(InterfaceFunctionRegressionTest UiChromeOverlapRegressionTest QaUiChatNavigationRegressionTest MediaInfiniteGalleryRegressionTest MediaFastScrollRegressionTest SearchLifecycleRegressionTest ChronologyHubRegressionTest) ;;
+  current_help) classes=(Qa00HelpLifecycleTest Qa00MediaFilterTest Qa00NavigationCoreTest UiMenuTourRegressionTest Qa01TwoChatsTest ConversationPdfExporterTest) ;;
+  chat_polish) classes=(ChatVisualConsistencyRegressionTest ViewerThemeRegressionTest UiChromeOverlapRegressionTest QaVisualAuditScreenshotsTest LightAnalyticsVisualTest MediaGridResponsiveAndroidTest) ;;
+  section_clarity) classes=(SavedWorkspaceRegressionTest QuoteSavedStoreIntegrationTest Qa00NavigationCoreTest ChronologyHubRegressionTest RelationshipAnalyticsExplanationUiTest RelationshipPaginationRegressionTest AnalyticsSectionNavigationRegressionTest LightAnalyticsVisualTest QaVisualAuditScreenshotsTest GroupTimelineScreenRegressionTest) ;;
+  event_management) classes=(RelationshipPaginationRegressionTest RelationshipsMigrationTest HistoryEventSearchRegressionTest ChronologyHubRegressionTest RelationshipAnalyticsExplanationUiTest) ;;
+  zip_codec_probe) classes=(EncryptedZipCodecProbeTest) ;;
+  final_password_ui) classes=(ArchiveImportPathRegressionTest ArchiveReadOnlySafPipeRegressionTest SearchLifecycleRegressionTest External7ZipRegressionTest ArchivePasswordUiRegressionTest ArchivePasswordOnDemandRegressionTest IndependentAesZipRegressionTest DrawerAesZipRegressionTest SevenZTelegramImportRegressionTest RarCompatibilityRegressionTest EncryptedTelegramImportRegressionTest ArchiveEndToEndRegressionTest ProtectedArchiveSessionTest RelationshipPaginationRegressionTest SavedWorkspaceRegressionTest ChronologyHubRegressionTest ChatVisualConsistencyRegressionTest ViewerThemeRegressionTest QaVisualAuditScreenshotsTest UiChromeOverlapRegressionTest) ;;
   *) echo "Unknown audit suite" >&2; exit 2 ;;
 esac
 qualified=()
@@ -28,7 +46,7 @@ mkdir -p app/build/ui-audit
 adb logcat -d -t 5000 > app/build/ui-audit/logcat.txt || true
 adb shell dumpsys window windows > app/build/ui-audit/windows.txt || true
 adb shell dumpsys activity activities > app/build/ui-audit/activities.txt || true
-if [[ "${1:-}" == navigation ]]; then
+if [[ "${1:-}" == navigation || "${1:-}" == premium_ui || "${1:-}" == chat_polish || "${1:-}" == section_clarity || "${1:-}" == final_password_ui ]]; then
   adb pull /sdcard/Download/ app/build/ui-audit/ || true
   adb pull /sdcard/Pictures/TelegramViewerVisualAudit/ app/build/ui-audit/ || true
   if ! find app/build/ui-audit -name "05-chat*.png" -print -quit | grep -q .; then
@@ -36,7 +54,11 @@ if [[ "${1:-}" == navigation ]]; then
     if [[ "$result" == 0 ]]; then result=4; fi
   fi
 fi
-if [[ "$result" != 0 ]]; then exit "$result"; fi
+grep -E 'AnalystPerf:' app/build/ui-audit/logcat.txt | tail -n 20 || true
+if [[ "$result" != 0 ]]; then
+  grep -E 'PatternSyntaxException|ExceptionInInitializerError|Caused by:|AssertionError' app/build/ui-audit/logcat.txt | tail -n 60 || true
+  exit "$result"
+fi
 python3 - "$selector" <<'PY'
 import pathlib, sys, xml.etree.ElementTree as ET
 expected = set(sys.argv[1].split(","))

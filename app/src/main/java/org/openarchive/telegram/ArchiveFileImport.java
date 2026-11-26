@@ -20,7 +20,12 @@ final class ArchiveFileImport {
         PasswordRequired(String message){super(message);}
         PasswordRequired(String message,Throwable cause){super(message,cause);}
     }
+    /** The decoder finished; only discovery of a Telegram export failed. */
+    static final class ExportNotFound extends IOException {
+        ExportNotFound(String message){super(message);}
+    }
     static boolean isPasswordFailure(Throwable error){
+        if(error instanceof ExportNotFound)return false;
         for(Throwable e=error;e!=null;e=e.getCause()){
             if(e instanceof PasswordRequired)return true;
             String type=e.getClass().getSimpleName().toLowerCase(Locale.ROOT);
@@ -59,6 +64,7 @@ final class ArchiveFileImport {
     private static final long MAX_ENTRY=12L*1024*1024*1024; // a large exported video can exceed 4 GiB
     private static final long MAX_TOTAL=60L*1024*1024*1024;
     private static final int MAX_FILES=200000;
+    private static final int MAX_NESTED_LEVELS=3;
     private static final long MIB=1024L*1024L;
     /** Allow large Telegram exports when there is room; never fill user storage. */
     static long maxTemporaryCopyForFreeBytes(long freeBytes){
@@ -68,12 +74,27 @@ final class ArchiveFileImport {
     }
     static final class Budget {
         long total; int count;
+        final long priorTotal;
+        final int priorCount;
+        final File storage;
+        long nextSpaceCheck=0, remainingSpace=0;
+        Budget(long priorTotal,int priorCount,File storage){this.priorTotal=priorTotal;this.priorCount=priorCount;this.storage=storage;}
+        int sevenZDeclared=-1,sevenZHtml=-1,sevenZHtmlCandidates=-1;
+        String sevenZReadMode="";
+        long sevenZSourceBytes=-1;
         void next(String name) throws IOException{
-            if(++count>MAX_FILES)throw new IOException("Слишком много файлов в архиве");
+            if(++count>MAX_FILES-priorCount)throw new IOException("Слишком много файлов в архиве");
             if(name.length()>1500)throw new IOException("Очень длинное имя файла в архиве");
         }
         void add(long count,long fileBytes) throws IOException{
-            if(fileBytes>MAX_ENTRY||total>MAX_TOTAL-count)throw new IOException("Лимит безопасной распаковки превышен");
+            if(count<0||fileBytes>MAX_ENTRY||total>MAX_TOTAL-priorTotal-count)
+                throw new IOException("Лимит безопасной распаковки превышен");
+            if(total>=nextSpaceCheck||count>remainingSpace){
+                remainingSpace=maxTemporaryCopyForFreeBytes(storage.getUsableSpace());
+                nextSpaceCheck=total+16*MIB;
+            }
+            if(count>remainingSpace)throw new IOException("Недостаточно свободного места для распаковки. Исходный файл не изменён.");
+            remainingSpace-=count;
             total+=count;
         }
     }
@@ -86,28 +107,114 @@ final class ArchiveFileImport {
         if(root.exists())throw new IOException("Папка архива уже существует");
         if(!root.mkdirs())throw new IOException("Не удалось создать папку для распаковки");
         try{
-            Budget budget=new Budget();
+            File stage=root;
+            Uri source=uri;
+            String format=suffix;
+            File previousWrapper=null;
+            long priorBytes=0;
+            int priorEntries=0;
+            for(int depth=0;depth<=MAX_NESTED_LEVELS;depth++){
+                Budget budget=new Budget(priorBytes,priorEntries,stage);
+                try{
+                    decodeLayer(ctx,source,format,stage,password,budget,progress);
+                }catch(Exception failure){
+                    if(depth>0&&password!=null&&password.length>0&&
+                        (isPasswordFailure(failure)||("7z".equals(format)&&
+                         String.valueOf(failure.getMessage()).toLowerCase(Locale.ROOT).matches("(?s).*(crc|checksum).*"))))
+                        throw new IOException("Не удалось открыть вложенный архив с тем же паролем. Если у него другой пароль, открой внутренний архив отдельно.",failure);
+                    throw failure;
+                }
+                if(previousWrapper!=null&&!previousWrapper.delete())
+                    throw new IOException("Не удалось удалить временный вложенный архив");
+                priorBytes+=budget.total;
+                priorEntries+=budget.count;
+                progress.update("Распаковка завершена. Ищу HTML переписки…");
+                try{
+                    File selected=findChatRoot(stage,0);
+                    progress.update("Распаковано записей: "+priorEntries+"; найден экспорт Telegram");
+                    return selected;
+                }catch(ExportNotFound notFound){
+                    File inner=soleArchive(ctx,stage);
+                    if(inner==null){
+                        if(budget.sevenZDeclared>=0)
+                            throw new ExportNotFound(notFound.getMessage()+"\n7z: записей в заголовке "+budget.sevenZDeclared+
+                                ", стандартных HTML в заголовке "+budget.sevenZHtml+
+                                ", обработано записей "+budget.count+
+                                ", распаковано байт "+budget.total+
+                                ", размер прочитанного архива "+budget.sevenZSourceBytes+" байт; чтение: "+budget.sevenZReadMode+".");
+                        throw notFound;
+                    }
+                    if(depth==MAX_NESTED_LEVELS)
+                        throw new ExportNotFound("Превышен предел вложенности: "+MAX_NESTED_LEVELS+" внутренних архивов.");
+                    format=detectFormat(ctx,Uri.fromFile(inner),inner.getName());
+                    progress.update("Найден вложенный "+format.toUpperCase(Locale.ROOT)+". Открываю уровень "+(depth+2)+"…");
+                    previousWrapper=inner;
+                    source=Uri.fromFile(inner);
+                    // Unique sibling staging avoids collisions with untrusted entry names.
+                    stage=java.nio.file.Files.createTempDirectory(root.toPath(),"nested-").toFile();
+                }
+            }
+            throw new ExportNotFound("Не найден экспорт Telegram");
+        }catch(Exception|OutOfMemoryError fail){
+            deleteTree(root);
+            if((password==null||password.length==0)&&isPasswordFailure(fail))
+                throw new PasswordRequired("Архив защищён паролем. Введи пароль от архива.",fail);
+            throw fail;
+        }
+    }
+    /** Automatic unwrap only for an unambiguous single-file archive wrapper.
+     * A normal export or a directory with other files is never silently replaced. */
+    private static File soleArchive(Context ctx,File root)throws IOException{
+        ArrayDeque<File> pending=new ArrayDeque<>();
+        pending.add(root);
+        File single=null;
+        while(!pending.isEmpty()){
+            File[] children=pending.removeLast().listFiles();
+            if(children==null)throw new IOException("Не удалось прочитать распакованную папку");
+            for(File f:children){
+                if(f.isDirectory())pending.add(f);
+                else if(f.isFile()){
+                    if(isWrapperMetadata(f))continue;
+                    if(single!=null)return null;
+                    single=f;
+                }
+            }
+        }
+        if(single==null)return null;
+        try{detectFormat(ctx,Uri.fromFile(single),single.getName());return single;}
+        catch(IOException unsupported){return null;}
+    }
+    // Ignore only well-known small OS metadata, never arbitrary user documents.
+    private static boolean isWrapperMetadata(File file){
+        if(file.length()>1024*1024)return false;
+        String name=file.getName().toLowerCase(Locale.ROOT);
+        return name.equals(".ds_store")||name.equals("thumbs.db")||name.equals("desktop.ini")||
+            (name.startsWith("._")&&file.getParentFile()!=null&&
+             file.getParentFile().getName().equals("__MACOSX"));
+    }
+    private static void decodeLayer(Context ctx,Uri uri,String suffix,File root,char[] password,
+            Budget budget,Progress progress)throws Exception{
             if("zip".equalsIgnoreCase(suffix)){
                 // Zip4j handles plain ZIP and encrypted ZipCrypto/AES using the same
                 // extraction path. A password is requested only for encrypted entries.
-                extractZipWithPassword(ctx,uri,root,password,budget,progress);
+                try{
+                    extractZipWithPassword(ctx,uri,root,password,budget,progress);
+                }catch(Exception primary){
+                    if(!unsupportedZipCodec(primary))throw primary;
+                    progress.update("Использую дополнительный распаковщик ZIP…");
+                    deleteTree(root);
+                    if(!root.mkdirs())throw new IOException("Не удалось подготовить временную папку",primary);
+                    budget.count=0;budget.total=0;budget.nextSpaceCheck=0;
+                    try{
+                        extractExtendedZip(ctx,uri,root,password,budget,progress);
+                    }catch(Exception fallback){fallback.addSuppressed(primary);throw fallback;}
+                }
             }else if("7z".equalsIgnoreCase(suffix)){
                 extractSevenZ(ctx,uri,root,password,budget,progress);
             }else if("rar".equalsIgnoreCase(suffix)){
                 extractRar(ctx,uri,root,password,budget,progress);
             }
             else throw new IOException("Ожидался ZIP, 7z или RAR");
-            File selected=findChatRoot(root,0);
-            if(selected==null)throw new IOException("В архиве не обнаружены messages.html или messages2.html. Экспортируй чат Telegram в формате HTML");
-            progress.update("Распаковано файлов: "+budget.count+"; найден экспорт Telegram");
-            return selected;
-        }catch(Exception fail){
-            deleteTree(root);
-            if((password==null||password.length==0)&&isPasswordFailure(fail))
-                throw new PasswordRequired(suffix.toUpperCase(Locale.ROOT)+
-                    " защищён паролем. Введи пароль от архива.",fail);
-            throw fail;
-        }
     }
     private static File safeFile(File root,String raw) throws IOException{
         if(raw==null)throw new IOException("Отсутствует имя файла");
@@ -130,9 +237,9 @@ final class ArchiveFileImport {
             try(ZipInputStream zip=new ZipInputStream(new BufferedInputStream(source,128*1024))){
                 ZipEntry entry;byte[] bytes=new byte[128*1024];
                 while((entry=zip.getNextEntry())!=null){
-                    String name=entry.getName();
-                    budget.next(name==null?"":name);
-                    BackupEntryPolicy.requireSafe(name,entry.isDirectory());
+                    String raw=entry.getName();
+                    budget.next(raw==null?"":raw);
+                    String name=ArchiveImportPath.normalize(raw,entry.isDirectory());
                     if(entry.isDirectory()){zip.closeEntry();continue;}
                     File file=safeFile(root,name);
                     if(entry.getSize()>MAX_ENTRY)throw new IOException("Слишком большой файл в ZIP");
@@ -154,27 +261,112 @@ final class ArchiveFileImport {
     }
     private static void extractZipWithPassword(Context ctx,Uri uri,File root,char[] password,
             Budget budget,Progress progress)throws Exception{
+        // Each reader gets its own password copy; no retry depends on a reader's internal buffer.
+        char[] attempt=password==null?null:password.clone();
         try{
-            extractZipStreaming(ctx,uri,root,password,budget,progress);
-        }catch(net.lingala.zip4j.exception.ZipException streamFailure){
-            if(password==null||password.length==0)throw streamFailure;
-            // A definite authentication failure is not a broken ZIP header:
-            // retrying the entire (possibly multi-gigabyte) file just wastes space.
-            if(streamFailure.getType()==net.lingala.zip4j.exception.ZipException.Type.WRONG_PASSWORD)
+            extractZipStreaming(ctx,uri,root,attempt,budget,progress);
+        }catch(net.lingala.zip4j.exception.ZipException|java.util.zip.ZipException streamFailure){
+            if((password==null||password.length==0)&&isPasswordFailure(streamFailure))
                 throw streamFailure;
-            // Some AES ZIPs written by 7-Zip rely on central-directory metadata
-            // or data descriptors that a sequential ZIP reader cannot recover.
-            // Retry with Zip4j's random-access reader; do not weaken path or size checks.
-            progress.update("Пробую альтернативное открытие ZIP с паролем…");
+            // A streaming decoder may misread a local header or data descriptor.
+            // Even WRONG_PASSWORD can be an incorrect result for unusual ZIP headers.
+            // Confirm via the central directory once, including when no password was
+            // supplied and the local header could not be parsed.
+            progress.update("Проверяю ZIP по центральному каталогу…");
             deleteTree(root);
             if(!root.mkdirs())throw new IOException("Не удалось очистить временную папку ZIP",streamFailure);
-            budget.count=0;budget.total=0;
+            budget.count=0;budget.total=0;budget.nextSpaceCheck=0;
+            char[] retry=password==null?null:password.clone();
             try{
-                extractZipFromCentralDirectory(ctx,uri,root,password,budget,progress);
+                extractZipFromCentralDirectory(ctx,uri,root,retry,budget,progress);
             }catch(Exception recoveryFailure){
                 recoveryFailure.addSuppressed(streamFailure);
                 throw recoveryFailure;
+            }finally{if(retry!=null)Arrays.fill(retry,'\0');}
+        }finally{if(attempt!=null)Arrays.fill(attempt,'\0');}
+    }
+    private static boolean unsupportedZipCodec(Throwable error){
+        for(Throwable e=error;e!=null;e=e.getCause()){
+            String message=e.getMessage()==null?"":e.getMessage().toLowerCase(Locale.ROOT);
+            if((message.contains("compression")||message.contains("compress method"))&&
+                (message.contains("unsupported")||message.contains("not supported")||message.contains("unknown")))return true;
+            for(Throwable suppressed:e.getSuppressed()) {
+                String detail=suppressed.getMessage()==null?"":suppressed.getMessage().toLowerCase(Locale.ROOT);
+                if(detail.contains("compression")&&(detail.contains("unsupported")||detail.contains("not supported")||detail.contains("unknown")))return true;
             }
+        }
+        return false;
+    }
+    /** Additional decoder only for unsupported codecs; never bypasses authentication or path policy.
+     * Commons Compress reads the central directory for independent entry metadata.
+     * The alternative decoder provides streams; it is never allowed to extract paths itself. */
+    private static void extractExtendedZip(Context ctx,Uri uri,File root,char[] password,
+            Budget budget,Progress progress)throws Exception{
+        File temporary=File.createTempFile("telegram-zip-codec-", ".zip",ctx.getCacheDir());
+        char[] secret=password==null?null:password.clone();
+        try{
+            long limit=maxTemporaryCopyForFreeBytes(ctx.getCacheDir().getUsableSpace()),copied=0;
+            try(InputStream source=ctx.getContentResolver().openInputStream(uri);
+                OutputStream out=new BufferedOutputStream(new FileOutputStream(temporary))){
+                if(source==null)throw new IOException("Не удалось открыть исходный ZIP");
+                byte[] buf=new byte[128*1024];int n;
+                while((n=source.read(buf))!=-1){
+                    copied+=n;if(copied>limit)throw new IOException("Недостаточно свободного места для дополнительного распаковщика ZIP");
+                    out.write(buf,0,n);
+                }
+            }
+            // Do not accept split archives, links, duplicate normalized paths,
+            // or entries that the alternate parser silently omits.
+            Map<String,Long> files=new LinkedHashMap<>();
+            Set<String> all=new HashSet<>();
+            try(org.apache.commons.compress.archivers.zip.ZipFile metadata=
+                    org.apache.commons.compress.archivers.zip.ZipFile.builder().setFile(temporary).get()){
+                Enumeration<org.apache.commons.compress.archivers.zip.ZipArchiveEntry> entries=metadata.getEntries();
+                while(entries.hasMoreElements()){
+                    org.apache.commons.compress.archivers.zip.ZipArchiveEntry entry=entries.nextElement();
+                    String raw=entry.getName();budget.next(raw==null?"":raw);
+                    String name=ArchiveImportPath.normalize(raw,entry.isDirectory());
+                    if(entry.isUnixSymlink())throw new IOException("Ссылки внутри ZIP не поддерживаются");
+                    if(!all.add(name))throw new IOException("Повторное имя в ZIP");
+                    if(entry.getGeneralPurposeBit().usesEncryption()&&(secret==null||secret.length==0))
+                        throw new PasswordRequired("ZIP защищён паролем. Введи пароль от архива.");
+                    if(entry.isDirectory())continue;
+                    long size=entry.getSize();
+                    if(size<0||size>MAX_ENTRY)throw new IOException("Некорректный размер файла в ZIP");
+                    files.put(name,size);
+                }
+            }
+            ru.olegcherednik.zip4jvm.UnzipIt unzip=ru.olegcherednik.zip4jvm.UnzipIt.zip(temporary.toPath());
+            if(secret!=null&&secret.length>0)unzip.password(secret);
+            ru.olegcherednik.zip4jvm.ZipFile.Reader reader=unzip.open();
+            if(reader.isSplit())throw new IOException("Многотомный ZIP не поддерживается");
+            byte[] buf=new byte[128*1024];
+            for(ru.olegcherednik.zip4jvm.ZipFile.Entry entry:reader){
+                String name=ArchiveImportPath.normalize(entry.getName(),entry.isDir());
+                if(entry.isSymlink())throw new IOException("Ссылки внутри ZIP не поддерживаются");
+                if(entry.isDir()){
+                    if(!all.contains(name))throw new IOException("Каталог ZIP отсутствует в исходном списке");
+                    continue;
+                }
+                Long size=files.remove(name);
+                if(size==null||entry.getUncompressedSize()!=size)throw new IOException("Несогласованный список файлов ZIP");
+                File target=safeFile(root,name);
+                File parent=target.getParentFile();
+                if(!parent.isDirectory()&&!parent.mkdirs())throw new IOException("Не создана папка ZIP");
+                if(target.exists())throw new IOException("Повторное имя в ZIP");
+                long written=0;
+                // Iteration exposes metadata only; extract(name) assigns the configured password.
+                // Still stream into our own checked output path, never call extract(Path).
+                try(InputStream in=reader.extract(entry.getName()).getInputStream();OutputStream out=new BufferedOutputStream(new FileOutputStream(target))){
+                    int n;while((n=in.read(buf))!=-1){written+=n;if(written>size)throw new IOException("Размер ZIP не совпадает");budget.add(n,written);out.write(buf,0,n);}
+                }
+                if(written!=size)throw new IOException("Файл ZIP распакован не полностью");
+                emit(budget,progress);
+            }
+            if(!files.isEmpty())throw new IOException("Дополнительный распаковщик пропустил файлы ZIP");
+        }finally{
+            if(secret!=null)Arrays.fill(secret,'\0');
+            temporary.delete();
         }
     }
     private static void extractZipStreaming(Context ctx,Uri uri,File root,char[] password,
@@ -187,11 +379,9 @@ final class ArchiveFileImport {
                 net.lingala.zip4j.model.LocalFileHeader entry;
                 byte[] bytes=new byte[128*1024];
                 while((entry=zip.getNextEntry())!=null){
-                    String name=entry.getFileName();
-                    budget.next(name==null?"":name);
-                    String safeName=entry.isDirectory()&&name!=null&&!name.endsWith("/")
-                        ?name+"/":name;
-                    BackupEntryPolicy.requireSafe(safeName,entry.isDirectory());
+                    String raw=entry.getFileName();
+                    budget.next(raw==null?"":raw);
+                    String name=ArchiveImportPath.normalize(raw,entry.isDirectory());
                     if(entry.isEncrypted()&&(password==null||password.length==0))
                         throw new PasswordRequired("ZIP защищён паролем. Введи пароль от архива.");
                     if(entry.isDirectory())continue;
@@ -237,11 +427,9 @@ final class ArchiveFileImport {
                 List<net.lingala.zip4j.model.FileHeader> entries=archive.getFileHeaders();
                 byte[] buffer=new byte[128*1024];
                 for(net.lingala.zip4j.model.FileHeader entry:entries){
-                    String name=entry.getFileName();
-                    budget.next(name==null?"":name);
-                    String safeName=entry.isDirectory()&&name!=null&&!name.endsWith("/")
-                        ?name+"/":name;
-                    BackupEntryPolicy.requireSafe(safeName,entry.isDirectory());
+                    String raw=entry.getFileName();
+                    budget.next(raw==null?"":raw);
+                    String name=ArchiveImportPath.normalize(raw,entry.isDirectory());
                     if(entry.isEncrypted()&&(password==null||password.length==0))
                         throw new PasswordRequired("ZIP защищён паролем. Введи пароль от архива.");
                     if(entry.isDirectory())continue;
@@ -270,35 +458,33 @@ final class ArchiveFileImport {
     }
     private static void extractSevenZ(Context ctx,Uri uri,File root,char[] password,
             Budget budget,Progress progress)throws Exception{
-        // SAF document providers may return a pipe instead of a seekable file.
-        // SevenZFile requires seeking; use the local channel where possible,
-        // otherwise spool safely to a bounded temporary file.
         try{
-            // Some Android document providers expose a stream or a sliced asset
-            // rather than a whole-file descriptor. A missing seekable descriptor
-            // is not an import failure if openInputStream is still available.
-            try{
-                try(android.os.ParcelFileDescriptor descriptor=
-                        ctx.getContentResolver().openFileDescriptor(uri,"r")){
-                    if(descriptor!=null){
-                        try(FileInputStream input=new FileInputStream(descriptor.getFileDescriptor())){
-                            boolean seekable;
-                            try{
-                                input.getChannel().position(0);
-                                input.getChannel().size();
-                                seekable=true;
-                            }catch(IOException|UnsupportedOperationException notSeekable){
-                                seekable=false;
-                            }
-                            if(seekable){
-                                readSevenZ(input.getChannel(),root,password,budget,progress);
-                                return;
-                            }
-                        }
+            android.os.ParcelFileDescriptor descriptor=null;
+            try{descriptor=ctx.getContentResolver().openFileDescriptor(uri,"r");}
+            catch(java.io.FileNotFoundException unavailable){ /* stream-only provider */ }
+            if(descriptor!=null){
+                // One owner of the descriptor; do not close a raw fd twice.
+                try(FileInputStream input=new android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor)){
+                    boolean seekable;
+                    try{input.getChannel().position(0);input.getChannel().size();seekable=true;}
+                    catch(IOException|UnsupportedOperationException notSeekable){seekable=false;}
+                    if(seekable){
+                        budget.sevenZReadMode="прямое";
+                        readSevenZ(input.getChannel(),root,password,budget,progress);
+                        if(budget.sevenZHtmlCandidates!=0||!"content".equalsIgnoreCase(uri.getScheme())||soleArchive(ctx,root)!=null)
+                            return;
+                        // Only after full successful decoding with no HTML at all,
+                        // retry a content URI once through its stream interface.
+                        // No password/integrity/path failure triggers this retry.
                     }
                 }
-            }catch(java.io.FileNotFoundException noWholeFile){
-                // Retry as a bounded private stream below.
+                if(budget.sevenZDeclared>=0){
+                    progress.update("В заголовке 7z нет HTML. Проверяю тот же файл через совместимый режим…");
+                    deleteTree(root);
+                    if(!root.mkdirs())throw new IOException("Не удалось подготовить повторное чтение 7z");
+                    budget.count=0;budget.total=0;budget.nextSpaceCheck=0;
+                    budget.sevenZDeclared=-1;budget.sevenZHtml=-1;budget.sevenZHtmlCandidates=-1;
+                }
             }
             File temporary=File.createTempFile("telegram-sevenz-", ".7z",ctx.getCacheDir());
             try{
@@ -310,12 +496,12 @@ final class ArchiveFileImport {
                     byte[] block=new byte[128*1024];int count;
                     while((count=input.read(block))!=-1){
                         copied+=count;
-                        if(copied>copyLimit)
-                            throw new IOException("Недостаточно свободного места для временного открытия большого 7z. Освободи место на телефоне или открой локальный файл.");
+                        if(copied>copyLimit)throw new IOException("Недостаточно свободного места для совместимого открытия 7z. Исходный архив не изменён.");
                         output.write(block,0,count);
                     }
                 }
                 try(FileInputStream local=new FileInputStream(temporary)){
+                    budget.sevenZReadMode="совместимое";
                     readSevenZ(local.getChannel(),root,password,budget,progress);
                 }
             }finally{temporary.delete();}
@@ -331,16 +517,31 @@ final class ArchiveFileImport {
                 org.apache.commons.compress.archivers.sevenz.SevenZFile.builder()
                     .setSeekableByteChannel(channel).setPassword(password)
                     .setMaxMemoryLimitKiB(131072).get()){
+            // Compare the decoder's header inventory with actual extraction;
+            // a successful return must not hide missing or truncated entries.
+            int declared=0,canonical=0,htmlCandidates=0;
+            long declaredBytes=0;
+            for(org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry header:archive.getEntries()){
+                if(++declared>MAX_FILES-budget.priorCount)throw new IOException("Слишком много файлов в 7z");
+                if(header.isAntiItem())throw new IOException("7z содержит записи удаления, не обычный экспорт Telegram");
+                String name=ArchiveImportPath.normalize(header.getName(),header.isDirectory());
+                if(header.isDirectory())continue;
+                long size=header.getSize();
+                if(size<0||size>MAX_ENTRY||declaredBytes>MAX_TOTAL-budget.priorTotal-size)
+                    throw new IOException("Лимит безопасной распаковки 7z превышен");
+                declaredBytes+=size;
+                String leaf=new File(name).getName();
+                if(TelegramExportHtml.canonical(leaf))canonical++;
+                if(TelegramExportHtml.candidate(leaf))htmlCandidates++;
+            }
+            budget.sevenZDeclared=declared;budget.sevenZHtml=canonical;budget.sevenZHtmlCandidates=htmlCandidates;
+            budget.sevenZSourceBytes=channel.size();
+            progress.update("7z: "+declared+" записей, "+canonical+" стандартных HTML. Распаковываю…");
             org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry entry;
             byte[] bytes=new byte[128*1024];
             while((entry=archive.getNextEntry())!=null){
-                String name=entry.getName();budget.next(name==null?"":name);
-                // Unlike ZIP, 7z stores real directory entries without a trailing
-                // slash (e.g. "round_video_messages"). Validate them as directories
-                // while preserving traversal, absolute-path and link protection.
-                String safeName=entry.isDirectory()&&name!=null&&!name.endsWith("/")
-                    ?name+"/":name;
-                BackupEntryPolicy.requireSafe(safeName,entry.isDirectory());
+                String raw=entry.getName();budget.next(raw==null?"":raw);
+                String name=ArchiveImportPath.normalize(raw,entry.isDirectory());
                 if(entry.isDirectory())continue;
                 if(entry.getSize()>MAX_ENTRY)throw new IOException("7z содержит слишком большой файл");
                 File target=safeFile(root,name);
@@ -350,11 +551,16 @@ final class ArchiveFileImport {
                 long written=0;
                 try(OutputStream out=new BufferedOutputStream(new FileOutputStream(target))){
                     int count;while((count=archive.read(bytes))!=-1){
-                        written+=count;budget.add(count,written);out.write(bytes,0,count);
+                        written+=count;
+                        if(written>entry.getSize())throw new IOException("Размер распакованного файла 7z превышает объявленный");
+                        budget.add(count,written);out.write(bytes,0,count);
                     }
                 }
+                if(written!=entry.getSize())throw new IOException("Файл 7z распакован не полностью");
                 emit(budget,progress);
             }
+            if(budget.count!=declared||budget.total!=declaredBytes)
+                throw new IOException("7z распакован не полностью: обработано "+budget.count+" из "+declared+" записей");
         }
     }
     private static void extractRar(Context ctx,Uri uri,File root,char[] password,Budget budget,Progress progress) throws Exception{
@@ -384,8 +590,9 @@ final class ArchiveFileImport {
                     .password(password).maxDictionarySize(128L*1024*1024).build())){
                 for(FileHeader entry:rar.getFileHeaders()){
                     // Even skipped directories and links consume the bounded entry budget.
-                    String name=entry.getFileName();
-                    budget.next(name==null?"":name);
+                    String raw=entry.getFileName();
+                    budget.next(raw==null?"":raw);
+                    String name=ArchiveImportPath.normalize(raw,entry.isDirectory());
                     if(entry.isDirectory())continue;
                     if(entry.getRedirection()!=null)continue; // never materialize archive links
                     if(entry.isEncrypted()&&(password==null||password.length==0))
@@ -395,8 +602,8 @@ final class ArchiveFileImport {
                     File parent=target.getParentFile();
                     if(!parent.isDirectory()&&!parent.mkdirs())throw new IOException("Не удалось создать каталог RAR");
                     if(target.exists())throw new IOException("Повторный файл в RAR");
-                    try(OutputStream raw=new BufferedOutputStream(new FileOutputStream(target))){
-                        OutputStream bounded=new FilterOutputStream(raw){
+                    try(OutputStream rawOutput=new BufferedOutputStream(new FileOutputStream(target))){
+                        OutputStream bounded=new FilterOutputStream(rawOutput){
                             long size;
                             @Override public void write(int one) throws IOException{
                                 size++;budget.add(1,size);out.write(one);
@@ -413,27 +620,42 @@ final class ArchiveFileImport {
         }finally{compressed.delete();}
     }
     private static File findChatRoot(File folder,int depth)throws IOException{
-        ArrayList<File> roots=new ArrayList<>();
-        collectChatRoots(folder,depth,roots);
-        if(roots.size()>1)throw new IOException("В архиве найдено несколько переписок. Выбери архив одной переписки; данные не изменены.");
-        return roots.isEmpty()?null:roots.get(0);
-    }
-    private static void collectChatRoots(File folder,int depth,List<File> roots)throws IOException{
-        // Inspect every extracted directory; a depth cutoff can hide a second chat.
+        Set<File> canonical=new LinkedHashSet<>();
+        List<File> otherHtml=new ArrayList<>();
         ArrayDeque<File> pending=new ArrayDeque<>();
         pending.add(folder);
+        int files=0,html=0,nested=0;
         while(!pending.isEmpty()){
             File[] items=pending.removeLast().listFiles();
-            if(items==null)throw new IOException("Не удалось прочитать распакованный архив");
+            if(items==null)throw new ExportNotFound("Не удалось прочитать распакованную папку.");
             for(File f:items){
-                if(f.isFile()&&f.getName().matches("(?i)^messages\\d*\\.html$")){
-                    roots.add(f.getParentFile());
-                    break;
+                if(f.isDirectory()){pending.add(f);continue;}
+                if(!f.isFile())continue;
+                files++;
+                String n=f.getName().toLowerCase(Locale.ROOT);
+                if(n.endsWith(".zip")||n.endsWith(".7z")||n.endsWith(".rar"))nested++;
+                if(TelegramExportHtml.candidate(n)){
+                    html++;
+                    if(TelegramExportHtml.canonical(n))canonical.add(f.getParentFile());
+                    else if(otherHtml.size()<256)otherHtml.add(f);
                 }
             }
-            if(roots.size()>1)return;
-            for(File f:items)if(f.isDirectory())pending.add(f);
         }
+        if(canonical.size()>1)throw new ExportNotFound("В архиве найдено несколько переписок. Выбери архив одной переписки; данные не изменены.");
+        if(canonical.size()==1)return canonical.iterator().next();
+        if(otherHtml.size()<html)throw new ExportNotFound("Слишком много HTML без стандартных имён для безопасного автоматического выбора: "+html+". Выбери нужный HTML вручную.");
+        File selected=null;
+        for(File f:otherHtml){
+            try(InputStream in=new BufferedInputStream(new FileInputStream(f))){
+                if(!TelegramExportHtml.recognized(in))continue;
+            }
+            if(selected!=null)throw new ExportNotFound("Найдено несколько HTML переписок с нестандартными именами. Выбери нужный HTML вручную.");
+            selected=f;
+        }
+        if(selected!=null)return selected.getParentFile();
+        throw new ExportNotFound("Архив распакован, но HTML переписки не найден. Файлов: "+files+
+            "; HTML: "+html+"; вложенных ZIP/7z/RAR: "+nested+". "+
+            (nested>0?"Возможно, переписка находится во вложенном архиве. Выбери его отдельно.":"Проверь имя HTML, который открывается после ручной распаковки."));
     }
     static void deleteTree(File file){
         if(file==null)return;

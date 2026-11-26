@@ -2,20 +2,62 @@
     <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:statusBarColor">#0B1424</item>
-        <item name="android:navigationBarColor">#0B1424</item>
-        <item name="android:colorAccent">#7AD2FF</item>
-        <item name="android:windowBackground">#0B1424</item>
+        <item name="android:statusBarColor">#0B111B</item>
+        <item name="android:navigationBarColor">#0B111B</item>
+        <item name="android:colorAccent">#81CAFF</item>
+        <item name="android:windowBackground">#0B111B</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:alertDialogTheme">@style/ArchiveAlertDialog</item>
     </style>
 
     <!-- Native AlertDialogs keep familiar Android behavior but match our dark slate UI. -->
     <style name="ArchiveAlertDialog" parent="android:style/Theme.Material.Dialog.Alert">
-        <item name="android:windowBackground">#192A3C</item>
-        <item name="android:colorAccent">#7AD2FF</item>
+        <item name="android:windowBackground">@drawable/viewer_dialog_surface</item>
+        <item name="android:colorAccent">#81CAFF</item>
         <item name="android:textColorPrimary">#F0F8FF</item>
         <item name="android:textColorSecondary">#B4C6D6</item>
         <item name="android:fontFamily">sans</item>
+        <item name="android:colorBackground">#172231</item>
+        <item name="android:colorForeground">#F0F8FF</item>
+        <item name="android:colorControlNormal">#F0F8FF</item>
+        <item name="android:colorControlActivated">#81CAFF</item>
+    </style>
+    <style name="AppThemeGraphite" parent="AppTheme">
+        <item name="android:statusBarColor">#101216</item>
+        <item name="android:navigationBarColor">#101216</item>
+        <item name="android:windowBackground">#101216</item>
+        <item name="android:colorAccent">#B5B9FF</item>
+        <item name="android:alertDialogTheme">@style/ArchiveAlertDialogGraphite</item>
+    </style>
+    <style name="ArchiveAlertDialogGraphite" parent="ArchiveAlertDialog">
+        <item name="android:windowBackground">@drawable/viewer_dialog_surface_graphite</item>
+        <item name="android:colorAccent">#B5B9FF</item>
+        <item name="android:textColorPrimary">#F5F5F7</item>
+        <item name="android:textColorSecondary">#B8BDC7</item>
+        <item name="android:colorBackground">#1E222A</item>
+        <item name="android:colorForeground">#F5F5F7</item>
+        <item name="android:colorControlNormal">#F5F5F7</item>
+        <item name="android:colorControlActivated">#B5B9FF</item>
+    </style>
+    <style name="AppThemeLight" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">#F3F6FA</item>
+        <item name="android:navigationBarColor">#F3F6FA</item>
+        <item name="android:colorAccent">#1468A4</item>
+        <item name="android:windowBackground">#F3F6FA</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:alertDialogTheme">@style/ArchiveAlertDialogLight</item>
+    </style>
+    <style name="ArchiveAlertDialogLight" parent="android:style/Theme.Material.Light.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/viewer_dialog_surface_light</item>
+        <item name="android:colorAccent">#1468A4</item>
+        <item name="android:textColorPrimary">#172B43</item>
+        <item name="android:textColorSecondary">#506780</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorBackground">#FFFFFF</item>
+        <item name="android:colorForeground">#172B43</item>
+        <item name="android:colorControlNormal">#172B43</item>
+        <item name="android:colorControlActivated">#1468A4</item>
     </style>
 </resources>
