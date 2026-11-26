@@ -18,6 +18,23 @@ final class AnalystModelDownload {
             (h.equals("huggingface.co")||h.equals("cdn-lfs.huggingface.co")||h.equals("cdn-lfs-us-1.huggingface.co")||
              h.equals("cdn-lfs.hf.co")||h.equals("cdn-lfs-us-1.hf.co")||h.equals("cas-bridge.xethub.hf.co"));
     }
+    /** Revalidate installed catalog models on the worker thread before native inference. */
+    static boolean matches(File file,long expectedSize,String expectedSha,AtomicBoolean cancel)throws IOException{
+        if(cancel.get()||!file.isFile()||expectedSize<=0||file.length()!=expectedSize)return false;
+        final MessageDigest digest;
+        try{digest=MessageDigest.getInstance("SHA-256");}catch(java.security.NoSuchAlgorithmException impossible){throw new IOException(impossible);}
+        byte[] buffer=new byte[262144];long total=0;
+        try(InputStream in=new BufferedInputStream(new FileInputStream(file))){
+            int n;
+            while(!cancel.get()&&(n=in.read(buffer))!=-1){
+                total+=n;if(total>expectedSize)return false;digest.update(buffer,0,n);
+            }
+        }
+        if(cancel.get()||total!=expectedSize||file.length()!=expectedSize)return false;
+        StringBuilder hex=new StringBuilder(64);
+        for(byte b:digest.digest())hex.append(String.format(java.util.Locale.ROOT,"%02x",b&255));
+        return expectedSha.equals(hex.toString());
+    }
     static void fetch(AnalystModelCatalog.Model spec,File model,AtomicBoolean cancel,LongConsumer progress)throws Exception{
         final long size=spec.size;
         File dir=model.getParentFile();if(dir==null||dir.getUsableSpace()<size+128L*1024*1024)throw new IOException("Not enough storage");
