@@ -93,6 +93,13 @@ final class DeepChatContext {
                 if(picked.size()>before)links++;
             }
             if(links>0||replyEvidence)method+=" + связанные ответы Telegram";
+            // Questions about change over time require examples across the archive,
+            // even when generic wording has no exact lexical matches.
+            boolean temporal=lower.matches("(?s).*(со временем|начал.*конц|динамик|менял|изменил|поворотн|развити).*");
+            if(temporal&&!cancelled.get()&&picked.size()<MAX_SOURCES){
+                addTimelineSamples(db,picked,cancelled);
+                method+=" + выборка по порядку импорта (не гарантированная календарная сортировка)";
+            }
             // Alternate across early/late hits rather than exhausting the context
             // around the first few messages only.
             hits.sort(Comparator.comparingLong(x->x.id));
@@ -109,6 +116,22 @@ final class DeepChatContext {
             }
             ArrayList<Source> sources=new ArrayList<>(picked.values());sources.sort(Comparator.comparingLong(x->x.id));
             return new DeepChatContext(sources,total,facts.toString(),method);
+        }
+    }
+    private static void addTimelineSamples(SQLiteDatabase db,Map<Long,Source> picked,AtomicBoolean cancel){
+        long first,last;
+        try(Cursor c=db.rawQuery("SELECT MIN(id),MAX(id) FROM messages",null)){
+            if(!c.moveToFirst()||c.isNull(0)||c.isNull(1))return;
+            first=c.getLong(0);last=c.getLong(1);
+        }
+        // Indexed ID range probes; no repeated large OFFSET queries.
+        int[] positions={0,100,50,25,75};
+        for(int position:positions){
+            if(cancel.get()||picked.size()>=MAX_SOURCES)break;
+            long target=first+((last-first)/100)*position+((last-first)%100)*position/100;
+            try(Cursor c=db.rawQuery("SELECT id,author,date_text,body FROM messages WHERE id>=? ORDER BY id LIMIT 1",new String[]{Long.toString(target)})){
+                add(c,picked,cancel);
+            }
         }
     }
     private static void collect(SQLiteDatabase db,String match,int limit,Map<Long,Source> rows,AtomicBoolean cancel,boolean recent){
