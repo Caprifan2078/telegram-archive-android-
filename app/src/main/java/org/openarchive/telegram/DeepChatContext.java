@@ -39,6 +39,17 @@ final class DeepChatContext {
                 for(BehaviorScan.Example e:report.evidence)if(used[e.category]++<2&&picked.size()<8)picked.put(e.source.id,e.source);
             }
             String method=behavior?"Полный проход по формулировкам + ограниченные цитаты":"Совпадения слов и локальных синонимов: ранние и поздние сообщения";
+            // Relationship templates often use abstract wording absent in actual messages.
+            // Reserve a few candidate passages from curated topic cues, then search the question.
+            int cueBefore=picked.size();
+            for(String cue:RelationshipEvidence.cues(question)){
+                if(cancelled.get()||picked.size()>=Math.min(10,cueBefore+4))break;
+                String sql="SELECT id,author,date_text,body FROM messages WHERE instr(COALESCE(body_fold,''),?)>0 ORDER BY id ";
+                try(Cursor c=db.rawQuery(sql+"ASC LIMIT 1",new String[]{cue})){add(c,picked,cancelled);}
+                if(picked.size()<Math.min(10,cueBefore+4))
+                    try(Cursor c=db.rawQuery(sql+"DESC LIMIT 1",new String[]{cue})){add(c,picked,cancelled);}
+            }
+            if(picked.size()>cueBefore)method+=" + тематические признаки (не доказательство)";
             // First prefer the intersection, then backfill individual terms. Never treat
             // a synonym match as proof of an actual event.
             List<OfflineSynonymSearch.Plan> plans=OfflineSynonymSearch.analystPlans(question);
