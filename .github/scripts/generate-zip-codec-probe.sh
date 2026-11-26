@@ -17,5 +17,5 @@ for method in Deflate Deflate64 BZip2 LZMA; do
   "$seven" t -pcodec-test-only "$archive"
   listing=$("$seven" l -slt -pcodec-test-only "$archive")
   printf '%s\n' "$listing"
-  printf '%s\n' "$listing" | grep -E "^Method = .*AES-256.*$method([[:space:]]|$)"
+  printf '%s\n' "$listing" | grep -E "^Method = .*AES-256.*$method([[:space:]]|:|$)"
 done
