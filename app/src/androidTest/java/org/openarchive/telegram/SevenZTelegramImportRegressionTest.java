@@ -105,6 +105,19 @@ public class SevenZTelegramImportRegressionTest {
             assertArrayEquals(original,java.nio.file.Files.readAllBytes(archive.toPath()));
         }finally{java.util.Arrays.fill(password,'\0');archive.delete();ArchiveFileImport.deleteTree(directory(next));ctx.deleteDatabase("telegram_"+next+".db");}
     }
+    @Test public void encryptedSevenZWithNonHtmlReportsDiscoveryNotPassword()throws Exception{
+        char[] password="synthetic-7z-import".toCharArray();
+        String next=key();File archive=fixture("Export/readme.txt",password);
+        try{
+            try{ArchiveFileImport.extract(ctx,Uri.fromFile(archive),"7z",next,password,p->{});fail("Non-HTML file was accepted");}
+            catch(ArchiveFileImport.ExportNotFound expected){
+                assertTrue(expected.getMessage().contains("Файлов: 1"));
+                assertTrue(expected.getMessage().contains("HTML: 0"));
+                assertFalse(ArchiveFileImport.isPasswordFailure(expected));
+            }
+            assertFalse(directory(next).exists());
+        }finally{java.util.Arrays.fill(password,'\0');archive.delete();ArchiveFileImport.deleteTree(directory(next));}
+    }
     @Test public void parentTraversalFailsAndRollsBackStaging()throws Exception{
         File archive=fixture("../messages.html",null);String next=key();
         try{

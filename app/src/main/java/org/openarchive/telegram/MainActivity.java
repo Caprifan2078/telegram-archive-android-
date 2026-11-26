@@ -3586,7 +3586,8 @@ public class MainActivity extends Activity {
                     lowerMessage.contains("не поддерж");
                 // Unsupported compression and malformed files are not proof of
                 // an incorrect password. Still let users enter one manually.
-                final boolean decoded=extracted;
+                final boolean contentMissing=error instanceof ArchiveFileImport.ExportNotFound;
+                final boolean decoded=extracted||contentMissing;
                 boolean auth=!decoded&&!unsupported&&((error instanceof Exception&&ArchiveFileImport.isPasswordFailure((Exception)error))
                     ||(!missing&&"7z".equalsIgnoreCase(extension)&&
                         (lowerMessage.contains("crc")||lowerMessage.contains("checksum"))));
@@ -3607,7 +3608,7 @@ public class MainActivity extends Activity {
                     }
                     AlertDialog.Builder failure=new FontDialog.Builder(this)
                         .setTitle(decoded?"Архив распакован, но переписка не прочитана":"Не удалось распаковать архив")
-                        .setMessage("Формат: "+extension.toUpperCase(Locale.ROOT)+"\nЭтап: "+(decoded?"индексация HTML":"распаковка / проверка содержимого")+"\n"+message+"\nИсходный файл не изменён.")
+                        .setMessage("Формат: "+extension.toUpperCase(Locale.ROOT)+"\nЭтап: "+(contentMissing?"поиск HTML переписки":decoded?"индексация HTML":"распаковка")+"\n"+message+"\nИсходный файл не изменён.")
                         .setNegativeButton("Закрыть",null)
                         .setNeutralButton("Повторить",(d,w)->importCompressed(source,extension,label,null));
                     if(!decoded)failure.setPositiveButton(missing?"Ввести пароль":"Другой пароль",(d,w)->confirmArchiveImport(source,extension,label));
