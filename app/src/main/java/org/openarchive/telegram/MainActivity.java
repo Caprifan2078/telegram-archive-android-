@@ -3550,10 +3550,12 @@ public class MainActivity extends Activity {
         beginImportProgress("Распаковываю «"+label+"»…");
         String key=UUID.randomUUID().toString().replace("-","");
         worker.execute(()->{
+            boolean extracted=false;
             try{
                 java.io.File root=ArchiveFileImport.extract(this,source,extension,key,password,
                     this::postImportProgress);
-                postImportProgress("Читаю сообщения Telegram…");
+                extracted=true;
+                postImportProgress("Архив распакован. Читаю сообщения Telegram…");
                 MessageDb fresh=new MessageDb(this,key);
                 try{
                     TelegramImporter.importFiles(getContentResolver(),
@@ -3584,7 +3586,8 @@ public class MainActivity extends Activity {
                     lowerMessage.contains("не поддерж");
                 // Unsupported compression and malformed files are not proof of
                 // an incorrect password. Still let users enter one manually.
-                boolean auth=!unsupported&&((error instanceof Exception&&ArchiveFileImport.isPasswordFailure((Exception)error))
+                final boolean decoded=extracted;
+                boolean auth=!decoded&&!unsupported&&((error instanceof Exception&&ArchiveFileImport.isPasswordFailure((Exception)error))
                     ||(!missing&&"7z".equalsIgnoreCase(extension)&&
                         (lowerMessage.contains("crc")||lowerMessage.contains("checksum"))));
                 runOnUiThread(()->{
@@ -3602,13 +3605,13 @@ public class MainActivity extends Activity {
                             .setPositiveButton("Другой пароль",(d,w)->confirmArchiveImport(source,extension,label)).show();
                         return;
                     }
-                    new FontDialog.Builder(this).setTitle("Не удалось импортировать архив")
-                        .setMessage(message+"\nИсходный файл не изменён. Проверь, что внутри есть экспорт Telegram в HTML.")
+                    AlertDialog.Builder failure=new FontDialog.Builder(this)
+                        .setTitle(decoded?"Архив распакован, но переписка не прочитана":"Не удалось распаковать архив")
+                        .setMessage("Формат: "+extension.toUpperCase(Locale.ROOT)+"\nЭтап: "+(decoded?"индексация HTML":"распаковка / проверка содержимого")+"\n"+message+"\nИсходный файл не изменён.")
                         .setNegativeButton("Закрыть",null)
-                        .setNeutralButton("Повторить",(d,w)->importCompressed(source,extension,label,null))
-                        .setPositiveButton(missing?"Ввести пароль":"Другой пароль",
-                            (d,w)->confirmArchiveImport(source,extension,label))
-                        .show();
+                        .setNeutralButton("Повторить",(d,w)->importCompressed(source,extension,label,null));
+                    if(!decoded)failure.setPositiveButton(missing?"Ввести пароль":"Другой пароль",(d,w)->confirmArchiveImport(source,extension,label));
+                    failure.show();
                 });
             }finally{if(password!=null)java.util.Arrays.fill(password,'\0');}
         });
