@@ -45,7 +45,7 @@ public final class InterfaceFunctionRegressionTest {
     @Test public void mediaControlsDoNotOfferImpossibleGridOrMisleadingImport(){
         MainActivity a=rule.getActivity();
         InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{try{
-            field("home").set(a,false);field("screen").set(a,"media");field("mediaKind").set(a,"voice");
+            field("home").set(a,false);field("screen").set(a,"media");field("mediaKind").set(a,"file");
             call(a,"configureBars");LinearLayout filter=(LinearLayout)field("filterBar").get(a);
             assertNull(find(filter,"Сетка"));assertNull(find(filter,"Список"));
             LinearLayout list=(LinearLayout)field("list").get(a);list.removeAllViews();call(a,"renderEmptyMediaState");
