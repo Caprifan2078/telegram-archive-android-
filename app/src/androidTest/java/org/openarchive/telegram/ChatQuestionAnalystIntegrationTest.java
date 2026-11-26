@@ -50,6 +50,15 @@ public class ChatQuestionAnalystIntegrationTest {
             expected.put(ChatQuestionAnalyst.Kind.QUESTIONS,"Сообщений со знаком вопроса: 1 из 4");
             expected.put(ChatQuestionAnalyst.Kind.TOPIC,"Сообщений с буквальным упоминанием «встреча»: 2");
             expected.put(ChatQuestionAnalyst.Kind.FIRST_TOPIC,"Анна");
+            expected.put(ChatQuestionAnalyst.Kind.LAST_TOPIC,"Анна · 2026-02-01 13:00");
+            expected.put(ChatQuestionAnalyst.Kind.PARTICIPANTS,"Различных имён отправителей: 2");
+            expected.put(ChatQuestionAnalyst.Kind.LEAST,"Борис — по 1 из 4");
+            expected.put(ChatQuestionAnalyst.Kind.TEXT_COUNT,"Сообщений с непустым текстом: 4 из 4");
+            expected.put(ChatQuestionAnalyst.Kind.LONGEST_TEXT,"15 символов Unicode");
+            expected.put(ChatQuestionAnalyst.Kind.AVG_LENGTH,"8.3 символов Unicode");
+            expected.put(ChatQuestionAnalyst.Kind.AVG_DAY,"Среднее в активный день: 1.3");
+            expected.put(ChatQuestionAnalyst.Kind.PEAK_HOUR,"Часы: 12:00");
+            expected.put(ChatQuestionAnalyst.Kind.WEEKEND,"Сообщений по субботам и воскресеньям: 2");
             int count=0;
             for(String[] group:ChatQuestionAnalyst.PRESETS)for(int i=1;i<group.length;i++){
                 ChatQuestionAnalyst.Query query=ChatQuestionAnalyst.parse(group[i]);
@@ -65,7 +74,7 @@ public class ChatQuestionAnalystIntegrationTest {
                 if(query.kind==ChatQuestionAnalyst.Kind.LAST)assertEquals(last,answer.sources.get(0).id);
                 count++;
             }
-            assertEquals(10,count);
+            assertEquals(19,count);
             assertFalse(ChatQuestionAnalyst.supports("Как менялось отношение участников?"));
             cancel.set(true);
             assertNull(ChatQuestionAnalyst.readOnly(ctx.getDatabasePath("telegram_"+key+".db"),ChatQuestionAnalyst.parse("Сколько сообщений?"),cancel));
