@@ -503,7 +503,8 @@ public final class DeepAnalystActivity extends Activity {
         if(!canStartModel()){
             android.app.AlertDialog.Builder fallback=new FontDialog.Builder(this).setTitle("ИИ сейчас недоступен").setMessage(status.getText()+"\nМожно найти исходные сообщения без модели.")
                 .setNegativeButton("Закрыть",null).setPositiveButton("Найти источники",(d,n)->{if(!busy)findEvidence(q);});
-            if(deviceFit().offerLightweight(getNoBackupFilesDir(),selectedModel))fallback.setNeutralButton("Лёгкая модель",(d,n)->selectModel(0));
+            int alternative=deviceFit().lightweightAlternative(getNoBackupFilesDir(),selectedModel);
+            if(alternative>=0)fallback.setNeutralButton("Лёгкая модель",(d,n)->selectModel(alternative));
             fallback.show();return;
         }
         if(!MODEL_BUSY.compareAndSet(false,true)){status.setText("Предыдущий запрос ещё завершает работу.");return;}
