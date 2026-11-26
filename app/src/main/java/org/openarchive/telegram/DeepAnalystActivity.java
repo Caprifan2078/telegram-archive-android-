@@ -200,11 +200,29 @@ public final class DeepAnalystActivity extends Activity {
         }
         return true;
     }
+    private static final class InvalidModelFile extends IOException {}
+    private void verifyModelForRun()throws IOException{
+        if(taskCancel.get()||stopped.get())throw new IOException("Cancelled");
+        if(selectedModel==AnalystModelCatalog.CUSTOM)return; // User-selected file has no pinned hash.
+        AnalystModelCatalog.Model spec=AnalystModelCatalog.MODELS[selectedModel];
+        runOnUiThread(()->{if(!stopped.get()&&!taskCancel.get())status.setText("Проверяю целостность модели…");});
+        boolean valid;
+        try{valid=AnalystModelDownload.matches(model,spec.size,spec.sha,taskCancel);}
+        catch(IOException failure){if(taskCancel.get()||stopped.get())throw failure;throw new InvalidModelFile();}
+        if(taskCancel.get()||stopped.get())throw new IOException("Cancelled");
+        if(!valid)throw new InvalidModelFile();
+    }
+    private String modelFailure(Throwable error,String fallback){
+        if(taskCancel.get())return "Операция отменена.";
+        if(error instanceof InvalidModelFile)return "Файл модели повреждён или недоступен. Удали выбранную модель и скачай её заново.";
+        return fallback;
+    }
     private void checkModel(){
         if(!canStartModel()||!MODEL_BUSY.compareAndSet(false,true))return;
         final String path=model.getAbsolutePath();busy("Проверяю модель на вымышленном диалоге…");results.removeAllViews();
         worker.execute(()->{
             try{
+                verifyModelForRun();
                 long start=android.os.SystemClock.elapsedRealtime();
                 String answer=(String)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
                     .getMethod("generate",String.class,String.class,AtomicBoolean.class).invoke(null,path,AnalystSelfCheck.PROMPT,taskCancel);
@@ -218,7 +236,7 @@ public final class DeepAnalystActivity extends Activity {
                     results.addView(text(assessment,14));results.addView(text(DeepChatContext.clip(value,4000),14));
                     results.addView(text("Личные сообщения не использовались. Этот тест не доказывает отсутствие отказов или галлюцинаций.",13));
                 });
-            }catch(Exception|LinkageError error){runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();status.setText(taskCancel.get()?"Проверка отменена.":"Модель не прошла пробный запуск. Проверь совместимость и память.");});}
+            }catch(Exception|LinkageError error){runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();status.setText(modelFailure(error,"Модель не прошла пробный запуск. Проверь совместимость и память."));});}
             finally{MODEL_BUSY.set(false);}
         });
     }
@@ -230,6 +248,7 @@ public final class DeepAnalystActivity extends Activity {
         busy("Запускаю полный проход модели…");results.removeAllViews();
         worker.execute(()->{
             try{
+                verifyModelForRun();
                 FullChatModelScan.Progress progress=(rows,total,blocks)->runOnUiThread(()->{
                     if(!stopped.get()&&!taskCancel.get()){
                         if(android.os.Build.VERSION.SDK_INT>=29){
@@ -256,7 +275,7 @@ public final class DeepAnalystActivity extends Activity {
                         source.setOnClickListener(v->{setResult(RESULT_OK,new Intent().putExtra("archive",archive).putExtra("message",src.id));finish();});
                     }
                 });
-            }catch(Exception|LinkageError error){runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();status.setText(taskCancel.get()?"Проход отменён.":"Модель не завершила проход. Проверь память и совместимость.");});}
+            }catch(Exception|LinkageError error){runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();status.setText(modelFailure(error,"Модель не завершила проход. Проверь память и совместимость."));});}
             finally{MODEL_BUSY.set(false);}
         });
     }
@@ -266,6 +285,7 @@ public final class DeepAnalystActivity extends Activity {
         busy("Подбираю сообщения, затем запускаю модель…");results.removeAllViews();
         worker.execute(()->{
             try{
+                verifyModelForRun();
                 DeepChatContext context=DeepChatContext.read(getDatabasePath(DeepChatContext.dbName(archive)),q,taskCancel);
                 if(taskCancel.get())throw new IOException("Cancelled");
                 if(stopped.get())return;
@@ -291,7 +311,7 @@ public final class DeepAnalystActivity extends Activity {
                         source.setOnClickListener(v->{setResult(RESULT_OK,new Intent().putExtra("archive",archive).putExtra("message",src.id));finish();});
                     }
                 });
-            }catch(Exception|LinkageError error){runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();status.setText("Не удалось выполнить анализ: проверь совместимость модели и доступную память.");});}
+            }catch(Exception|LinkageError error){runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();status.setText(modelFailure(error,"Не удалось выполнить анализ: проверь совместимость модели и доступную память."));});}
             finally{MODEL_BUSY.set(false);}
         });
     }
