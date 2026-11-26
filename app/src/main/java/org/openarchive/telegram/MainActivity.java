@@ -3260,7 +3260,18 @@ public class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
-        if(request==119){if(result==RESULT_OK&&data!=null&&!home&&"analytics".equals(screen)&&activeKey.equals(data.getStringExtra("archive"))){long id=data.getLongExtra("message",-1);if(id>0)jump(id,"analytics");}return;}
+        if(request==119){
+            if(result==RESULT_OK&&data!=null&&!home){
+                String source=data.getStringExtra("archive");long id=data.getLongExtra("message",-1);
+                if(id>0&&"analytics".equals(screen)&&activeKey.equals(source))jump(id,"analytics");
+                else if(id>0&&"dual_compare".equals(screen)&&source!=null&&
+                    (activeKey.equals(source)||source.equals(dualSecondKey))&&canOpenQuoteArchive(source)){
+                    if(!activeKey.equals(source))activateArchive(source);
+                    if(activeKey.equals(source))jump(id,"");
+                }
+            }
+            return;
+        }
         if(request==SAVE_CONVERSATION_PDF_REQUEST){
             final String key=pendingPdfKey,name=pendingPdfName;pendingPdfKey=null;pendingPdfName=null;
             if(result==RESULT_OK&&data!=null&&data.getData()!=null&&key!=null){
