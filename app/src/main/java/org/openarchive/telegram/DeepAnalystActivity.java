@@ -512,19 +512,28 @@ public final class DeepAnalystActivity extends Activity {
                 if(stopped.get())return;
                 final String answer=response==null?"":response.trim();
                 runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();results.removeAllViews();
-                    results.addView(text("Ответ модели · не проверенный факт",18));revealResults();
-                    results.addView(text(answer.isEmpty()?"Модель не вернула текст.":DeepChatContext.clip(answer,16000),15));
-                    if(dual!=null&&!dual.citesBoth(answer,prompt))results.addView(text("Сравнение не подтверждено цитатами из обеих переписок. Проверь выводы.",14));
-                    if(!DeepChatContext.unknownCitations(answer,prompt).isEmpty())results.addView(text("Внимание: ответ содержит неизвестные номера источников. Перепроверь выводы.",14));
-                    if(!answer.matches("(?s).*\\[#\\d+\\].*"))results.addView(text("Модель не сослалась на конкретные сообщения. Выводы не подтверждены.",14));
+                    java.util.Set<Long> cited=FullChatModelScan.ids(answer);
+                    boolean unknown=!DeepChatContext.unknownCitations(answer,prompt).isEmpty();
+                    boolean missingSide=dual!=null&&!dual.citesBoth(answer,prompt);
+                    boolean unsupported=answer.isEmpty()||cited.isEmpty()||unknown||missingSide;
+                    results.addView(text(unsupported?"Ответ требует проверки":"Ответ модели · сверены номера цитат",18));revealResults();
+                    if(answer.isEmpty())results.addView(text("Модель не вернула итоговый текст. Ниже доступны найденные источники.",14));
+                    if(missingSide)results.addView(text("Нет ссылок на обе переписки. Сравнение не подтверждено.",14));
+                    if(unknown)results.addView(text("Ответ содержит неизвестные номера источников.",14));
+                    if(!answer.isEmpty()&&cited.isEmpty())results.addView(text("Ответ не ссылается на конкретные сообщения.",14));
+                    if(!unsupported)results.addView(text("Номера существуют в выборке; это не проверка смысла или истинности вывода.",13));
+                    if(!answer.isEmpty())results.addView(text(DeepChatContext.clip(answer,16000),15));
                     long sent=context.sources.stream().filter(src->DeepChatContext.sentSource(prompt,src.id)).count();
                     results.addView(text(context.method+" · "+sent+" выдержек из "+context.total+" сообщений",13));
+                    LinearLayout other=null;
                     for(DeepChatContext.Source src:context.sources){
                         // Only offer sources that were actually sent to the model.
                         if(!DeepChatContext.sentSource(prompt,src.id))continue;
                         Button source=button("[#"+src.id+"] "+src.author+" · "+src.date+"\n"+src.body);
                         source.setGravity(android.view.Gravity.START|android.view.Gravity.CENTER_VERTICAL);
-                        source.setAllCaps(false);results.addView(source);
+                        source.setAllCaps(false);
+                        if(cited.contains(src.id)||unsupported)results.addView(source);
+                        else{if(other==null)other=reportSection("Остальные выдержки");other.addView(source);}
                         source.setOnClickListener(v->{
                             DualAnalystContext.Link link=dual==null?null:dual.links.get(src.id);
                             setResult(RESULT_OK,new Intent().putExtra("archive",link==null?archive:link.archive)
