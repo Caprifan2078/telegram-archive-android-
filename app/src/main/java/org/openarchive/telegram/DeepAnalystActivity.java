@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class DeepAnalystActivity extends Activity {
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private final AtomicBoolean stopped=new AtomicBoolean();
+    private static final AtomicBoolean MODEL_BUSY=new AtomicBoolean();
     private String archive;
     private File model;
     private LinearLayout panel,results;
@@ -60,7 +61,7 @@ public final class DeepAnalystActivity extends Activity {
         if(request!=1||result!=RESULT_OK||data==null||data.getData()==null||busy)return;
         Uri uri=data.getData();busy("Копирую модель в приватное хранилище…");
         worker.execute(()->{
-            File tmp=new File(getNoBackupFilesDir(),"analyst-install.tmp");String error=null;
+            File tmp=new File(getNoBackupFilesDir(),"analyst-install-"+java.util.UUID.randomUUID()+".tmp");String error=null;
             try(InputStream in=getContentResolver().openInputStream(uri);OutputStream out=new FileOutputStream(tmp,false)){
                 if(in==null)throw new IOException("Unreadable model");
                 byte[] buf=new byte[256*1024];long size=0;int n;
@@ -78,6 +79,7 @@ public final class DeepAnalystActivity extends Activity {
         ActivityManager.MemoryInfo memory=new ActivityManager.MemoryInfo();
         ((ActivityManager)getSystemService(ACTIVITY_SERVICE)).getMemoryInfo(memory);
         if(memory.lowMemory||memory.availMem<model.length()+512L*1024*1024){status.setText("Недостаточно свободной памяти для этой модели. Выбери модель меньше.");return;}
+        if(!MODEL_BUSY.compareAndSet(false,true)){status.setText("Предыдущий запрос ещё завершает работу.");return;}
         busy("Подбираю сообщения, затем запускаю модель…");results.removeAllViews();
         worker.execute(()->{
             try{
@@ -93,16 +95,18 @@ public final class DeepAnalystActivity extends Activity {
                     results.addView(text("Ответ модели · не проверенный факт",18));
                     results.addView(text(answer.isEmpty()?"Модель не вернула текст.":DeepChatContext.clip(answer,16000),15));
                     if(!DeepChatContext.unknownCitations(answer,prompt).isEmpty())results.addView(text("Внимание: ответ содержит неизвестные номера источников. Перепроверь выводы.",14));
+                    if(!answer.matches("(?s).*\\[#\\d+\\].*"))results.addView(text("Модель не сослалась на конкретные сообщения. Выводы не подтверждены.",14));
                     results.addView(text(context.method+" · до "+context.sources.size()+" выдержек из "+context.total+" сообщений",13));
                     for(DeepChatContext.Source src:context.sources){
                         // Only offer sources that were actually sent to the model.
-                        if(!prompt.contains("[#"+src.id+"] "+src.author+" |"))continue;
+                        if(!DeepChatContext.sentSource(prompt,src.id))continue;
                         Button source=button("[#"+src.id+"] "+src.author+" · "+src.date+"\n"+src.body);
                         source.setAllCaps(false);results.addView(source);
                         source.setOnClickListener(v->{setResult(RESULT_OK,new Intent().putExtra("archive",archive).putExtra("message",src.id));finish();});
                     }
                 });
             }catch(Exception|LinkageError error){runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();status.setText("Не удалось выполнить анализ: проверь совместимость модели и доступную память.");});}
+            finally{MODEL_BUSY.set(false);}
         });
     }
     @Override protected void onDestroy(){stopped.set(true);worker.shutdownNow();super.onDestroy();}
