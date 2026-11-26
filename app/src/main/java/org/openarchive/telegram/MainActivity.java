@@ -3952,7 +3952,7 @@ public class MainActivity extends Activity {
             if(query.kind==ChatQuestionAnalyst.Kind.UNKNOWN){
                 result.removeAllViews();analyticsText(result,"Для смыслового вопроса нужен локальный ИИ. Переписка не передаётся в интернет.",SUB,13);
                 Button semantic=btn("Ответить локальным ИИ");result.addView(semantic,p(-1,48));
-                semantic.setOnClickListener(v->deepModel.performClick());return;
+                semantic.setOnClickListener(semanticButton->deepModel.performClick());return;
             }
             categories.setVisibility(View.GONE);suggestions.setText("Готовые вопросы  ›");
             android.view.inputmethod.InputMethodManager ime=(android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
