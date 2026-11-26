@@ -516,7 +516,6 @@ public final class DeepAnalystActivity extends Activity {
                 if(compareArchive!=null){
                     if(taskCancel.get()||stopped.get())throw new IOException("Cancelled");
                     DeepChatContext second=DeepChatContext.read(getDatabasePath(DeepChatContext.dbName(compareArchive)),q,taskCancel);
-                    if(first.sources.isEmpty()||second.sources.isEmpty())throw new IOException("Missing comparison evidence");
                     dual=DualAnalystContext.combine(archive,first,compareArchive,second);
                 }else dual=null;
                 DeepChatContext context=dual==null?first:dual.context;
@@ -524,8 +523,10 @@ public final class DeepAnalystActivity extends Activity {
                 if(stopped.get())return;
                 if(!context.hasTopicEvidence||context.sources.isEmpty()){
                     runOnUiThread(()->{
-                        if(stopped.get()||taskCancel.get())return;
-                        busy=false;refresh();results.removeAllViews();
+                        if(stopped.get())return;
+                        busy=false;refresh();
+                        if(taskCancel.get()){status.setText("Операция отменена.");return;}
+                        results.removeAllViews();
                         results.addView(text("Недостаточно тематических источников",18));revealResults();
                         results.addView(text("ИИ не запускался: поиск не нашёл достаточных совпадений"+(dual!=null?" в обеих переписках":"")+". Измените вопрос или откройте ограниченную выборку без ИИ.",14));
                         Button evidence=button("Посмотреть выборку без ИИ");results.addView(evidence);
