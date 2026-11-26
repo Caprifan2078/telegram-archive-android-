@@ -39,8 +39,7 @@ import java.io.InputStream;
 
 /** Completely isolated interactive tutorial: never touches user's chat database. */
 public final class DemoChatActivity extends Activity {
-    private static final int BG=0xff0b1424, PANEL=0xff1a2b42, AQUA=0xff89d9f5;
-    private static final int IN=0xff283c56, OUT=0xff21564f, FG=0xfff1f7ff;
+    private int BG,PANEL,AQUA,IN,OUT,FG,SUB;private ViewerPalette palette;
     private final DemoConversation[] scenarios={new DemoConversation(),new DemoConversation(1)};
     private int scenario=0;
     private DemoConversation model=scenarios[0];
@@ -67,19 +66,19 @@ public final class DemoChatActivity extends Activity {
     private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_SHORT).show();}
     private Button button(String s){
         Button b=new Button(this);b.setText(s);b.setTextColor(FG);b.setAllCaps(false);
-        b.setBackground(bg(0xff255978,16));return b;
+        ViewerUi.styleButton(b,palette.raised,FG,palette.light);return b;
     }
-    @Override public void onCreate(Bundle state){super.onCreate(state);FontStyler.bind(this);audio=(android.media.AudioManager)getSystemService(AUDIO_SERVICE);draw();}
+    @Override public void onCreate(Bundle state){ViewerUi.applyActivityTheme(this);super.onCreate(state);palette=ViewerUi.palette(this);BG=palette.background;PANEL=palette.surface;AQUA=palette.accent;IN=palette.incoming;OUT=palette.outgoing;FG=palette.text;SUB=palette.muted;ViewerUi.systemBars(this,palette);FontStyler.bind(this);audio=(android.media.AudioManager)getSystemService(AUDIO_SERVICE);draw();}
     private void draw(){
         stopAudio();
         LinearLayout root=column();root.setBackgroundColor(BG);root.setFitsSystemWindows(true);setContentView(root);
         LinearLayout bar=new LinearLayout(this);bar.setPadding(px(12),px(16),px(12),px(12));
-        bar.setGravity(Gravity.CENTER_VERTICAL);bar.setBackground(bg(PANEL,0));root.addView(bar);
-        Button back=button("‹");bar.addView(back,new LinearLayout.LayoutParams(px(48),px(50)));
+        bar.setGravity(Gravity.CENTER_VERTICAL);bar.setBackground(ViewerUi.surface(this,PANEL,ViewerUi.CARD,palette.light,false));LinearLayout.LayoutParams barBounds=new LinearLayout.LayoutParams(-1,-2);barBounds.setMargins(px(10),px(6),px(10),px(5));root.addView(bar,barBounds);
+        Button back=button("‹");back.setContentDescription("Назад");bar.addView(back,new LinearLayout.LayoutParams(px(48),px(50)));
         back.setOnClickListener(v->finish());
         LinearLayout headline=column();headline.setPadding(px(12),0,0,0);
         bar.addView(headline,new LinearLayout.LayoutParams(0,-2,1));
-        TextView title=text("Учебная переписка",21,FG);title.setTypeface(null,Typeface.BOLD);headline.addView(title);
+        TextView title=text("Учебная переписка",18,FG);title.setTypeface(null,Typeface.BOLD);headline.addView(title);
         headline.addView(text("Сценарий "+(scenario+1)+" из 2 · 9 типов медиа · офлайн",12,AQUA));
         Button reset=button("Сценарии");bar.addView(reset,new LinearLayout.LayoutParams(px(108),px(50)));
         reset.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Учебные диалоги")
@@ -91,7 +90,7 @@ public final class DemoChatActivity extends Activity {
                         .setNegativeButton("Отмена",null).setPositiveButton("Сбросить",(ok,which)->{model.reset();draw();}).show();
                 }).show());
         TextView notice=text("ПЕСОЧНИЦА · демонстрационные данные, не настоящая переписка",12,AQUA);
-        notice.setPadding(px(17),px(11),px(12),px(11));root.addView(notice);
+        notice.setPadding(px(12),px(11),px(12),px(11));notice.setBackground(ViewerUi.surface(this,PANEL,ViewerUi.CONTROL,palette.light,false));LinearLayout.LayoutParams noticeBounds=new LinearLayout.LayoutParams(-1,-2);noticeBounds.setMargins(px(10),px(4),px(10),px(4));root.addView(notice,noticeBounds);
         pinned=column();root.addView(pinned);
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
@@ -111,7 +110,7 @@ public final class DemoChatActivity extends Activity {
         pinned.removeAllViews();feed.removeAllViews();footer.removeAllViews();
         TextView p=text("Закреплено: "+model.pinnedCount()+"  ·  Избранное: "+model.savedCount(),12,AQUA);
         p.setPadding(px(17),px(8),px(13),px(8));pinned.addView(p);
-        TextView intro=text("Нажми на медиа для просмотра. Удерживай сообщение для действий. Все изменения останутся только в этой учебной переписке.",13,0xffb9cce1);
+        TextView intro=text("Нажми на медиа для просмотра. Удерживай сообщение для действий. Все изменения останутся только в этой учебной переписке.",13,SUB);
         intro.setPadding(px(14),px(12),px(12),px(17));feed.addView(intro);
         for(DemoConversation.Item e:model.items())feed.addView(renderItem(e));
         TextView progress=text("Практика: закрепить / открепить · ответить · цитировать · избранное",13,FG);

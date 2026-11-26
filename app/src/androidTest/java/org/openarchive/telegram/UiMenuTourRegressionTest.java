@@ -99,7 +99,7 @@ public class UiMenuTourRegressionTest {
         assertNotNull("Hamburger not displayed",menu);
         menu.click();
         device.waitForIdle();
-        expect("TELEGRAM ARCHIVE");
+        expect("Telegram Archive");
     }
     private void close(){
         device.pressBack();

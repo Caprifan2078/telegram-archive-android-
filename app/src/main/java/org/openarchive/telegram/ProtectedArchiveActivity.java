@@ -70,8 +70,10 @@ public final class ProtectedArchiveActivity extends Activity {
         Line(String text,List<TelegramImporter.Media> media){this.text=text;this.media=media;}
         @Override public String toString(){return text;}
     }
+    private ViewerPalette palette;
     @Override public void onCreate(Bundle saved){
-        super.onCreate(saved);
+        ViewerUi.applyActivityTheme(this);super.onCreate(saved);
+        palette=ViewerUi.palette(this);ViewerUi.systemBars(this,palette);
         // After a process crash the ephemeral key is gone. Remove only our own
         // orphaned containers/ciphertext once, before any new session can open.
         if(ORPHANS_SCANNED.compareAndSet(false,true)){
@@ -80,7 +82,8 @@ public final class ProtectedArchiveActivity extends Activity {
             if(orphaned!=null)for(File f:orphaned)if(f.isFile())f.delete();
         }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
-        body=new LinearLayout(this);body.setOrientation(LinearLayout.VERTICAL);body.setSaveEnabled(false);
+        FontStyler.bind(this);
+        body=new LinearLayout(this);body.setOrientation(LinearLayout.VERTICAL);body.setSaveEnabled(false);body.setBackgroundColor(palette.background);
         body.setSaveFromParentEnabled(false);
         int p=(int)(16*getResources().getDisplayMetrics().density);body.setPadding(p,p,p,p);
         setContentView(body);
@@ -101,20 +104,20 @@ public final class ProtectedArchiveActivity extends Activity {
     }
     private int dp(int value){return Math.round(value*getResources().getDisplayMetrics().density);}
     private void title(String s){
-        TextView t=new TextView(this);t.setTextSize(21);t.setText(s);
+        TextView t=new TextView(this);t.setTextSize(21);t.setText(s);t.setTextColor(palette.text);
         t.setTypeface(t.getTypeface(),android.graphics.Typeface.BOLD);
         t.setMaxLines(2);t.setEllipsize(android.text.TextUtils.TruncateAt.END);
         t.setContentDescription(s);t.setPadding(0,dp(4),0,dp(8));body.addView(t);
     }
     private void label(String s){
-        TextView t=new TextView(this);t.setText(s);t.setTextSize(14);t.setPadding(0,dp(2),0,dp(6));body.addView(t);
+        TextView t=new TextView(this);t.setText(s);t.setTextSize(14);t.setTextColor(palette.muted);t.setLineSpacing(dp(2),1f);t.setPadding(0,dp(2),0,dp(8));body.addView(t);
     }
     private Button actionButton(String name){
         Button b=new Button(this);b.setAllCaps(false);b.setText(name);
-        b.setMinHeight(dp(48));b.setMinimumHeight(dp(48));return b;
+        ViewerUi.styleButton(b,palette.raised,palette.text,palette.light);b.setMinHeight(dp(48));b.setMinimumHeight(dp(48));b.setPadding(dp(12),dp(6),dp(12),dp(6));return b;
     }
     private void button(String title,Runnable action){
-        Button b=actionButton(title);b.setOnClickListener(v->action.run());body.addView(b);
+        Button b=actionButton(title);b.setOnClickListener(v->action.run());LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=dp(8);body.addView(b,lp);
     }
     private void library(){
         body.removeAllViews();
@@ -132,7 +135,7 @@ public final class ProtectedArchiveActivity extends Activity {
             JSONObject item=list.optJSONObject(j);if(item==null)continue;
             String name=item.optString("name","Архив");Uri uri=Uri.parse(item.optString("uri"));
             Button b=actionButton("🔒 "+name);b.setMaxLines(2);b.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            b.setContentDescription("Открыть защищённую переписку "+name);pinList.addView(b);
+            b.setContentDescription("Открыть защищённую переписку "+name);LinearLayout.LayoutParams pinBounds=new LinearLayout.LayoutParams(-1,-2);pinBounds.bottomMargin=dp(6);pinList.addView(b,pinBounds);
             b.setOnClickListener(v->ask(uri,name));
             b.setOnLongClickListener(v->{archiveActions(uri,name);return true;});
         }
@@ -151,7 +154,7 @@ public final class ProtectedArchiveActivity extends Activity {
         secureShow(prompt);
     }
     private void renamePin(Uri uri,String oldName){
-        EditText field=new EditText(this);field.setSingleLine(true);field.setText(oldName);
+        EditText field=new EditText(this);ViewerUi.styleInput(field,palette);field.setSingleLine(true);field.setText(oldName);
         field.setSelectAllOnFocus(true);field.setSaveEnabled(false);
         field.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO);
         field.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
@@ -207,7 +210,7 @@ public final class ProtectedArchiveActivity extends Activity {
         }catch(Exception e){new FontDialog.Builder(this).setMessage("Android не предоставил постоянный доступ. Выбери локальный файл через системный проводник.").setPositiveButton("OK",null).show();}
     }
     private void ask(Uri uri,String name){
-        EditText field=new EditText(this);field.setSingleLine(true);
+        EditText field=new EditText(this);ViewerUi.styleInput(field,palette);field.setSingleLine(true);
         field.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
         field.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO);
         field.setSaveEnabled(false);field.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);field.setHint("Пароль архива");
@@ -312,11 +315,11 @@ public final class ProtectedArchiveActivity extends Activity {
         cancelPreview();detachPrivateViews();body.removeAllViews();title(name);label(detail);
         LinearLayout controls=new LinearLayout(this);
         Button change=actionButton(toggleLabel);
-        controls.addView(change,new LinearLayout.LayoutParams(0,-2,1));change.setOnClickListener(v->toggle.run());
+        LinearLayout.LayoutParams toggleBounds=new LinearLayout.LayoutParams(0,-2,1);toggleBounds.rightMargin=dp(6);controls.addView(change,toggleBounds);change.setOnClickListener(v->toggle.run());
         Button lockButton=actionButton("🔒 Заблокировать");
         controls.addView(lockButton,new LinearLayout.LayoutParams(0,-2,1));
         lockButton.setOnClickListener(v->{lock();library();});
-        body.addView(controls);
+        LinearLayout.LayoutParams controlBounds=new LinearLayout.LayoutParams(-1,-2);controlBounds.bottomMargin=dp(8);body.addView(controls,controlBounds);
     }
     private void rememberPosition(){
         if(chatList==null)return;
@@ -330,6 +333,7 @@ public final class ProtectedArchiveActivity extends Activity {
         activeList=list;
         list.setFastScrollEnabled(true);list.setFastScrollAlwaysVisible(true);
         list.setVerticalScrollBarEnabled(true);list.setSaveEnabled(false);
+        list.setDivider(new android.graphics.drawable.ColorDrawable(palette.raised));list.setDividerHeight(dp(1));
         list.setSaveFromParentEnabled(false);
     }
     private void showChat(String name){
@@ -341,7 +345,7 @@ public final class ProtectedArchiveActivity extends Activity {
         ListView list=new ListView(this);chatList=list;configureList(list);
         final ArrayAdapter<Line> adapter=new ArrayAdapter<>(this,android.R.layout.simple_list_item_1,new ArrayList<>());
         adapter.addAll(lines);list.setAdapter(adapter);
-        EditText search=new EditText(this);activeSearch=search;search.setSingleLine(true);search.setSaveEnabled(false);search.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO);
+        EditText search=new EditText(this);ViewerUi.styleInput(search,palette);activeSearch=search;search.setSingleLine(true);search.setSaveEnabled(false);search.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO);
         search.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
         search.setHint("Поиск по переписке");
         search.addTextChangedListener(new android.text.TextWatcher(){
@@ -408,18 +412,18 @@ public final class ProtectedArchiveActivity extends Activity {
         for(int i=0;i<MEDIA_KEYS.length;i++){
             final String key=MEDIA_KEYS[i];int count=mediaIndex.getOrDefault(key,Collections.emptyList()).size();
             Button chip=actionButton(MEDIA_NAMES[i]+" "+count);
-            chip.setEnabled(!key.equals(category));chip.setOnClickListener(v->showMedia(key));categories.addView(chip);
+            chip.setEnabled(!key.equals(category));chip.setSelected(key.equals(category));chip.setOnClickListener(v->showMedia(key));LinearLayout.LayoutParams chipBounds=new LinearLayout.LayoutParams(-2,-2);chipBounds.rightMargin=dp(6);categories.addView(chip,chipBounds);
         }
         scroll.addView(categories);body.addView(scroll);
         ArrayList<MediaRow> filtered=new ArrayList<>(mediaIndex.getOrDefault(category,Collections.emptyList()));
         if(filtered.isEmpty()){label("В этой категории нет вложений");return;}
         ListView list=new ListView(this);configureList(list);
         ArrayAdapter<MediaRow> adapter=new ArrayAdapter<>(this,android.R.layout.simple_list_item_1,new ArrayList<>(filtered));
-        EditText search=new EditText(this);activeSearch=search;search.setSingleLine(true);search.setSaveEnabled(false);
+        EditText search=new EditText(this);ViewerUi.styleInput(search,palette);activeSearch=search;search.setSingleLine(true);search.setSaveEnabled(false);
         search.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO);
         search.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
         search.setHint("Поиск по имени файла");body.addView(search);
-        TextView results=new TextView(this);results.setText("Файлов: "+filtered.size());body.addView(results);
+        TextView results=new TextView(this);results.setText("Файлов: "+filtered.size());results.setTextColor(palette.muted);results.setPadding(0,dp(6),0,dp(6));body.addView(results);
         search.addTextChangedListener(new android.text.TextWatcher(){
             @Override public void beforeTextChanged(CharSequence s,int start,int count,int after){}
             @Override public void onTextChanged(CharSequence s,int start,int before,int count){

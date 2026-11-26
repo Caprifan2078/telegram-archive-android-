@@ -17,6 +17,9 @@ case "${1:-}" in
   reading) classes=(PinnedFocusNavigationRegressionTest Qa01ChatListSizeTest Qa01ReadingPositionTest Qa01TwoChatsTest Qa02MissingAnchorTest Qa02ReadingPositionIsolationTest Qa02ReadingProgressIsolationTest) ;;
   ui_legacy) classes=(Qa00HelpLifecycleTest Qa00MediaFilterTest Qa00NavigationCoreTest Qa00RotationLifecycleTest QaUiChatNavigationRegressionTest ReadableUiTest UiSmokeTest) ;;
   history_export) classes=(ConversationPdfExporterTest GroupTimelineReadOnlyRegressionTest GroupTimelineScreenRegressionTest) ;;
+  premium_ui) classes=(UiMenuTourRegressionTest UiChromeOverlapRegressionTest ChronologyHubRegressionTest ChatVisualConsistencyRegressionTest MultiConversationHomeRegressionTest QaVisualAuditScreenshotsTest AnalyticsSectionNavigationRegressionTest LightAnalyticsVisualTest RelationshipAnalyticsExplanationUiTest ViewerThemeRegressionTest) ;;
+  premium_players) classes=(MusicRecoveryRegressionTest RoundPlayerActivityTest PlaybackLifecycleTest MissingMediaPlaybackRegressionTest AttachmentPreviewScreenTest MediaFastScrollRegressionTest) ;;
+  home_reading) classes=(Qa01ChatListSizeTest Qa01TwoChatsTest MultiConversationHomeRegressionTest Qa02ReadingPositionIsolationTest Qa02ReadingProgressIsolationTest QaUiChatNavigationRegressionTest) ;;
   *) echo "Unknown audit suite" >&2; exit 2 ;;
 esac
 qualified=()
@@ -36,7 +39,7 @@ mkdir -p app/build/ui-audit
 adb logcat -d -t 5000 > app/build/ui-audit/logcat.txt || true
 adb shell dumpsys window windows > app/build/ui-audit/windows.txt || true
 adb shell dumpsys activity activities > app/build/ui-audit/activities.txt || true
-if [[ "${1:-}" == navigation ]]; then
+if [[ "${1:-}" == navigation || "${1:-}" == premium_ui ]]; then
   adb pull /sdcard/Download/ app/build/ui-audit/ || true
   adb pull /sdcard/Pictures/TelegramViewerVisualAudit/ app/build/ui-audit/ || true
   if ! find app/build/ui-audit -name "05-chat*.png" -print -quit | grep -q .; then

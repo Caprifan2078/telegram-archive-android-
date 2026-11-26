@@ -2,20 +2,38 @@
     <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:statusBarColor">#0B1424</item>
-        <item name="android:navigationBarColor">#0B1424</item>
-        <item name="android:colorAccent">#7AD2FF</item>
-        <item name="android:windowBackground">#0B1424</item>
+        <item name="android:statusBarColor">#0B111B</item>
+        <item name="android:navigationBarColor">#0B111B</item>
+        <item name="android:colorAccent">#81CAFF</item>
+        <item name="android:windowBackground">#0B111B</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:alertDialogTheme">@style/ArchiveAlertDialog</item>
     </style>
 
     <!-- Native AlertDialogs keep familiar Android behavior but match our dark slate UI. -->
     <style name="ArchiveAlertDialog" parent="android:style/Theme.Material.Dialog.Alert">
-        <item name="android:windowBackground">#192A3C</item>
-        <item name="android:colorAccent">#7AD2FF</item>
+        <item name="android:windowBackground">@drawable/viewer_dialog_surface</item>
+        <item name="android:colorAccent">#81CAFF</item>
         <item name="android:textColorPrimary">#F0F8FF</item>
         <item name="android:textColorSecondary">#B4C6D6</item>
+        <item name="android:fontFamily">sans</item>
+    </style>
+    <style name="AppThemeLight" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:statusBarColor">#F3F6FA</item>
+        <item name="android:navigationBarColor">#F3F6FA</item>
+        <item name="android:colorAccent">#1468A4</item>
+        <item name="android:windowBackground">#F3F6FA</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:alertDialogTheme">@style/ArchiveAlertDialogLight</item>
+    </style>
+    <style name="ArchiveAlertDialogLight" parent="android:style/Theme.Material.Light.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/viewer_dialog_surface_light</item>
+        <item name="android:colorAccent">#1468A4</item>
+        <item name="android:textColorPrimary">#172B43</item>
+        <item name="android:textColorSecondary">#506780</item>
         <item name="android:fontFamily">sans</item>
     </style>
 </resources>
