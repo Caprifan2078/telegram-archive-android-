@@ -16,7 +16,10 @@ final class AnalystModelDownload {
         String h=u.getHost();
         return "https".equalsIgnoreCase(u.getScheme())&&u.getUserInfo()==null&&(u.getPort()==-1||u.getPort()==443)&&h!=null&&
             (h.equals("huggingface.co")||h.equals("cdn-lfs.huggingface.co")||h.equals("cdn-lfs-us-1.huggingface.co")||
-             h.equals("cdn-lfs.hf.co")||h.equals("cdn-lfs-us-1.hf.co")||h.equals("cas-bridge.xethub.hf.co"));
+             h.equals("cdn-lfs.hf.co")||h.equals("cdn-lfs-us-1.hf.co")||h.equals("cas-bridge.xethub.hf.co")||h.equals("cas-bridge.xethub-eu.hf.co")||
+             h.equals("cdn-lfs-eu-1.hf.co")||h.equals("us.aws.cdn.hf.co")||h.equals("us.gcp.cdn.hf.co")||
+             h.equals("transfer.xethub.hf.co")||h.equals("transfer.xethub-eu.hf.co")||
+             h.equals("cas-server.xethub.hf.co")||h.equals("cas-server.xethub-eu.hf.co"));
     }
     /** Revalidate installed catalog models on the worker thread before native inference. */
     static boolean matches(File file,long expectedSize,String expectedSha,AtomicBoolean cancel)throws IOException{
@@ -43,7 +46,9 @@ final class AnalystModelDownload {
         try{
             URI url=URI.create(spec.url);
             for(int redirects=0;;redirects++){
-                if(cancel.get()||redirects>5||!allowed(url))throw new IOException("Blocked redirect");
+                if(cancel.get())throw new IOException("Cancelled");
+                if(redirects>10)throw new IOException("Too many redirects");
+                if(!allowed(url))throw new IOException("Blocked redirect host: "+url.getHost());
                 conn=(HttpURLConnection)url.toURL().openConnection();
                 conn.setInstanceFollowRedirects(false);conn.setConnectTimeout(20000);conn.setReadTimeout(20000);
                 conn.setRequestMethod("GET");conn.setRequestProperty("Accept-Encoding","identity");
