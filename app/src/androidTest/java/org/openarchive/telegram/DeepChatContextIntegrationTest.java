@@ -64,4 +64,37 @@ public class DeepChatContextIntegrationTest {
             assertEquals(101,db.totalMessages());
         }finally{db.close();c.deleteDatabase(DeepChatContext.dbName(key));}
     }
+    @Test public void largeRelationshipArchiveKeepsTopicEvidenceAndReportsTimings(){
+        Context c=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key="speed_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb db=new MessageDb(c,key);
+        try{
+            SQLiteDatabase sql=db.getWritableDatabase();
+            sql.beginTransaction();
+            long target=0;
+            try{
+                for(int i=0;i<10000;i++){
+                    long id=db.stage(sql,i%2==0?"А":"Б","2026-02-01 12:00",
+                        i==5200?"Я люблю тебя":i==8200?"Прости, я был неправ":"Обычная запись "+i,null,"");
+                    if(i==5200)target=id;
+                }
+                sql.setTransactionSuccessful();
+            }finally{sql.endTransaction();}
+            db.publishStaged(sql);
+            long start=android.os.SystemClock.elapsedRealtime();
+            DeepChatContext romance=DeepChatContext.read(c.getDatabasePath(DeepChatContext.dbName(key)),"Какие признания в любви встречались?",new AtomicBoolean());
+            long romanceMs=android.os.SystemClock.elapsedRealtime()-start;
+            assertEquals(10000,romance.total);
+            final long expected=target;
+            assertTrue("Rare central relationship evidence was missed",romance.sources.stream().anyMatch(x->x.id==expected));
+            start=android.os.SystemClock.elapsedRealtime();
+            DeepChatContext behavior=DeepChatContext.read(c.getDatabasePath(DeepChatContext.dbName(key)),"Какие конфликты были в отношениях?",new AtomicBoolean());
+            long behaviorMs=android.os.SystemClock.elapsedRealtime()-start;
+            assertEquals(10000,behavior.total);assertTrue(behavior.facts.contains("А = 5000"));assertTrue(behavior.facts.contains("Б = 5000"));
+            assertTrue(behavior.sources.stream().anyMatch(x->x.body.contains("Прости")));
+            assertTrue(romance.sources.size()<=DeepChatContext.MAX_SOURCES);
+            assertEquals(10000,db.totalMessages());
+            android.util.Log.i("AnalystPerf","10000 rows: romance_ms="+romanceMs+" behavior_ms="+behaviorMs);
+        }finally{db.close();c.deleteDatabase(DeepChatContext.dbName(key));}
+    }
 }
