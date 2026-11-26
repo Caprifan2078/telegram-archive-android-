@@ -15,8 +15,13 @@ public final class LocalLlmRuntime {
     private static Engine open(String path){
         Engine.Companion.setNativeMinLogSeverity(LogSeverity.ERROR);
         Engine engine=new Engine(new EngineConfig(path,new Backend.CPU(2,null),null,null,4096,null,":nocache",null));
-        engine.initialize();
-        return engine;
+        try{
+            engine.initialize();
+            return engine;
+        }catch(RuntimeException|LinkageError failure){
+            try{engine.close();}catch(RuntimeException|LinkageError closeFailure){if(closeFailure!=failure)failure.addSuppressed(closeFailure);}
+            throw failure;
+        }
     }
     private static String infer(Engine engine,String prompt,int outputLimit,AtomicBoolean cancel)throws InterruptedException{
         if(cancel.get())throw new InterruptedException();
@@ -36,6 +41,7 @@ public final class LocalLlmRuntime {
             },"analyst-cancel");
             watcher.setDaemon(true);watcher.start();
             try{
+                if(cancel.get())throw new InterruptedException();
                 String answer=conversation.sendMessage(prompt,Collections.emptyMap()).toString();
                 if(cancel.get())throw new InterruptedException();
                 return answer;
