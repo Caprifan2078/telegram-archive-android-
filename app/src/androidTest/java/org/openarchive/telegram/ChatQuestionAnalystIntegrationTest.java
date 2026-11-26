@@ -26,4 +26,44 @@ public class ChatQuestionAnalystIntegrationTest {
             assertEquals(2,db.totalMessages());
         }finally{db.close();ctx.deleteDatabase("telegram_"+key+".db");}
     }
+
+    @Test public void everySavedQuestionCardReturnsExpectedFactsFromUnsortedExport(){
+        Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key="preset_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb db=new MessageDb(ctx,key);
+        try{
+            SQLiteDatabase sql=db.getWritableDatabase();
+            long last=db.stage(sql,"Борис","2026-02-06 12:00","Пока",null,"");
+            long first=db.stage(sql,"Анна","2026-02-01 11:00","встреча?",null,"");
+            db.stage(sql,"Анна","2026-02-01 13:00","встреча вечером",null,"");
+            db.stage(sql,"Анна","2026-02-03 12:00","Хорошо",null,"");
+            db.publishStaged(sql);
+            AtomicBoolean cancel=new AtomicBoolean(false);
+            java.util.Map<ChatQuestionAnalyst.Kind,String> expected=new java.util.EnumMap<>(ChatQuestionAnalyst.Kind.class);
+            expected.put(ChatQuestionAnalyst.Kind.FIRST,"Анна");
+            expected.put(ChatQuestionAnalyst.Kind.LAST,"Борис");
+            expected.put(ChatQuestionAnalyst.Kind.TOTAL,"Всего сообщений: 4");
+            expected.put(ChatQuestionAnalyst.Kind.MOST,"Анна");
+            expected.put(ChatQuestionAnalyst.Kind.ACTIVE_DAYS,"Дней с сообщениями: 3");
+            expected.put(ChatQuestionAnalyst.Kind.BUSIEST_DAY,"Максимум за день: 2");
+            expected.put(ChatQuestionAnalyst.Kind.LONGEST_GAP,"2 полных календарных дней");
+            expected.put(ChatQuestionAnalyst.Kind.QUESTIONS,"Сообщений со знаком вопроса: 1 из 4");
+            expected.put(ChatQuestionAnalyst.Kind.TOPIC,"Сообщений с буквальным упоминанием «встреча»: 2");
+            expected.put(ChatQuestionAnalyst.Kind.FIRST_TOPIC,"Анна");
+            int count=0;
+            for(String[] group:ChatQuestionAnalyst.PRESETS)for(int i=1;i<group.length;i++){
+                ChatQuestionAnalyst.Query query=ChatQuestionAnalyst.parse(group[i]);
+                assertTrue("Unknown saved preset: "+group[i],expected.containsKey(query.kind));
+                ChatQuestionAnalyst.Answer answer=db.askChat(query,cancel);
+                assertNotNull(answer);
+                assertTrue(group[i]+": "+answer.text,answer.text.contains(expected.get(query.kind)));
+                if(query.kind==ChatQuestionAnalyst.Kind.FIRST||query.kind==ChatQuestionAnalyst.Kind.FIRST_TOPIC)
+                    assertEquals(first,answer.sources.get(0).id);
+                if(query.kind==ChatQuestionAnalyst.Kind.LAST)assertEquals(last,answer.sources.get(0).id);
+                count++;
+            }
+            assertEquals(10,count);
+            assertEquals(4,db.totalMessages());
+        }finally{db.close();ctx.deleteDatabase("telegram_"+key+".db");}
+    }
 }
