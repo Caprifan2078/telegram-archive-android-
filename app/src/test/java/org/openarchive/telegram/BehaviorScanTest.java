@@ -17,7 +17,7 @@ public class BehaviorScanTest {
             assertTrue(AnalystModelDownload.allowed(java.net.URI.create(spec.url)));
             assertTrue(paths.add(spec.file(new java.io.File("/tmp")).getName()));
         }
-        assertEquals(3,paths.size());
+        assertEquals(AnalystModelCatalog.MODELS.length,paths.size());
         assertFalse(paths.contains(AnalystModelCatalog.file(new java.io.File("/tmp"),AnalystModelCatalog.CUSTOM).getName()));
     }
     @Test public void modelDownloadAllowsOnlyPinnedHttpsHosts(){

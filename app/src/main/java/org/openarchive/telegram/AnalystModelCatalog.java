@@ -7,6 +7,7 @@ final class AnalystModelCatalog {
     static final class Model {
         final String key,label,description,url,sha;
         final long size;
+        boolean modified(){return key.equals("gemma4community")||key.equals("huihui352")||key.equals("gemma4skillsafe");}
         boolean legacy(){return key.equals("qwen06")||key.equals("qwen17");}
         long suggestedFreeBytes(){return requiredFreeBytes(size,legacy());}
         Model(String key,String label,String description,String url,long size,String sha){
@@ -32,12 +33,25 @@ final class AnalystModelCatalog {
             2119744416L,"fa4ac3259404567c7f82533746549eed94e2e1c8222095706c63cce17653c68a"),
         new Model("lfm2526","LFM2.5 2.6B INT4","Компактная альтернатива · русский язык требует проверки",
             "https://huggingface.co/litert-community/LFM2.5-2.6B/resolve/74de0c552676734655e3d282070ffc6ea78cda5d/LFM2.5-2.6B_int4.litertlm",
-            1668151680L,"f4797d5a16812231deb6d505b4f417dd835b9b3dc47bb74d9ec71facfd0c91a4")
+            1668151680L,"f4797d5a16812231deb6d505b4f417dd835b9b3dc47bb74d9ec71facfd0c91a4"),
+        new Model("huihui352","Huihui Qwen3.5 2B Abliterated","Сторонняя модификация · качество и совместимость не проверены",
+            "https://huggingface.co/geladons/Huihui-Qwen3.5-2B-abliterated/resolve/22f7b5edefb2251f1d189f02f4fe668b06066d25/Huihui-Qwen3.5-2B-abliterated_int8_v2.litertlm",
+            2116592816L,"3d51c41abe591db12a497dbc4fcfd8ec17f474ef1a5fa8e16814e9cce6e9b873"),
+        new Model("gemma4skillsafe","Gemma 4 E2B Community","Сторонняя модификация Skillsafe · экспериментальная",
+            "https://huggingface.co/skillsafe-ai/Gemma-4-E2B-Uncensored/resolve/97fb035680f1af0c39789bb48b45e0fe380912ce/model.litertlm",
+            2008432640L,"a6132d4e449c56de2b33bc0a12d8508b87f5c62f870ab8ec574e6767f92f7c7b")
     };
     static final int CUSTOM=MODELS.length;
     static File file(File dir,int index){return index>=0&&index<MODELS.length?MODELS[index].file(dir):new File(dir,"analyst.litertlm");}
     static int safeIndex(int index){return index>=0&&index<=CUSTOM?index:0;}
     static final String CUSTOM_KEY="custom";
+    // Stable indices are storage identities, not presentation order.
+    static int[] pickerOrder(){return new int[]{0,3,1,4,5,2,6,7,CUSTOM};}
+    static String group(int index){
+        if(index==CUSTOM)return "Локальный файл";
+        if(MODELS[index].modified())return "Сторонние модификации";
+        return index==0||index==3?"Компактные":"Основные альтернативы";
+    }
     static String key(int index){return index>=0&&index<CUSTOM?MODELS[index].key:CUSTOM_KEY;}
     static int initialSelection(String storedKey,int legacyIndex,boolean customExists){
         if(storedKey!=null){

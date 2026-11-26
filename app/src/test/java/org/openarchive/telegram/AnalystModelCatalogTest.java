@@ -24,7 +24,15 @@ public class AnalystModelCatalogTest {
             assertTrue(AnalystModelDownload.allowed(URI.create(model.url)));
             assertEquals("analyst-"+model.key+".litertlm",model.file(new File("models")).getName());
         }
-        assertEquals(6,keys.size());
+        assertEquals(8,keys.size());
+    }
+    @Test public void presentationDoesNotChangeStoredSelection(){
+        java.util.HashSet<Integer> seen=new java.util.HashSet<>();
+        for(int i:AnalystModelCatalog.pickerOrder())assertTrue(seen.add(i));
+        assertEquals(AnalystModelCatalog.CUSTOM+1,seen.size());
+        assertTrue(AnalystModelCatalog.MODELS[6].modified());
+        assertTrue(AnalystModelCatalog.MODELS[7].modified());
+        assertEquals(6,AnalystModelCatalog.initialSelection("huihui352",3,false));
     }
     @Test public void hybridAndCustomModelsDoNotReuseState(){
         assertTrue(AnalystModelCatalog.canReuseEngine("/private/analyst-qwen06.litertlm"));

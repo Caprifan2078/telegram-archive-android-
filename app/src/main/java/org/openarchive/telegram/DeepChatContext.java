@@ -38,16 +38,18 @@ final class DeepChatContext {
                 int[] used=new int[BehaviorScan.LABELS.length];
                 for(BehaviorScan.Example e:report.evidence)if(used[e.category]++<2&&picked.size()<12)picked.put(e.source.id,e.source);
             }
-            String method=behavior?"Полный проход по формулировкам + ограниченные цитаты":"Совпадения слов и локальных синонимов";
+            String method=behavior?"Полный проход по формулировкам + ограниченные цитаты":"Совпадения слов и локальных синонимов: ранние и поздние сообщения";
             // First prefer the intersection, then backfill individual terms. Never treat
             // a synonym match as proof of an actual event.
             OfflineSynonymSearch.Plan plan=null;
             try{plan=OfflineSynonymSearch.make(question,true,false);}catch(IllegalArgumentException ignored){}
             if(plan!=null&&!cancelled.get()){
-                collect(db,plan.fts,6,picked,cancelled);
+                collect(db,plan.fts,3,picked,cancelled,false);
+                collect(db,plan.fts,3,picked,cancelled,true);
                 int n=0;for(String term:plan.terms){
                     if(cancelled.get()||n++>=7||picked.size()>=10)break;
-                    try{collect(db,OfflineSynonymSearch.make(term,true,false).fts,3,picked,cancelled);}catch(IllegalArgumentException ignored){}
+                    try{collect(db,OfflineSynonymSearch.make(term,true,false).fts,2,picked,cancelled,false);
+                        if(picked.size()<10)collect(db,OfflineSynonymSearch.make(term,true,false).fts,1,picked,cancelled,true);}catch(IllegalArgumentException ignored){}
                 }
             }
             // Add adjacent messages to restore conversational context around hits.
@@ -66,8 +68,8 @@ final class DeepChatContext {
             return new DeepChatContext(sources,total,facts.toString(),method);
         }
     }
-    private static void collect(SQLiteDatabase db,String match,int limit,Map<Long,Source> rows,AtomicBoolean cancel){
-        try(Cursor c=db.rawQuery("SELECT m.id,m.author,m.date_text,m.body FROM messages_fts JOIN messages m ON m.id=messages_fts.docid WHERE messages_fts MATCH ? ORDER BY m.id LIMIT "+limit,new String[]{match})){add(c,rows,cancel);}
+    private static void collect(SQLiteDatabase db,String match,int limit,Map<Long,Source> rows,AtomicBoolean cancel,boolean recent){
+        try(Cursor c=db.rawQuery("SELECT m.id,m.author,m.date_text,m.body FROM messages_fts JOIN messages m ON m.id=messages_fts.docid WHERE messages_fts MATCH ? ORDER BY m.id "+(recent?"DESC":"ASC")+" LIMIT "+limit,new String[]{match})){add(c,rows,cancel);}
     }
     private static void add(Cursor c,Map<Long,Source> rows,AtomicBoolean cancel){
         while(!cancel.get()&&rows.size()<MAX_SOURCES&&c.moveToNext()){
