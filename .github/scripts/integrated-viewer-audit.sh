@@ -20,6 +20,7 @@ case "${1:-}" in
   premium_ui) classes=(UiMenuTourRegressionTest UiChromeOverlapRegressionTest ChronologyHubRegressionTest ChatVisualConsistencyRegressionTest MultiConversationHomeRegressionTest QaVisualAuditScreenshotsTest AnalyticsSectionNavigationRegressionTest LightAnalyticsVisualTest RelationshipAnalyticsExplanationUiTest ViewerThemeRegressionTest) ;;
   premium_players) classes=(MusicRecoveryRegressionTest RoundPlayerActivityTest PlaybackLifecycleTest MissingMediaPlaybackRegressionTest AttachmentPreviewScreenTest MediaFastScrollRegressionTest) ;;
   home_reading) classes=(Qa01ChatListSizeTest Qa01TwoChatsTest MultiConversationHomeRegressionTest Qa02ReadingPositionIsolationTest Qa02ReadingProgressIsolationTest QaUiChatNavigationRegressionTest) ;;
+  interface_audit) classes=(InterfaceFunctionRegressionTest UiChromeOverlapRegressionTest QaUiChatNavigationRegressionTest MediaInfiniteGalleryRegressionTest MediaFastScrollRegressionTest SearchLifecycleRegressionTest ChronologyHubRegressionTest) ;;
   *) echo "Unknown audit suite" >&2; exit 2 ;;
 esac
 qualified=()
