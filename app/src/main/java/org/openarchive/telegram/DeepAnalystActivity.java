@@ -21,7 +21,7 @@ public final class DeepAnalystActivity extends Activity {
     private LinearLayout panel,results;
     private TextView status;
     private EditText question;
-    private Button install,ask,remove,download,scan,stop;
+    private Button install,ask,remove,download,scan,stop,full;
     private final AtomicBoolean taskCancel=new AtomicBoolean();
     private ViewerPalette palette;
     private boolean busy;
@@ -48,12 +48,16 @@ public final class DeepAnalystActivity extends Activity {
         question.setText(getIntent().getStringExtra("question"));panel.addView(question);
         ask=button("Спросить локальную нейросеть");panel.addView(ask);
         scan=button("Полный разбор поведения · без ИИ");panel.addView(scan);
+        full=button("Весь чат нейросетью · медленно");panel.addView(full);
         stop=button("Отменить операцию");panel.addView(stop);
         results=new LinearLayout(this);results.setOrientation(LinearLayout.VERTICAL);panel.addView(results);
         install.setOnClickListener(v->{Intent picker=new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*");startActivityForResult(picker,1);});
         remove.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Удалить только файл модели?").setMessage("Переписки останутся без изменений.").setNegativeButton("Отмена",null).setPositiveButton("Удалить",(d,n)->{if(!busy){if(model.exists()&&!model.delete())status.setText("Не удалось удалить модель");else refresh();}}).show());
         ask.setOnClickListener(v->analyze());
         scan.setOnClickListener(v->scanBehavior());
+        full.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Полный проход нейросети?")
+            .setMessage("Модель прочитает текст по блокам. Большой архив может занять часы, нагреть телефон и разрядить аккумулятор. Конспект сжимается, поэтому отдельные детали могут потеряться. Можно отменить между блоками.")
+            .setNegativeButton("Отмена",null).setPositiveButton("Начать",(d,n)->scanWithModel()).show());
         stop.setOnClickListener(v->{taskCancel.set(true);status.setText("Отмена запрошена…");});
         download.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Скачать Qwen3-0.6B?").setMessage("614 МБ, лучше по Wi-Fi. Скачивается только публичный файл модели с Hugging Face; переписка и вопросы не передаются.").setNegativeButton("Отмена",null).setPositiveButton("Скачать",(d,n)->downloadModel()).show());
         refresh();
@@ -63,9 +67,9 @@ public final class DeepAnalystActivity extends Activity {
         status.setText(!runtime?"В этой лёгкой сборке нет движка нейросети. Нужна экспериментальная ИИ-сборка.":present?"Модель установлена локально.":"Выбери совместимую модель LiteRT-LM из файлов телефона.");
         install.setEnabled(runtime&&!busy);remove.setEnabled(present&&!busy);ask.setEnabled(runtime&&present&&!busy);
         download.setEnabled(runtime&&!busy&&checkSelfPermission(android.Manifest.permission.INTERNET)==android.content.pm.PackageManager.PERMISSION_GRANTED);
-        scan.setEnabled(!busy);stop.setEnabled(busy);
+        scan.setEnabled(!busy);full.setEnabled(runtime&&present&&!busy);stop.setEnabled(busy);
     }
-    private void busy(String message){taskCancel.set(false);busy=true;install.setEnabled(false);remove.setEnabled(false);ask.setEnabled(false);download.setEnabled(false);scan.setEnabled(false);stop.setEnabled(true);status.setText(message);}
+    private void busy(String message){taskCancel.set(false);busy=true;install.setEnabled(false);remove.setEnabled(false);ask.setEnabled(false);download.setEnabled(false);scan.setEnabled(false);full.setEnabled(false);stop.setEnabled(true);status.setText(message);}
     private void downloadModel(){
         if(busy)return;busy("Скачиваю модель…");
         worker.execute(()->{
@@ -112,6 +116,39 @@ public final class DeepAnalystActivity extends Activity {
             if(error==null&&!stopped.get()&&!taskCancel.get())try{java.nio.file.Files.move(tmp.toPath(),model.toPath(),java.nio.file.StandardCopyOption.ATOMIC_MOVE,java.nio.file.StandardCopyOption.REPLACE_EXISTING);}catch(IOException e){error="Не удалось сохранить модель.";}
             if(tmp.exists())tmp.delete();final String message=error;
             runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();if(message!=null)status.setText(message);});
+        });
+    }
+    private void scanWithModel(){
+        if(busy||!model.isFile())return;
+        ActivityManager.MemoryInfo memory=new ActivityManager.MemoryInfo();
+        ((ActivityManager)getSystemService(ACTIVITY_SERVICE)).getMemoryInfo(memory);
+        if(memory.lowMemory||memory.availMem<model.length()+512L*1024*1024){status.setText("Недостаточно свободной памяти для модели.");return;}
+        if(!MODEL_BUSY.compareAndSet(false,true)){status.setText("Предыдущий запрос ещё завершается.");return;}
+        String input=question.getText().toString().trim();
+        final String q=input.isEmpty()?"Разбери поведение обоих участников, конфликты, поддержку и изменения общения.":input;
+        busy("Запускаю полный проход модели…");results.removeAllViews();
+        worker.execute(()->{
+            try{
+                FullChatModelScan.Progress progress=(rows,total,blocks)->runOnUiThread(()->{
+                    if(!stopped.get()&&!taskCancel.get())status.setText("Прочитано строк "+rows+" из "+total+" · обработано блоков "+blocks);
+                });
+                FullChatModelScan.Report report=(FullChatModelScan.Report)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
+                    .getMethod("generateFull",String.class,String.class,String.class,AtomicBoolean.class,FullChatModelScan.Progress.class)
+                    .invoke(null,model.getAbsolutePath(),getDatabasePath(DeepChatContext.dbName(archive)).getAbsolutePath(),q,taskCancel,progress);
+                runOnUiThread(()->{
+                    if(stopped.get())return;busy=false;refresh();
+                    results.addView(text(report.complete?"Полный проход по текстовым строкам":"Незавершённый проход",18));
+                    results.addView(text("Строк прочитано: "+report.rows+" из "+report.total+" · завершено блоков: "+report.blocks,13));
+                    results.addView(text("Сжатый конспект модели. Может пропускать детали; не является доказательством всех выводов.",13));
+                    results.addView(text(report.notes.isEmpty()?"Конспект не сформирован.":report.notes,15));
+                    if(report.unverified)results.addView(text("Часть выводов не имеет надёжной ссылки. Проверь цитаты.",14));
+                    for(DeepChatContext.Source src:report.sources){
+                        Button source=button("[#"+src.id+"] "+src.author+" · "+src.date+"\n"+src.body);results.addView(source);
+                        source.setOnClickListener(v->{setResult(RESULT_OK,new Intent().putExtra("archive",archive).putExtra("message",src.id));finish();});
+                    }
+                });
+            }catch(Exception|LinkageError error){runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();status.setText(taskCancel.get()?"Проход отменён.":"Модель не завершила проход. Проверь память и совместимость.");});}
+            finally{MODEL_BUSY.set(false);}
         });
     }
     private void analyze(){
