@@ -76,9 +76,12 @@ public final class LocalLlmRuntime {
     private static String single(String path,String prompt,int outputLimit,AtomicBoolean cancel)throws InterruptedException{
         if(cancel.get())throw new InterruptedException();
         String name=new java.io.File(path).getName();
-        if(name.equals("analyst-qwen25unc15.litertlm")){
-            if(prompt.length()>1800)throw new IllegalArgumentException("Candidate requires short prompt");
+        if(name.equals("analyst-qwen25unc15.litertlm")||name.equals("analyst-qwen06q4.litertlm")){
+            if(prompt.length()>1500)throw new IllegalArgumentException("Candidate requires short prompt");
             try(Engine engine=open(path,1280)){return infer(engine,prompt,256,cancel,true);}
+        }
+        if(name.equals("analyst-qwen2515.litertlm")){
+            try(Engine engine=open(path,4096)){return infer(engine,prompt,512,cancel,true);}
         }
         boolean compactLegacy=name.equals("analyst-qwen06.litertlm");
         int budget=compactLegacy?Math.max(768,outputLimit):outputLimit;
