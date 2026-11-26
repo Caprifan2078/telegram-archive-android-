@@ -252,5 +252,5 @@ gradle.taskGraph.whenReady { graph ->
 if (project.findProperty('qaLocalModel') == 'true') {
     android.sourceSets.main.java.srcDir 'src/localModel/java'
     android.sourceSets.main.manifest.srcFile 'src/localModel/AndroidManifest.xml'
-    dependencies { implementation 'com.google.ai.edge.litertlm:litertlm-android:0.10.2' }
+    dependencies { implementation 'com.google.ai.edge.litertlm:litertlm-android:0.18.0' }
 }

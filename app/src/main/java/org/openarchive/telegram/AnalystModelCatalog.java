@@ -7,6 +7,8 @@ final class AnalystModelCatalog {
     static final class Model {
         final String key,label,description,url,sha;
         final long size;
+        boolean legacy(){return key.equals("qwen06")||key.equals("qwen17");}
+        long suggestedFreeBytes(){return requiredFreeBytes(size,legacy());}
         Model(String key,String label,String description,String url,long size,String sha){
             this.key=key;this.label=label;this.description=description;this.url=url;this.size=size;this.sha=sha;
         }
@@ -21,10 +23,43 @@ final class AnalystModelCatalog {
             2056729520L,"66064a4e9269cb693e124c4e3040bcb8a446b10bca42663896329495add3861c"),
         new Model("gemma4community","Gemma 4 E2B Uncensored","Сторонняя экспериментальная версия; совместимость не подтверждена",
             "https://huggingface.co/PeppX/gemma-4-e2b-uncensored-litertlm/resolve/5e28da253d149f19bc78dad2dec5d91f8c799756/gemma4_uncensored_INT4_8192.litertlm",
-            2570459088L,"7c1dd5e4723e8a6d20fbb5f11f34141eb1f8e413d2049aa52211f533966d785e")
+            2570459088L,"7c1dd5e4723e8a6d20fbb5f11f34141eb1f8e413d2049aa52211f533966d785e"),
+        new Model("qwen3508","Qwen3.5 0.8B INT8","Новая компактная · экспериментальная",
+            "https://huggingface.co/litert-community/Qwen3.5-0.8B/resolve/ff11c109e8e56797cd1ee5befa856975bb465afc/Qwen3.5-0.8B_int8.litertlm",
+            964566992L,"25447e2550082aed6145bbc755ec4da5d535f98f6a0c386865fdae2ccb88aed1"),
+        new Model("qwen352","Qwen3.5 2B INT8","Новый глубокий анализ · экспериментальная",
+            "https://huggingface.co/litert-community/Qwen3.5-2B/resolve/895dd827bca539c532b359d9fec3b4fe512f8426/Qwen3.5-2B_int8.litertlm",
+            2119744416L,"fa4ac3259404567c7f82533746549eed94e2e1c8222095706c63cce17653c68a"),
+        new Model("lfm2526","LFM2.5 2.6B INT4","Компактная альтернатива · русский язык требует проверки",
+            "https://huggingface.co/litert-community/LFM2.5-2.6B/resolve/74de0c552676734655e3d282070ffc6ea78cda5d/LFM2.5-2.6B_int4.litertlm",
+            1668151680L,"f4797d5a16812231deb6d505b4f417dd835b9b3dc47bb74d9ec71facfd0c91a4")
     };
     static final int CUSTOM=MODELS.length;
     static File file(File dir,int index){return index>=0&&index<MODELS.length?MODELS[index].file(dir):new File(dir,"analyst.litertlm");}
     static int safeIndex(int index){return index>=0&&index<=CUSTOM?index:0;}
+    static final String CUSTOM_KEY="custom";
+    static String key(int index){return index>=0&&index<CUSTOM?MODELS[index].key:CUSTOM_KEY;}
+    static int initialSelection(String storedKey,int legacyIndex,boolean customExists){
+        if(storedKey!=null){
+            if(CUSTOM_KEY.equals(storedKey))return CUSTOM;
+            for(int i=0;i<CUSTOM;i++)if(MODELS[i].key.equals(storedKey))return i;
+            return 0;
+        }
+        // The old catalog had exactly 3 entries. Its index 3 meant custom.
+        if(legacyIndex==3||legacyIndex==-1&&customExists)return CUSTOM;
+        return legacyIndex>=0&&legacyIndex<3?legacyIndex:0;
+    }
+    static boolean installed(File file,int index){
+        return file.isFile()&&file.length()>0&&(index==CUSTOM||file.length()==MODELS[safeIndex(index)].size);
+    }
+    static boolean canReuseEngine(String path){
+        String name=new File(path).getName();
+        return name.equals("analyst-qwen06.litertlm")||name.equals("analyst-qwen17.litertlm");
+    }
+    // Conservative start threshold, not a measurement or a guarantee against native OOM.
+    static long requiredFreeBytes(long size,boolean legacy){
+        long reserve=(legacy?768L:1536L)*1024*1024;
+        return size<0||size>Long.MAX_VALUE-reserve?Long.MAX_VALUE:size+reserve;
+    }
     private AnalystModelCatalog(){}
 }
