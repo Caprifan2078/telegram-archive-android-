@@ -160,8 +160,8 @@ public final class DeepAnalystActivity extends Activity {
         if(busy)return;selectedModel=index;model=AnalystModelCatalog.file(getNoBackupFilesDir(),index);
         getSharedPreferences(MODEL_PREFS,MODE_PRIVATE).edit().putString("selected_key",AnalystModelCatalog.key(index)).apply();refresh();
     }
-    private void showModelPicker(){showModelPicker(false);}
-    private void showModelPicker(boolean all){
+    private void showModelPicker(){showModelPicker(0);}
+    private void showModelPicker(int mode){
         if(busy)return;
         AnalystDeviceFit fit=deviceFit();
         LinearLayout choices=new LinearLayout(this);choices.setOrientation(LinearLayout.VERTICAL);
@@ -169,11 +169,15 @@ public final class DeepAnalystActivity extends Activity {
         ScrollView scroll=new ScrollView(this);scroll.addView(choices);
         android.app.AlertDialog picker=new FontDialog.Builder(this).setTitle("Выбор модели").setView(scroll).setNegativeButton("Закрыть",null).create();
         choices.addView(text(fit.summary()+"\nОценка совместимости, не гарантия запуска.",13));
-        Button filter=button(all?"Только основные и сохранённые":"Все альтернативы");choices.addView(filter);
-        filter.setOnClickListener(v->{picker.dismiss();showModelPicker(!all);});
+        String[] filters={"Основные","По ОЗУ","Без цензуры*","Все"};
+        Button filter=button("Показать: "+filters[mode]+"  ▾");choices.addView(filter);
+        filter.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Фильтр моделей").setSingleChoiceItems(filters,mode,(d,n)->{d.dismiss();picker.dismiss();showModelPicker(n);}).show());
+        if(mode==2)choices.addView(text("*Сторонние модификации с ослабленными ограничениями; отсутствие отказов и качество не гарантированы.",12));
         String group="";
-        for(int i:all?AnalystModelCatalog.pickerOrder():AnalystModelCatalog.focusedPickerOrder(getNoBackupFilesDir(),selectedModel)){
-            String nextGroup=all?AnalystModelCatalog.group(i):AnalystModelCatalog.focusedGroup(i);
+        int shown=0;
+        for(int i:AnalystModelCatalog.filteredPickerOrder(getNoBackupFilesDir(),selectedModel,mode,fit)){
+            shown++;
+            String nextGroup=mode==0?AnalystModelCatalog.focusedGroup(i):AnalystModelCatalog.group(i);
             if(!group.equals(nextGroup)){group=nextGroup;TextView heading=text(group,14);heading.setTypeface(null,android.graphics.Typeface.BOLD);choices.addView(heading);}
             final int index=i;boolean custom=i==AnalystModelCatalog.CUSTOM,selected=i==selectedModel;
             File file=AnalystModelCatalog.file(getNoBackupFilesDir(),i);
@@ -189,6 +193,7 @@ public final class DeepAnalystActivity extends Activity {
             row.setFocusable(true);row.setContentDescription(name.getText()+". "+info.getText());
             row.setOnClickListener(v->{if(busy)return;picker.dismiss();selectModel(index);});
         }
+        if(shown==0)choices.addView(text("Нет моделей, подходящих по текущей оценке. Можно изменить фильтр или использовать поиск без ИИ.",14));
         picker.show();
     }
     private void refresh(){
