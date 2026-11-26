@@ -24,7 +24,9 @@ public class AnalystModelCatalogTest {
             assertTrue(AnalystModelDownload.allowed(URI.create(model.url)));
             assertEquals("analyst-"+model.key+".litertlm",model.file(new File("models")).getName());
         }
-        assertEquals(8,keys.size());
+        assertEquals(10,keys.size());
+        assertEquals(8,AnalystModelCatalog.initialSelection("qwen06q4",3,false));
+        assertEquals(9,AnalystModelCatalog.initialSelection("qwen2515",3,false));
     }
     @Test public void presentationDoesNotChangeStoredSelection(){
         java.util.HashSet<Integer> seen=new java.util.HashSet<>();
