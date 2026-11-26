@@ -56,8 +56,21 @@ class DocumentFolder {
     Uri uriFor(String id) { return localRoot!=null?Uri.fromFile(new java.io.File(id)):DocumentsContract.buildDocumentUriUsingTree(tree,id); }
     List<Entry> htmlParts() {
         List<Entry> parts=new ArrayList<>();
-        for(Entry e:children(rootId))if(e.name.matches("(?i)^messages\\d*\\.html$"))parts.add(e);
-        Collections.sort(parts,(a,b)->Integer.compare(partNo(a.name),partNo(b.name)));
+        List<Entry> entries=children(rootId);
+        for(Entry e:entries)if(!DocumentsContract.Document.MIME_TYPE_DIR.equals(e.mime)&&TelegramExportHtml.canonical(e.name))parts.add(e);
+        if(!parts.isEmpty()){
+            Collections.sort(parts,(a,b)->Integer.compare(partNo(a.name),partNo(b.name)));
+            return parts;
+        }
+        int candidates=0;
+        for(Entry e:entries){
+            if(DocumentsContract.Document.MIME_TYPE_DIR.equals(e.mime)||!TelegramExportHtml.candidate(e.name))continue;
+            if(++candidates>256)throw new IllegalStateException("Слишком много HTML с нестандартными именами.");
+            try(java.io.InputStream in=resolver.openInputStream(uriFor(e.id))){
+                if(TelegramExportHtml.recognized(in))parts.add(e);
+            }catch(java.io.IOException failure){throw new IllegalStateException("Не удалось проверить HTML переписки",failure);}
+        }
+        if(parts.size()>1)throw new IllegalStateException("Найдено несколько HTML переписок с нестандартными именами. Выбери нужный HTML.");
         return parts;
     }
     static int partNo(String s) {

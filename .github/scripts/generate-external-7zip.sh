@@ -16,3 +16,37 @@ for f in "$dest"/aes256.zip "$dest"/zipcrypto.zip "$dest"/headers.7z; do "$seven
 
 "$seven" a -t7z -mhe=on "-p пробел-Ё-123 ! " "$dest/unicode.7z" messages.html
 "$seven" t "-p пробел-Ё-123 ! " "$dest/unicode.7z"
+
+# Match the reported export layout, with synthetic payloads only.
+mkdir -p "$tmp/layout"
+cd "$tmp/layout"
+python3 - <<'PY'
+from pathlib import Path
+for directory, count in {"css":1,"images":42,"js":1,"photos":42,"round_video_messages":834,"stickers":15,"video_files":21,"voice_messages":1}.items():
+    root=Path(directory);root.mkdir()
+    for i in range(count):
+        (root/("synthetic%04d.txt"%i)).write_bytes(("fixture %s %d\n"%(directory,i)).encode())
+for i in range(1,21):
+    name="messages.html" if i==1 else "messages%d.html"%i
+    Path(name).write_text('<div class="history"><div class="message default" id="message%d"><div class="body"><div class="from_name">Synthetic</div><div class="text">Synthetic page %d</div></div></div></div>'%(i,i),encoding="utf-8")
+PY
+for config in solid-header solid-data nonsolid-header; do
+    solid=on;header=on
+    if [[ "$config" == solid-data ]]; then header=off; fi
+    if [[ "$config" == nonsolid-header ]]; then solid=off; fi
+    archive="$dest/layout-$config.7z"
+    "$seven" a -t7z "-ms=$solid" "-mhe=$header" -pqa-layout-secret "$archive" .
+    "$seven" t -pqa-layout-secret "$archive"
+    "$seven" l -slt -pqa-layout-secret "$archive" | grep -E '^(Solid|Blocks|Files|Folders) ='
+done
+
+# Reproduce reported archive-inside-archive, using the same synthetic 20-page layout.
+"$seven" a -t7z -ms=on "$tmp/inner-plain.7z" .
+"$seven" a -tzip "$tmp/inner-plain.zip" .
+cd "$tmp"
+"$seven" a -t7z -mhe=on -pqa-layout-secret "$dest/wrapped-plain-7z.7z" inner-plain.7z
+"$seven" a -t7z -mhe=on -pqa-layout-secret "$dest/wrapped-plain-zip.7z" inner-plain.zip
+cp "$dest/layout-solid-header.7z" "$tmp/inner-encrypted.7z"
+"$seven" a -t7z -mhe=on -pqa-layout-secret "$dest/wrapped-same-password.7z" inner-encrypted.7z
+"$seven" a -t7z "$dest/wrapped-inner-password.7z" inner-encrypted.7z
+for f in "$dest"/wrapped-*.7z; do "$seven" t -pqa-layout-secret "$f"; done
