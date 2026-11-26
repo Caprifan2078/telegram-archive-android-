@@ -1,13 +1,13 @@
 name: Real Russian analyst model benchmark
 on:
   pull_request:
-    branches: [qa/native-analyst-jni-recovery-20261127]
+    branches: [qa/analyst-model-benchmark-20261127]
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   real_model:
-    if: github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || github.head_ref == 'qa/analyst-model-benchmark-20261127')
+    if: github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || github.head_ref == 'qa/relationship-analysis-20261127')
     name: Native model / ${{ matrix.model }}
     strategy:
       fail-fast: false

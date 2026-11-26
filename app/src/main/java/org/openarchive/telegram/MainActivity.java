@@ -4116,6 +4116,9 @@ public class MainActivity extends Activity {
         }
         Button ask=btn("Задать вопрос о переписке");
         list.addView(ask,p(-1,48));ask.setOnClickListener(v->showChatAnalyst());
+        Button relationships=btn("Взаимоотношения  ›");list.addView(relationships,p(-1,48));
+        relationships.setOnClickListener(v->{if(!home&&"analytics".equals(screen)&&db!=null&&!importing)
+            startActivityForResult(new Intent(this,DeepAnalystActivity.class).putExtra("archive",activeKey).putExtra("relationships",true),119);});
         analyticsSectionHeading("Главное о переписке","Короткая сводка без длинных таблиц и графиков.");
         LinearLayout glance=row();glance.setGravity(Gravity.TOP);
         glance.setPadding(px(5),0,px(5),px(6));list.addView(glance,p(-1,-2));

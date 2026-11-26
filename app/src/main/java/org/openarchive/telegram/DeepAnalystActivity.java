@@ -17,6 +17,7 @@ public final class DeepAnalystActivity extends Activity {
     private final AtomicBoolean stopped=new AtomicBoolean();
     private static final AtomicBoolean MODEL_BUSY=new AtomicBoolean();
     private String archive,compareArchive;
+    private boolean relationships;
     private File model;
     private int selectedModel;
     private Button modelSelector;
@@ -44,6 +45,7 @@ public final class DeepAnalystActivity extends Activity {
         archive=getIntent().getStringExtra("archive");
         try{if(!getDatabasePath(DeepChatContext.dbName(archive)).isFile()){finish();return;}}catch(IllegalArgumentException bad){finish();return;}
         compareArchive=getIntent().getStringExtra("compare_archive");
+        relationships=getIntent().getBooleanExtra("relationships",false)&&compareArchive==null;
         if(compareArchive!=null){
             try{if(archive.equals(compareArchive)||!getDatabasePath(DeepChatContext.dbName(compareArchive)).isFile()){finish();return;}}
             catch(IllegalArgumentException bad){finish();return;}
@@ -55,8 +57,8 @@ public final class DeepAnalystActivity extends Activity {
         model=AnalystModelCatalog.file(getNoBackupFilesDir(),selectedModel);
         ScrollView scroll=new ScrollView(this);panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(16),dp(16),dp(16),dp(24));panel.setBackgroundColor(palette.background);scroll.addView(panel);setContentView(scroll);
-        TextView title=text(compareArchive==null?"Глубокий анализ":"Сравнение двух переписок",22);title.setTypeface(null,android.graphics.Typeface.BOLD);panel.addView(title);
-        panel.addView(text(compareArchive==null?"Локальный ИИ · быстрый вопрос или полный проход. Ответы могут ошибаться.":"Локальный ИИ · отдельные выборки А и Б. Сравнение по цитатам, не полный проход.",14));
+        TextView title=text(relationships?"Взаимоотношения":compareArchive==null?"Глубокий анализ":"Сравнение двух переписок",22);title.setTypeface(null,android.graphics.Typeface.BOLD);panel.addView(title);
+        panel.addView(text(relationships?"Поступки, взаимность, забота и конфликты. Выводы только по сообщениям, не оценка личности.":compareArchive==null?"Локальный ИИ · быстрый вопрос или полный проход. Ответы могут ошибаться.":"Локальный ИИ · отдельные выборки А и Б. Сравнение по цитатам, не полный проход.",14));
         status=text("",13);panel.addView(status);
         modelCard=new LinearLayout(this);modelCard.setOrientation(LinearLayout.VERTICAL);
         modelCard.setPadding(dp(12),dp(10),dp(12),dp(12));
@@ -84,8 +86,9 @@ public final class DeepAnalystActivity extends Activity {
         question.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(360)});
         question.setText(getIntent().getStringExtra("question"));LinearLayout.LayoutParams qlp=new LinearLayout.LayoutParams(-1,-2);qlp.topMargin=dp(12);qlp.bottomMargin=dp(8);panel.addView(question,qlp);
         ask=button("Спросить");ViewerUi.styleButton(ask,palette.chip,palette.accent,palette.light);panel.addView(ask);
-        Button presets=button("Идеи вопросов  ›");panel.addView(presets);
+        Button presets=button(relationships?"80 вопросов об отношениях  ›":"Идеи вопросов  ›");panel.addView(presets);
         presets.setOnClickListener(v->showQuestionLibrary());
+        if(relationships){Button report=button("Сводка отношений · весь архив");panel.addView(report);report.setOnClickListener(v->{if(!busy)scanRelationships();});}
         question.addTextChangedListener(new android.text.TextWatcher(){
             public void beforeTextChanged(CharSequence s,int start,int count,int after){}
             public void onTextChanged(CharSequence s,int start,int before,int count){updateAsk();}
@@ -123,8 +126,8 @@ public final class DeepAnalystActivity extends Activity {
     }
     private void showQuestionLibrary(){
         if(busy)return;
-        final String[][] semantic=compareArchive==null?AnalystQuestionLibrary.SINGLE:AnalystQuestionLibrary.DUAL;
-        final String[][] exact=compareArchive==null?ChatQuestionAnalyst.PRESETS:new String[0][];
+        final String[][] semantic=relationships?RelationshipQuestions.GROUPS:compareArchive==null?AnalystQuestionLibrary.SINGLE:AnalystQuestionLibrary.DUAL;
+        final String[][] exact=compareArchive==null&&!relationships?ChatQuestionAnalyst.PRESETS:new String[0][];
         final java.util.ArrayList<String[]> groups=new java.util.ArrayList<>();
         final java.util.ArrayList<String> labels=new java.util.ArrayList<>();
         for(String[] group:exact){groups.add(group);labels.add("Факты · "+group[0]+" ("+(group.length-1)+")");}
@@ -328,12 +331,7 @@ public final class DeepAnalystActivity extends Activity {
         });
     }
     private void scanWithModel(){
-        if(!canStartModel()){
-            new FontDialog.Builder(this).setTitle("Модель сейчас не готова")
-                .setMessage(status.getText()+"\nМожно посмотреть найденные сообщения без запуска модели.")
-                .setNegativeButton("Закрыть",null).setPositiveButton("Найти источники",(d,n)->findEvidence(q)).show();
-            return;
-        }
+        if(!canStartModel())return;
         if(!MODEL_BUSY.compareAndSet(false,true)){status.setText("Предыдущий запрос ещё завершается.");return;}
         String input=question.getText().toString().trim();
         final String q=input.isEmpty()?"Разбери поведение обоих участников, конфликты, поддержку и изменения общения.":input;
@@ -372,6 +370,45 @@ public final class DeepAnalystActivity extends Activity {
         });
     }
     /** Useful evidence retrieval even on lightweight builds or phones without downloaded weights. */
+    private void scanRelationships(){
+        busy("Сканирую весь архив…");results.removeAllViews();
+        worker.execute(()->{
+            try{
+                RelationshipScan.Report report=RelationshipScan.read(getDatabasePath(DeepChatContext.dbName(archive)),taskCancel,
+                    n->runOnUiThread(()->{if(!stopped.get()&&!taskCancel.get())status.setText("Проверено сообщений: "+n);}));
+                runOnUiThread(()->{
+                    if(stopped.get())return;busy=false;refresh();
+                    if(!report.complete||taskCancel.get()){status.setText("Сканирование отменено.");return;}
+                    results.addView(text("Взаимоотношения · "+report.total+" сообщений",20));
+                    results.addView(text("Начало разговора: первое сообщение архива или после паузы от 6 часов. Неизвестные даты и обратный порядок ограничивают точность. Ответы — только явные связи Telegram, не все сообщения.",13));
+                    results.addView(text("Начал разговоров: "+report.sessions+" · без времени: "+report.missingTime+" · обратный порядок: "+report.unorderedTime,13));
+                    java.util.List<java.util.Map.Entry<String,RelationshipScan.Person>> people=new java.util.ArrayList<>(report.people.entrySet());
+                    people.sort((a,b)->Long.compare(b.getValue().messages,a.getValue().messages));
+                    for(int i=0;i<Math.min(20,people.size());i++){
+                        java.util.Map.Entry<String,RelationshipScan.Person> item=people.get(i);RelationshipScan.Person p=item.getValue();
+                        results.addView(text(item.getKey()+" · "+p.messages+" сообщений\nНачал разговор: "+p.starts+" · со знаком вопроса: "+p.questions+" · явных ответов: "+p.explicitReplies,15));
+                    }
+                    if(people.size()>20||report.capped)results.addView(text("Разбивка по участникам ограничена.",13));
+                    results.addView(text("Кто кому отвечал",18));
+                    java.util.List<RelationshipScan.Pair> pairs=new java.util.ArrayList<>(report.replies.values());
+                    pairs.sort((a,b)->Long.compare(b.count,a.count));
+                    for(int i=0;i<Math.min(20,pairs.size());i++){
+                        RelationshipScan.Pair p=pairs.get(i);results.addView(text(p.from+" → "+p.to+": "+p.count,14));
+                    }
+                    if(pairs.isEmpty())results.addView(text("Нет разрешённых связей явных ответов.",13));
+                    results.addView(text("Неразрешённых ответов: "+report.unresolvedReplies,13));
+                    results.addView(text("Формулировки поведения · не оценка человека",18));
+                    results.addView(text(report.behavior.summary(),14));
+                    for(BehaviorScan.Example example:report.behavior.evidence){
+                        DeepChatContext.Source src=example.source;
+                        Button link=button(BehaviorScan.LABELS[example.category]+" · "+src.author+"\n"+src.body);
+                        link.setAllCaps(false);results.addView(link);
+                        link.setOnClickListener(v->{setResult(RESULT_OK,new Intent().putExtra("archive",archive).putExtra("message",src.id));finish();});
+                    }
+                });
+            }catch(Exception failure){runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();status.setText("Не удалось прочитать архив.");});}
+        });
+    }
     private void findEvidence(String q){
         busy("Подбираю источники из локального архива…");results.removeAllViews();
         worker.execute(()->{
