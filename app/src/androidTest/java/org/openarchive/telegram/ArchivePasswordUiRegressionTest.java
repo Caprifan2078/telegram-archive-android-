@@ -66,6 +66,9 @@ public final class ArchivePasswordUiRegressionTest {
                 assertNotNull("Password entry exists in secure window",password);
                 assertTrue(password.isShown());
                 assertEquals("Пароль от архива",password.getHint().toString());
+                assertTrue(actual.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick());
+                assertTrue("Empty password must keep the secure dialog open",actual.isShowing());
+                assertNotNull(password.getError());
                 assertTrue(actual.getButton(android.app.AlertDialog.BUTTON_NEGATIVE).performClick());
             });
             inst.waitForIdleSync();

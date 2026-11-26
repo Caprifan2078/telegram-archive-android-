@@ -3521,19 +3521,21 @@ public class MainActivity extends Activity {
             android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
         archivePassword.setTextColor(FG);
         archivePassword.setHintTextColor(SUB);
-        archivePassword.setPadding(px(18),px(10),px(18),px(10));
+        ViewerUi.styleInput(archivePassword,ViewerPalette.of(themeIndex));
+        LinearLayout passwordForm=column();passwordForm.setPadding(px(20),px(10),px(20),px(6));
+        passwordForm.addView(archivePassword,p(-1,-2));
         android.app.AlertDialog passwordDialog=new FontDialog.Builder(this).setTitle("Этот архив защищён паролем")
             .setMessage("Введи пароль для открытия "+displayName+". Пароль не сохраняется.")
-            .setView(archivePassword).setNegativeButton("Отмена",null)
-            .setPositiveButton("Открыть",(d,w)->{
+            .setView(passwordForm).setNegativeButton("Отмена",null)
+            .setPositiveButton("Открыть",null).create();
+        passwordDialog.setOnShowListener(ignored->passwordDialog.getButton(-1).setOnClickListener(v->{
+                if(archivePassword.length()==0){archivePassword.setError("Введи пароль");return;}
                 char[] password=new char[archivePassword.length()];
                 archivePassword.getText().getChars(0,archivePassword.length(),password,0);
                 archivePassword.getText().clear();
-                if(password.length==0){
-                    toast("Пароль не указан");return;
-                }
+                passwordDialog.dismiss();
                 importCompressed(source,ext,displayName,password);
-            }).create();
+            }));
         archivePasswordDialog=passwordDialog;
         passwordDialog.setOnDismissListener(d->{archivePassword.getText().clear();if(archivePasswordDialog==passwordDialog)archivePasswordDialog=null;});
         if(passwordDialog.getWindow()!=null)
