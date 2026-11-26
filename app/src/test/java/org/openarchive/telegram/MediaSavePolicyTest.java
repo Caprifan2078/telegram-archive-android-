@@ -36,4 +36,13 @@ public class MediaSavePolicyTest {
         assertEquals("application/octet-stream",MediaSavePolicy.plan("audio.unknown","voice",false).mime);
         assertEquals(MediaSavePolicy.Destination.DOWNLOADS,MediaSavePolicy.plan("audio.unknown","voice",false).destination);
     }
+
+    @Test public void encodedTelegramFilenameKeepsCorrectExtensionAndReadableName(){
+        MediaSavePolicy.Spec spec=MediaSavePolicy.plan("voice_messages/%D0%93%D0%BE%D0%BB%D0%BE%D1%81%20%231%2Eogg?download=1","voice",false);
+        assertEquals("Голос _1.ogg",spec.filename);
+        assertEquals("audio/ogg",spec.mime);
+        assertEquals(MediaSavePolicy.Destination.MUSIC,spec.destination);
+        assertEquals("a_2.mp3",MediaSavePolicy.plan("music/a+2.mp3","audio",false).filename);
+        assertEquals("x_y.png",MediaSavePolicy.plan("photos/x%2Fy.png","image",false).filename);
+    }
 }

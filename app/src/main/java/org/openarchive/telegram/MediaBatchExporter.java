@@ -35,7 +35,8 @@ final class MediaBatchExporter {
                         long size=MediaSaver.copy(ctx,file,destination);
                         if(size==0)throw new IOException("Пустой файл");
                         result.bytes+=size;done=true;
-                    }finally{if(!done)MediaSaver.discardIncompleteDocument(ctx,destination);}
+                    }catch(MediaSaver.SameSourceException alias){done=true;throw alias;}
+                    finally{if(!done)MediaSaver.discardIncompleteDocument(ctx,destination);}
                 }
                 result.saved++;
             }catch(Exception e){result.failed++;}

@@ -3274,7 +3274,8 @@ public class MainActivity extends Activity {
                         if(bytes==0)throw new IOException("Исходный файл пуст");
                         runOnUiThread(()->toast("Сохранено · "+(bytes/1024)+" КБ"));
                     }catch(Exception error){
-                        MediaSaver.discardIncompleteDocument(this,destination);
+                        if(!(error instanceof MediaSaver.SameSourceException))
+                            MediaSaver.discardIncompleteDocument(this,destination);
                         runOnUiThread(()->toast("Не удалось сохранить: "+error.getMessage()));
                     }
                 });

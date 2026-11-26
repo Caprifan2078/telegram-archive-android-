@@ -17,7 +17,10 @@ final class MediaSavePolicy {
         String raw=path==null?"":path.replace('\\','/');
         int query=raw.indexOf('?'); if(query>=0)raw=raw.substring(0,query);
         int fragment=raw.indexOf('#'); if(fragment>=0)raw=raw.substring(0,fragment);
-        String name=raw.substring(raw.lastIndexOf('/')+1).replaceAll("[^\\p{L}\\p{N}._() -]","_").trim();
+        String leaf=raw.substring(raw.lastIndexOf('/')+1);
+        try{leaf=java.net.URLDecoder.decode(leaf.replace("+","%2B"),"UTF-8");}
+        catch(IllegalArgumentException|java.io.UnsupportedEncodingException ignored){/* preserve malformed raw name */}
+        String name=leaf.replaceAll("[^\\p{L}\\p{N}._() -]","_").trim();
         if(name.equals(".")||name.equals("..")||name.isEmpty())name="file";
         if(name.length()>90)name=name.substring(name.length()-90);
         String ext="";
