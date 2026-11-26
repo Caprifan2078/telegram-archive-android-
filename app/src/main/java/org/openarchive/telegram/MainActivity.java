@@ -4944,14 +4944,14 @@ public class MainActivity extends Activity {
             worker.execute(()->{try{
                 source.updateRelationshipEvent(event.id,label,body);
                 runOnUiThread(()->{if(isFinishing()||isDestroyed())return;dialog.dismiss();
-                    if(sameScreenRequest(source,key,token)&&"relationships".equals(screen))renderRelationshipsPage();});
+                    if(sameScreenRequest(source,key,token)){if("relationships".equals(screen))renderRelationshipsPage();else if("chronology".equals(screen))renderChronologyPage();}});
             }catch(Exception error){runOnUiThread(()->{if(dialog.isShowing()){save.setEnabled(true);name.setError("Не удалось сохранить");}});}});
         }));dialog.show();
     }
     private void unlinkEventAttachment(long eventId,MessageDb.Attachment attachment){
         final MessageDb source=db;final String key=activeKey;final int token=loadToken;
         new FontDialog.Builder(this).setTitle("Открепить вложение?")
-            .setMessage("Удалится только ссылка из события. Исходный файл останется.")
+            .setMessage("Удалится только ссылка из отметки. Исходный файл останется.")
             .setNegativeButton("Отмена",null).setPositiveButton("Открепить",(d,w)->{
                 if(!sameScreenRequest(source,key,token))return;
                 worker.execute(()->{try{source.unlinkRelationshipMedia(eventId,attachment.id);
@@ -5155,7 +5155,7 @@ public class MainActivity extends Activity {
                                     if(event.note!=null&&event.note.length()>115)
                                         analyticsText(details,event.note,FG,13);
                                     if(event.linkedCount>0){
-                                        loadEventAttachmentPage(details,event,source,key,token,0);
+                                        loadHistoryAttachmentPage(details,event.id,event.linkedCount,source,key,token,0);
                                     }
                                 }
                                 details.setVisibility(opening?View.VISIBLE:View.GONE);
@@ -5195,30 +5195,31 @@ public class MainActivity extends Activity {
             }catch(Exception e){runOnUiThread(()->{if(token==loadToken)status.setText("Ошибка событий: "+e.getMessage());});}
         });
     }
-    private void loadEventAttachmentPage(LinearLayout target,MessageDb.RelationshipEvent event,MessageDb source,String key,int token,int offset){
+    private void loadHistoryAttachmentPage(LinearLayout target,long eventId,int linkedCount,MessageDb source,String key,int token,int offset){
         TextView loading=text("Загружаю вложения…",12,SUB);target.addView(loading);
         worker.execute(()->{try{
-            List<MessageDb.Attachment> items=source.relationshipMediaPage(event.id,offset,26);
+            List<MessageDb.Attachment> items=source.relationshipMediaPage(eventId,offset,26);
             runOnUiThread(()->{
                 if(!sameScreenRequest(source,key,token)||!target.isAttachedToWindow())return;
                 target.removeView(loading);int shown=Math.min(25,items.size());
+                if(offset==0&&shown==0)analyticsText(target,"Нет прикреплённых вложений.",SUB,12);
                 for(int i=0;i<shown;i++){
                     MessageDb.Attachment attachment=items.get(i);
                     LinearLayout fileRow=row();target.addView(fileRow,p(-1,48));
                     Button open=btn(mediaLabel(attachment.kind)+" · открыть");fileRow.addView(open,new LinearLayout.LayoutParams(0,-1,1));
                     open.setOnClickListener(v->openMedia(attachment));
                     Button unlink=btn("✕");unlink.setContentDescription("Открепить "+mediaLabel(attachment.kind));
-                    fileRow.addView(unlink,p(44,44));unlink.setOnClickListener(v->unlinkEventAttachment(event.id,attachment));
+                    fileRow.addView(unlink,p(44,44));unlink.setOnClickListener(v->unlinkEventAttachment(eventId,attachment));
                 }
                 if(items.size()>25){
                     Button more=btn("Показать ещё вложения");target.addView(more,p(-1,48));
-                    more.setOnClickListener(v->{target.removeView(more);loadEventAttachmentPage(target,event,source,key,token,offset+shown);});
-                }else if(offset+shown<event.linkedCount)analyticsText(target,"Некоторые ссылки не соответствуют исходному вложению.",SUB,12);
+                    more.setOnClickListener(v->{target.removeView(more);loadHistoryAttachmentPage(target,eventId,linkedCount,source,key,token,offset+shown);});
+                }else if(linkedCount>=0&&offset+shown<linkedCount)analyticsText(target,"Некоторые ссылки не соответствуют исходному вложению.",SUB,12);
             });
         }catch(Exception error){runOnUiThread(()->{
             if(!sameScreenRequest(source,key,token)||!target.isAttachedToWindow())return;
             target.removeView(loading);Button retry=btn("Повторить загрузку");target.addView(retry,p(-1,48));
-            retry.setOnClickListener(v->{target.removeView(retry);loadEventAttachmentPage(target,event,source,key,token,offset);});
+            retry.setOnClickListener(v->{target.removeView(retry);loadHistoryAttachmentPage(target,eventId,linkedCount,source,key,token,offset);});
         });}});
     }
     private void chooseRelationshipAttachment(long eventId,int offset){
@@ -5657,10 +5658,6 @@ public class MainActivity extends Activity {
                 LinkedHashMap<Long,ConversationPeriods.Stats> stats=new LinkedHashMap<>();
                 for(ConversationPeriods.Chapter chapter:chapters)
                     stats.put(chapter.id,source.periodStats(chapter));
-                LinkedHashMap<Long,List<MessageDb.Attachment>> media=new LinkedHashMap<>();
-                if("stages".equals(section))
-                    for(ConversationPeriods.Chapter chapter:chapters)
-                        media.put(chapter.id,source.relationshipMedia(-chapter.id));
                 runOnUiThread(()->{
                     if(isFinishing()||token!=loadToken||!archive.equals(activeKey)||db!=source
                             ||!"chronology".equals(screen)||!section.equals(chronologySection))return;
@@ -5692,12 +5689,9 @@ public class MainActivity extends Activity {
                                     analyticsText(details,"Начало: #"+chapter.start.messageId+
                                         " · конец: #"+chapter.end.messageId,SUB,12);
                                     renderPeriodBars(details,st,maximum);
-                                    List<MessageDb.Attachment> attachments=media.get(chapter.id);
-                                    if(attachments!=null)for(MessageDb.Attachment attachment:attachments){
-                                        Button file=btn("Открыть · "+mediaLabel(attachment.kind));
-                                        details.addView(file,p(-1,42));
-                                        file.setOnClickListener(w->openMedia(attachment));
-                                    }
+                                    // Load links only for the opened stage; every page remains reachable.
+                                    LinearLayout attachments=column();details.addView(attachments,p(-1,-2));
+                                    loadHistoryAttachmentPage(attachments,-chapter.id,-1,source,archive,token,0);
                                     Button link=btn("+ Прикрепить медиа");details.addView(link,p(-1,43));
                                     link.setOnClickListener(w->chooseRelationshipAttachment(-chapter.id,0));
                                     LinearLayout actions=row();details.addView(actions,p(-1,44));
