@@ -3889,14 +3889,40 @@ public class MainActivity extends Activity {
         final MessageDb source=db;final String archive=activeKey;final int token=loadToken;
         final java.util.concurrent.atomic.AtomicBoolean cancelled=new java.util.concurrent.atomic.AtomicBoolean(false);
         LinearLayout panel=column();panel.setPadding(px(16),px(8),px(16),px(12));
-        analyticsText(panel,"Локальные ответы по фактам · без нейросети и интернета",SUB,12);
+        analyticsText(panel,"Только этот чат · локальные ответы по фактам",SUB,12);
         EditText question=new EditText(this);ViewerUi.styleInput(question,ViewerPalette.of(themeIndex));
         question.setHint("Кто первый написал?");question.setContentDescription("Вопрос о переписке");
         question.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(240)});
         question.setMaxLines(3);panel.addView(question,p(-1,-2));
         Button ask=btn("Спросить");panel.addView(ask,p(-1,48));
         LinearLayout result=column();panel.addView(result,p(-1,-2));
-        analyticsText(result,ChatQuestionAnalyst.HELP,SUB,13);
+        analyticsText(result,"Задай свой вопрос или выбери готовый ниже.",SUB,13);
+        Button suggestions=btn("Готовые вопросы  ▾");panel.addView(suggestions,p(-1,44));
+        LinearLayout categories=column();panel.addView(categories,p(-1,-2));
+        int[] colors=themeIndex==2?new int[]{0xffdce9ff,0xffd9f0e5,0xffffe9cf,0xffebdfff}:
+            new int[]{0xff253c60,0xff244c40,0xff51402b,0xff49365d};
+        for(int i=0;i<ChatQuestionAnalyst.PRESETS.length;i++){
+            String[] group=ChatQuestionAnalyst.PRESETS[i];
+            LinearLayout card=column();card.setPadding(px(10),px(6),px(10),px(8));
+            card.setBackground(ViewerUi.surface(this,colors[i],ViewerUi.CARD,themeIndex==2,false));
+            LinearLayout.LayoutParams gap=p(-1,-2);gap.topMargin=px(7);categories.addView(card,gap);
+            TextView heading=text(group[0],15,FG);heading.setTypeface(null,Typeface.BOLD);card.addView(heading,p(-1,-2));
+            for(int j=1;j<group.length;j++){
+                final String preset=group[j];
+                TextView chip=text(preset,14,FG);chip.setPadding(px(8),px(10),px(8),px(10));
+                chip.setMinHeight(px(44));chip.setGravity(Gravity.CENTER_VERTICAL);
+                chip.setBackground(ViewerUi.control(this,colors[i],ViewerUi.CONTROL,themeIndex==2));
+                chip.setContentDescription("Готовый вопрос: "+preset);
+                chip.setFocusable(true);card.addView(chip,p(-1,-2));
+                chip.setOnClickListener(v->{if(!ask.isEnabled())return;question.setText(preset);question.setSelection(question.length());
+                    if(preset.contains("«встреча»")){
+                        int start=preset.indexOf("встреча");question.requestFocus();question.setSelection(start,start+"встреча".length());
+                    }else{ask.performClick();}
+                });
+            }
+        }
+        suggestions.setOnClickListener(v->{boolean open=categories.getVisibility()!=View.VISIBLE;
+            categories.setVisibility(open?View.VISIBLE:View.GONE);suggestions.setText(open?"Готовые вопросы  ▾":"Готовые вопросы  ›");});
         ScrollView viewport=new ScrollView(this);viewport.addView(panel);
         AlertDialog dialog=new FontDialog.Builder(this).setTitle("Аналитик переписки")
             .setView(viewport).setNegativeButton("Закрыть",null).create();
@@ -3904,6 +3930,7 @@ public class MainActivity extends Activity {
         ask.setOnClickListener(v->{
             if(!dialog.isShowing()||!sameScreenRequest(source,archive,token))return;
             ChatQuestionAnalyst.Query query=ChatQuestionAnalyst.parse(question.getText().toString());
+            categories.setVisibility(View.GONE);suggestions.setText("Готовые вопросы  ›");
             ask.setEnabled(false);result.removeAllViews();analyticsText(result,"Читаю локальную переписку…",SUB,13);
             worker.execute(()->{
                 try{
