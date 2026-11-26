@@ -28,12 +28,9 @@ public class DeepAnalystOfflineUiTest {
             assertNotNull(device.wait(Until.findObject(By.text("80 вопросов об отношениях  ›")),5000));
             UiObject2 ask=device.wait(Until.findObject(By.text("Найти источники")),5000);
             assertNotNull("Offline evidence action must be usable",ask);ask.click();
-            UiObject2 answer=null;
-            for(int i=0;i<7&&answer==null;i++){
-                answer=device.wait(Until.findObject(By.text("Подборка источников · без нейросети")),1800);
-                if(answer==null)device.swipe(device.getDisplayWidth()/2,device.getDisplayHeight()*3/4,device.getDisplayWidth()/2,device.getDisplayHeight()/4,24);
-            }
-            assertNotNull("Offline evidence results must be reachable",answer);
+            UiObject2 answer=device.wait(Until.findObject(By.text("Подборка источников · без нейросети")),10000);
+            assertNotNull("Results must be revealed without scrolling through model settings",answer);
+            assertTrue(answer.getVisibleBounds().height()>0);
         }finally{
             device.pressBack();db.close();ctx.deleteDatabase(DeepChatContext.dbName(key));
         }
