@@ -55,9 +55,10 @@ public final class RealLocalModelSmokeTest {
             assertNotNull("Native model returned null",answer);
             android.util.Log.i("ModelSmoke","Synthetic answer: "+DeepChatContext.clip(answer,2000));
             assertFalse("Native model returned empty text",answer.trim().isEmpty());
-            assertTrue("Model failed to retrieve correct time from synthetic chat",answer.contains("17:45"));
-            assertTrue("Model did not cite the actual source",answer.contains("[#"+evidence+"]"));
-            assertTrue("Model invented source IDs",DeepChatContext.unknownCitations(answer,prompt).isEmpty());
+            java.util.ArrayList<String> defects=new java.util.ArrayList<>();
+            if(!answer.contains("17:45"))defects.add("single: incorrect time");
+            if(!answer.contains("[#"+evidence+"]"))defects.add("single: missing evidence");
+            if(!DeepChatContext.unknownCitations(answer,prompt).isEmpty())defects.add("single: invented source");
             assertEquals("Inference must not modify archive",3,db.totalMessages());
             // Reuse the downloaded model; verify a comparison with overlapping source IDs.
             java.util.List<DeepChatContext.Source> a=java.util.Collections.singletonList(
@@ -74,9 +75,11 @@ public final class RealLocalModelSmokeTest {
             android.util.Log.i("ModelSmoke","Comparison ms="+(android.os.SystemClock.elapsedRealtime()-comparisonStart));
             assertNotNull(comparison);
             android.util.Log.i("ModelSmoke","Synthetic comparison: "+DeepChatContext.clip(comparison,2000));
-            assertTrue("Comparison must mention both exact times",comparison.contains("17:45")&&comparison.contains("09:30"));
-            assertTrue("Comparison must cite both archives",comparison.contains("[#1]")&&comparison.contains("[#2]"));
-            assertTrue(DeepChatContext.unknownCitations(comparison,comparisonPrompt).isEmpty());
+            if(!comparison.contains("17:45")||!comparison.contains("09:30"))defects.add("comparison: incorrect time");
+            if(!dual.citesBoth(comparison,comparisonPrompt))defects.add("comparison: missing evidence from either side");
+            if(!DeepChatContext.unknownCitations(comparison,comparisonPrompt).isEmpty())defects.add("comparison: invented source");
+            android.util.Log.i("ModelSmoke","Quality defects: "+defects);
+            assertTrue("Model quality gate: "+defects,defects.isEmpty());
         } finally {
             db.close();context.deleteDatabase(DeepChatContext.dbName(key));model.delete();
         }
