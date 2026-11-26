@@ -73,7 +73,8 @@ final class ArchiveFileImport {
     }
     static final class Budget {
         long total; int count;
-        int sevenZDeclared=-1,sevenZHtml=-1;
+        int sevenZDeclared=-1,sevenZHtml=-1,sevenZHtmlCandidates=-1;
+        String sevenZReadMode="";
         long sevenZSourceBytes=-1;
         void next(String name) throws IOException{
             if(++count>MAX_FILES)throw new IOException("Слишком много файлов в архиве");
@@ -124,7 +125,7 @@ final class ArchiveFileImport {
                         ", стандартных HTML в заголовке "+budget.sevenZHtml+
                         ", обработано записей "+budget.count+
                         ", распаковано байт "+budget.total+
-                        ", размер прочитанного архива "+budget.sevenZSourceBytes+" байт.");
+                        ", размер прочитанного архива "+budget.sevenZSourceBytes+" байт; чтение: "+budget.sevenZReadMode+".");
                 throw notFound;
             }
             progress.update("Распаковано файлов: "+budget.count+"; найден экспорт Telegram");
@@ -379,35 +380,33 @@ final class ArchiveFileImport {
     }
     private static void extractSevenZ(Context ctx,Uri uri,File root,char[] password,
             Budget budget,Progress progress)throws Exception{
-        // SAF document providers may return a pipe instead of a seekable file.
-        // SevenZFile requires seeking; use the local channel where possible,
-        // otherwise spool safely to a bounded temporary file.
         try{
-            // Some Android document providers expose a stream or a sliced asset
-            // rather than a whole-file descriptor. A missing seekable descriptor
-            // is not an import failure if openInputStream is still available.
-            try{
-                try(android.os.ParcelFileDescriptor descriptor=
-                        ctx.getContentResolver().openFileDescriptor(uri,"r")){
-                    if(descriptor!=null){
-                        try(FileInputStream input=new FileInputStream(descriptor.getFileDescriptor())){
-                            boolean seekable;
-                            try{
-                                input.getChannel().position(0);
-                                input.getChannel().size();
-                                seekable=true;
-                            }catch(IOException|UnsupportedOperationException notSeekable){
-                                seekable=false;
-                            }
-                            if(seekable){
-                                readSevenZ(input.getChannel(),root,password,budget,progress);
-                                return;
-                            }
-                        }
+            android.os.ParcelFileDescriptor descriptor=null;
+            try{descriptor=ctx.getContentResolver().openFileDescriptor(uri,"r");}
+            catch(java.io.FileNotFoundException unavailable){ /* stream-only provider */ }
+            if(descriptor!=null){
+                // One owner of the descriptor; do not close a raw fd twice.
+                try(FileInputStream input=new android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor)){
+                    boolean seekable;
+                    try{input.getChannel().position(0);input.getChannel().size();seekable=true;}
+                    catch(IOException|UnsupportedOperationException notSeekable){seekable=false;}
+                    if(seekable){
+                        budget.sevenZReadMode="прямое";
+                        readSevenZ(input.getChannel(),root,password,budget,progress);
+                        if(budget.sevenZHtmlCandidates!=0||!"content".equalsIgnoreCase(uri.getScheme()))
+                            return;
+                        // Only after full successful decoding with no HTML at all,
+                        // retry a content URI once through its stream interface.
+                        // No password/integrity/path failure triggers this retry.
                     }
                 }
-            }catch(java.io.FileNotFoundException noWholeFile){
-                // Retry as a bounded private stream below.
+                if(budget.sevenZDeclared>=0){
+                    progress.update("В заголовке 7z нет HTML. Проверяю тот же файл через совместимый режим…");
+                    deleteTree(root);
+                    if(!root.mkdirs())throw new IOException("Не удалось подготовить повторное чтение 7z");
+                    budget.count=0;budget.total=0;
+                    budget.sevenZDeclared=-1;budget.sevenZHtml=-1;budget.sevenZHtmlCandidates=-1;
+                }
             }
             File temporary=File.createTempFile("telegram-sevenz-", ".7z",ctx.getCacheDir());
             try{
@@ -419,12 +418,12 @@ final class ArchiveFileImport {
                     byte[] block=new byte[128*1024];int count;
                     while((count=input.read(block))!=-1){
                         copied+=count;
-                        if(copied>copyLimit)
-                            throw new IOException("Недостаточно свободного места для временного открытия большого 7z. Освободи место на телефоне или открой локальный файл.");
+                        if(copied>copyLimit)throw new IOException("Недостаточно свободного места для совместимого открытия 7z. Исходный архив не изменён.");
                         output.write(block,0,count);
                     }
                 }
                 try(FileInputStream local=new FileInputStream(temporary)){
+                    budget.sevenZReadMode="совместимое";
                     readSevenZ(local.getChannel(),root,password,budget,progress);
                 }
             }finally{temporary.delete();}
@@ -442,7 +441,7 @@ final class ArchiveFileImport {
                     .setMaxMemoryLimitKiB(131072).get()){
             // Compare the decoder's header inventory with actual extraction;
             // a successful return must not hide missing or truncated entries.
-            int declared=0,canonical=0;
+            int declared=0,canonical=0,htmlCandidates=0;
             long declaredBytes=0;
             for(org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry header:archive.getEntries()){
                 if(++declared>MAX_FILES)throw new IOException("Слишком много файлов в 7z");
@@ -453,9 +452,11 @@ final class ArchiveFileImport {
                 if(size<0||size>MAX_ENTRY||declaredBytes>MAX_TOTAL-size)
                     throw new IOException("Лимит безопасной распаковки 7z превышен");
                 declaredBytes+=size;
-                if(TelegramExportHtml.canonical(new File(name).getName()))canonical++;
+                String leaf=new File(name).getName();
+                if(TelegramExportHtml.canonical(leaf))canonical++;
+                if(TelegramExportHtml.candidate(leaf))htmlCandidates++;
             }
-            budget.sevenZDeclared=declared;budget.sevenZHtml=canonical;
+            budget.sevenZDeclared=declared;budget.sevenZHtml=canonical;budget.sevenZHtmlCandidates=htmlCandidates;
             budget.sevenZSourceBytes=channel.size();
             progress.update("7z: "+declared+" записей, "+canonical+" стандартных HTML. Распаковываю…");
             org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry entry;
