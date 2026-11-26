@@ -62,11 +62,46 @@ final class ChatQuestionAnalyst {
         Accumulator result=new Accumulator(query);
         if(cancelled.get())return null;
         if(query.kind==Kind.UNKNOWN)return result.finish();
-        try(android.database.sqlite.SQLiteDatabase database=android.database.sqlite.SQLiteDatabase.openDatabase(file.getAbsolutePath(),null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY);
-            android.database.Cursor rows=database.rawQuery("SELECT id,author,date_text,body FROM messages ORDER BY id",null)){
-            while(!cancelled.get()&&rows.moveToNext())result.add(rows.getLong(0),rows.getString(1),rows.getString(2),rows.getString(3));
+        try(android.database.sqlite.SQLiteDatabase database=android.database.sqlite.SQLiteDatabase.openDatabase(file.getAbsolutePath(),null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY)){
+            // COUNT(*) avoids transporting every message body to Java.
+            if(query.kind==Kind.TOTAL){
+                try(android.database.Cursor count=database.rawQuery("SELECT COUNT(*) FROM messages",null)){
+                    if(count.moveToFirst())result.total=count.getLong(0);
+                }
+            }else if(query.kind==Kind.MOST||query.kind==Kind.LEAST||query.kind==Kind.PARTICIPANTS){
+                // Group raw names in SQLite, then normalize exactly as the row scanner does.
+                // If the raw-name cap is exceeded, fall back to the original bounded scanner.
+                int groups=0;
+                try(android.database.Cursor rows=database.rawQuery("SELECT author,COUNT(*) FROM messages GROUP BY author LIMIT 10001",null)){
+                    while(!cancelled.get()&&rows.moveToNext()){
+                        if(++groups>10000)break;
+                        String name=normalizedAuthor(rows.getString(0));
+                        long n=rows.getLong(1);
+                        result.total+=n;
+                        result.authors.put(name,result.authors.getOrDefault(name,0L)+n);
+                    }
+                }
+                if(groups>10000&&!cancelled.get()){
+                    result=new Accumulator(query);
+                    scan(database,result,cancelled,"SELECT id,author,NULL,NULL FROM messages ORDER BY id");
+                }
+            }else{
+                // Calendar-only queries never need the potentially large message body.
+                boolean calendar=query.kind==Kind.ACTIVE_DAYS||query.kind==Kind.BUSIEST_DAY||query.kind==Kind.LONGEST_GAP||
+                    query.kind==Kind.AVG_DAY||query.kind==Kind.PEAK_HOUR||query.kind==Kind.WEEKEND;
+                scan(database,result,cancelled,calendar?"SELECT id,NULL,date_text,NULL FROM messages ORDER BY id":
+                    "SELECT id,author,date_text,body FROM messages ORDER BY id");
+            }
         }
         return cancelled.get()?null:result.finish();
+    }
+    private static void scan(android.database.sqlite.SQLiteDatabase db,Accumulator result,java.util.concurrent.atomic.AtomicBoolean cancelled,String sql){
+        try(android.database.Cursor rows=db.rawQuery(sql,null)){
+            while(!cancelled.get()&&rows.moveToNext())result.add(rows.getLong(0),rows.getString(1),rows.getString(2),rows.getString(3));
+        }
+    }
+    private static String normalizedAuthor(String author){
+        return author==null||author.trim().isEmpty()?"Неизвестный отправитель":author.trim();
     }
     static final class Evidence {
         final long id;final String author,date,excerpt;
