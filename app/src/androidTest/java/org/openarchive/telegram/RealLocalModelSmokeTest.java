@@ -46,6 +46,20 @@ public final class RealLocalModelSmokeTest {
             assertTrue("Model did not cite the actual source",answer.contains("[#"+evidence+"]"));
             assertTrue("Model invented source IDs",DeepChatContext.unknownCitations(answer,prompt).isEmpty());
             assertEquals("Inference must not modify archive",3,db.totalMessages());
+            // Reuse the downloaded model; verify a comparison with overlapping source IDs.
+            java.util.List<DeepChatContext.Source> a=java.util.Collections.singletonList(
+                new DeepChatContext.Source(1,"Аня","2026-02-01","Встреча в 17:45."));
+            java.util.List<DeepChatContext.Source> b=java.util.Collections.singletonList(
+                new DeepChatContext.Source(1,"Аня","2026-02-01","Встреча в 09:30."));
+            DualAnalystContext dual=DualAnalystContext.combine("a",new DeepChatContext(a,1,"Одно сообщение","QA"),
+                "b",new DeepChatContext(b,1,"Одно сообщение","QA"));
+            String comparisonPrompt=dual.prompt("Назови время встречи в А и Б цифрами, со ссылками [#1] и [#2].");
+            String comparison=(String)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
+                .getMethod("generate",String.class,String.class).invoke(null,model.getAbsolutePath(),comparisonPrompt);
+            assertNotNull(comparison);
+            assertTrue("Comparison must mention both exact times",comparison.contains("17:45")&&comparison.contains("09:30"));
+            assertTrue("Comparison must cite both archives",comparison.contains("[#1]")&&comparison.contains("[#2]"));
+            assertTrue(DeepChatContext.unknownCitations(comparison,comparisonPrompt).isEmpty());
         } finally {
             db.close();context.deleteDatabase(DeepChatContext.dbName(key));model.delete();
         }

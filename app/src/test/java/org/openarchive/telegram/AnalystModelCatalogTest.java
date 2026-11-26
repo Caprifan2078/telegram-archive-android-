@@ -41,4 +41,11 @@ public class AnalystModelCatalogTest {
         assertTrue(AnalystModelCatalog.requiredFreeBytes(1000,false)>AnalystModelCatalog.requiredFreeBytes(1000,true));
         assertEquals(Long.MAX_VALUE,AnalystModelCatalog.requiredFreeBytes(Long.MAX_VALUE,false));
     }
+
+    @Test public void redirectAllowlistRemainsExactAndHttpsOnly(){
+        for(String host:new String[]{"us.aws.cdn.hf.co","us.gcp.cdn.hf.co","cdn-lfs-eu-1.hf.co","transfer.xethub-eu.hf.co"})
+            assertTrue(AnalystModelDownload.allowed(URI.create("https://"+host+"/file")));
+        for(String url:new String[]{"http://huggingface.co/model","https://huggingface.co.evil.test/model","https://evil.test","https://user@huggingface.co/file","https://huggingface.co:444/file"})
+            assertFalse(AnalystModelDownload.allowed(URI.create(url)));
+    }
 }
