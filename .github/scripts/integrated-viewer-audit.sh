@@ -17,7 +17,7 @@ case "${1:-}" in
   reading) classes=(PinnedFocusNavigationRegressionTest Qa01ChatListSizeTest Qa01ReadingPositionTest Qa01TwoChatsTest Qa02MissingAnchorTest Qa02ReadingPositionIsolationTest Qa02ReadingProgressIsolationTest) ;;
   ui_legacy) classes=(Qa00HelpLifecycleTest Qa00MediaFilterTest Qa00NavigationCoreTest Qa00RotationLifecycleTest QaUiChatNavigationRegressionTest ReadableUiTest UiSmokeTest) ;;
   history_export) classes=(ConversationPdfExporterTest GroupTimelineReadOnlyRegressionTest GroupTimelineScreenRegressionTest) ;;
-  premium_ui) classes=(UiMenuTourRegressionTest UiChromeOverlapRegressionTest ChronologyHubRegressionTest ChatVisualConsistencyRegressionTest MultiConversationHomeRegressionTest QaVisualAuditScreenshotsTest AnalyticsSectionNavigationRegressionTest LightAnalyticsVisualTest RelationshipAnalyticsExplanationUiTest) ;;
+  premium_ui) classes=(UiMenuTourRegressionTest UiChromeOverlapRegressionTest ChronologyHubRegressionTest ChatVisualConsistencyRegressionTest MultiConversationHomeRegressionTest QaVisualAuditScreenshotsTest AnalyticsSectionNavigationRegressionTest LightAnalyticsVisualTest RelationshipAnalyticsExplanationUiTest ViewerThemeRegressionTest) ;;
   premium_players) classes=(MusicRecoveryRegressionTest RoundPlayerActivityTest PlaybackLifecycleTest MissingMediaPlaybackRegressionTest AttachmentPreviewScreenTest MediaFastScrollRegressionTest) ;;
   *) echo "Unknown audit suite" >&2; exit 2 ;;
 esac
