@@ -382,6 +382,7 @@ public final class DeepAnalystActivity extends Activity {
                 runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();results.removeAllViews();
                     results.addView(text("Ответ модели · не проверенный факт",18));
                     results.addView(text(answer.isEmpty()?"Модель не вернула текст.":DeepChatContext.clip(answer,16000),15));
+                    if(dual!=null&&!dual.citesBoth(answer,prompt))results.addView(text("Сравнение не подтверждено цитатами из обеих переписок. Проверь выводы.",14));
                     if(!DeepChatContext.unknownCitations(answer,prompt).isEmpty())results.addView(text("Внимание: ответ содержит неизвестные номера источников. Перепроверь выводы.",14));
                     if(!answer.matches("(?s).*\\[#\\d+\\].*"))results.addView(text("Модель не сослалась на конкретные сообщения. Выводы не подтверждены.",14));
                     long sent=context.sources.stream().filter(src->DeepChatContext.sentSource(prompt,src.id)).count();
@@ -390,6 +391,7 @@ public final class DeepAnalystActivity extends Activity {
                         // Only offer sources that were actually sent to the model.
                         if(!DeepChatContext.sentSource(prompt,src.id))continue;
                         Button source=button("[#"+src.id+"] "+src.author+" · "+src.date+"\n"+src.body);
+                        source.setGravity(android.view.Gravity.START|android.view.Gravity.CENTER_VERTICAL);
                         source.setAllCaps(false);results.addView(source);
                         source.setOnClickListener(v->{
                             DualAnalystContext.Link link=dual==null?null:dual.links.get(src.id);
