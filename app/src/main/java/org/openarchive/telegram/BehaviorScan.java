@@ -70,9 +70,13 @@ final class BehaviorScan {
         }
     }
     static Report read(File file,AtomicBoolean cancel,java.util.function.LongConsumer progress){
+        try(SQLiteDatabase db=SQLiteDatabase.openDatabase(file.getAbsolutePath(),null,SQLiteDatabase.OPEN_READONLY)){
+            return read(db,cancel,progress);
+        }
+    }
+    static Report read(SQLiteDatabase db,AtomicBoolean cancel,java.util.function.LongConsumer progress){
         Report report=new Report();
-        try(SQLiteDatabase db=SQLiteDatabase.openDatabase(file.getAbsolutePath(),null,SQLiteDatabase.OPEN_READONLY);
-            Cursor rows=db.rawQuery("SELECT id,author,date_text,body FROM messages ORDER BY id",null)){
+        try(Cursor rows=db.rawQuery("SELECT id,author,date_text,body FROM messages ORDER BY id",null)){
             while(!cancel.get()&&rows.moveToNext()){
                 report.add(rows.getLong(0),rows.getString(1),rows.getString(2),rows.getString(3));
                 if(report.scanned%1000==0)progress.accept(report.scanned);
