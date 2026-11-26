@@ -151,15 +151,29 @@ public final class DeepAnalystActivity extends Activity {
                 }).setNegativeButton("Назад",(dialog,index)->showQuestionLibrary()).show();
             }).setNegativeButton("Закрыть",null).show();
     }
-    private void showModelPicker(){
+    private AnalystDeviceFit deviceFit(){
+        ActivityManager.MemoryInfo memory=new ActivityManager.MemoryInfo();
+        ((ActivityManager)getSystemService(ACTIVITY_SERVICE)).getMemoryInfo(memory);
+        return new AnalystDeviceFit(memory.availMem,memory.totalMem,memory.lowMemory);
+    }
+    private void selectModel(int index){
+        if(busy)return;selectedModel=index;model=AnalystModelCatalog.file(getNoBackupFilesDir(),index);
+        getSharedPreferences(MODEL_PREFS,MODE_PRIVATE).edit().putString("selected_key",AnalystModelCatalog.key(index)).apply();refresh();
+    }
+    private void showModelPicker(){showModelPicker(false);}
+    private void showModelPicker(boolean all){
         if(busy)return;
+        AnalystDeviceFit fit=deviceFit();
         LinearLayout choices=new LinearLayout(this);choices.setOrientation(LinearLayout.VERTICAL);
         choices.setPadding(dp(14),dp(6),dp(14),dp(12));
         ScrollView scroll=new ScrollView(this);scroll.addView(choices);
         android.app.AlertDialog picker=new FontDialog.Builder(this).setTitle("Выбор модели").setView(scroll).setNegativeButton("Закрыть",null).create();
+        choices.addView(text(fit.summary()+"\nОценка совместимости, не гарантия запуска.",13));
+        Button filter=button(all?"Только основные и сохранённые":"Все альтернативы");choices.addView(filter);
+        filter.setOnClickListener(v->{picker.dismiss();showModelPicker(!all);});
         String group="";
-        for(int i:AnalystModelCatalog.focusedPickerOrder(getNoBackupFilesDir(),selectedModel)){
-            String nextGroup=AnalystModelCatalog.focusedGroup(i);
+        for(int i:all?AnalystModelCatalog.pickerOrder():AnalystModelCatalog.focusedPickerOrder(getNoBackupFilesDir(),selectedModel)){
+            String nextGroup=all?AnalystModelCatalog.group(i):AnalystModelCatalog.focusedGroup(i);
             if(!group.equals(nextGroup)){group=nextGroup;TextView heading=text(group,14);heading.setTypeface(null,android.graphics.Typeface.BOLD);choices.addView(heading);}
             final int index=i;boolean custom=i==AnalystModelCatalog.CUSTOM,selected=i==selectedModel;
             File file=AnalystModelCatalog.file(getNoBackupFilesDir(),i);
@@ -171,10 +185,9 @@ public final class DeepAnalystActivity extends Activity {
             name.setTypeface(null,android.graphics.Typeface.BOLD);row.addView(name);
             TextView info=text((custom?"Файл LiteRT-LM":AnalystModelCatalog.MODELS[i].description+" · "+String.format(java.util.Locale.ROOT,"%.2f ГБ",AnalystModelCatalog.MODELS[i].size/1e9))+
                 (AnalystModelCatalog.installed(file,i)?" · Установлена":file.exists()?" · Файл неполный":" · Не установлена")+
-                (custom?"":"\nЖелательно свободно ОЗУ от "+String.format(java.util.Locale.ROOT,"%.1f ГБ",AnalystModelCatalog.MODELS[i].suggestedFreeBytes()/1e9)+" (оценка)"),12);info.setTextColor(palette.muted);row.addView(info);
+                ("\n"+fit.label(i,file)),12);info.setTextColor(palette.muted);row.addView(info);
             row.setFocusable(true);row.setContentDescription(name.getText()+". "+info.getText());
-            row.setOnClickListener(v->{if(busy)return;selectedModel=index;model=file;
-                getSharedPreferences(MODEL_PREFS,MODE_PRIVATE).edit().putString("selected_key",AnalystModelCatalog.key(index)).apply();picker.dismiss();refresh();});
+            row.setOnClickListener(v->{if(busy)return;picker.dismiss();selectModel(index);});
         }
         picker.show();
     }
@@ -282,11 +295,9 @@ public final class DeepAnalystActivity extends Activity {
     }
     private boolean canStartModel(){
         if(busy||!AnalystModelCatalog.installed(model,selectedModel))return false;
-        ActivityManager.MemoryInfo memory=new ActivityManager.MemoryInfo();
-        ((ActivityManager)getSystemService(ACTIVITY_SERVICE)).getMemoryInfo(memory);
-        long required=AnalystModelCatalog.requiredFreeBytes(model.length(),AnalystModelCatalog.canReuseEngine(model.getAbsolutePath()));
-        if(memory.lowMemory||memory.availMem<required){
-            status.setText(String.format(java.util.Locale.ROOT,"Свободно ОЗУ %.1f ГБ; оценка для запуска %.1f ГБ. Закрой другие приложения или выбери модель меньше.",memory.availMem/1e9,required/1e9));return false;
+        AnalystDeviceFit fit=deviceFit();
+        if(!fit.fits(selectedModel,model)){
+            status.setText(fit.summary()+". "+fit.label(selectedModel,model)+". Выбери лёгкую модель или найди источники.");return false;
         }
         if(android.os.Build.VERSION.SDK_INT>=29){
             android.os.PowerManager power=(android.os.PowerManager)getSystemService(POWER_SERVICE);
@@ -485,8 +496,10 @@ public final class DeepAnalystActivity extends Activity {
         if(factualQuestion()){analyzeFacts(q);return;}
         if(!runtimeAvailable()||!AnalystModelCatalog.installed(model,selectedModel)){findEvidence(q);return;}
         if(!canStartModel()){
-            new FontDialog.Builder(this).setTitle("ИИ сейчас недоступен").setMessage(status.getText()+"\nМожно найти исходные сообщения без модели.")
-                .setNegativeButton("Закрыть",null).setPositiveButton("Найти источники",(d,n)->{if(!busy)findEvidence(q);}).show();return;
+            android.app.AlertDialog.Builder fallback=new FontDialog.Builder(this).setTitle("ИИ сейчас недоступен").setMessage(status.getText()+"\nМожно найти исходные сообщения без модели.")
+                .setNegativeButton("Закрыть",null).setPositiveButton("Найти источники",(d,n)->{if(!busy)findEvidence(q);});
+            if(deviceFit().offerLightweight(getNoBackupFilesDir(),selectedModel))fallback.setNeutralButton("Лёгкая модель",(d,n)->selectModel(0));
+            fallback.show();return;
         }
         if(!MODEL_BUSY.compareAndSet(false,true)){status.setText("Предыдущий запрос ещё завершает работу.");return;}
         busy("Подбираю сообщения, затем запускаю модель…");results.removeAllViews();
