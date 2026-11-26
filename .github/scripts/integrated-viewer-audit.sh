@@ -9,6 +9,7 @@ case "${1:-}" in
   recovery) classes=(PortableRestoreRegressionTest RestoreRecoveryTest ImportRollbackRegressionTest DuplicateTelegramIdSafetyTest) ;;
   viewer) classes=(SearchLifecycleRegressionTest PerformanceRegressionTest) ;;
   documents) classes=(AttachmentPreviewScreenTest) ;;
+  analytics) classes=(AnalyticsIntegrationTest AnalyticsSectionNavigationRegressionTest LightAnalyticsVisualTest TrendsIntegrationTest RelationshipAnalyticsExplanationUiTest RelationshipPaginationRegressionTest) ;;
   *) echo "Unknown audit suite" >&2; exit 2 ;;
 esac
 qualified=()
