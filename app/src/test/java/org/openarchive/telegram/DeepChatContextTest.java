@@ -30,4 +30,12 @@ public class DeepChatContextTest {
         for(int i=1;i<=16;i++)assertTrue("Source missing: "+i,DeepChatContext.sentSource(prompt,i));
         assertEquals(Collections.singletonList(999L),DeepChatContext.unknownCitations("[#1] [#999]",prompt));
     }
+    @Test public void directQueryMatchesOutrankGenericTopicCues(){
+        Map<Long,DeepChatContext.Source> candidates=new LinkedHashMap<>();
+        candidates.put(1L,new DeepChatContext.Source(1,"А","","Прости, я был неправ"));
+        candidates.put(2L,new DeepChatContext.Source(2,"Б","","Ноутбук стоит 54000"));
+        candidates.put(3L,new DeepChatContext.Source(3,"А","","Ноутбук"));
+        candidates.put(4L,new DeepChatContext.Source(4,"А","","Ноутбуки"));
+        assertEquals(Arrays.asList(2L,3L,1L,4L),DeepChatContext.rankDirect(candidates,Arrays.asList("ноутбук","стоит"),Arrays.asList("прости")));
+    }
 }
