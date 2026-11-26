@@ -217,7 +217,7 @@ android {
     buildTypes {
         protectedArchiveQa {
             initWith compactQa
-            applicationIdSuffix '.integrated20261126'
+            applicationIdSuffix '.premium20261126'
             signingConfig signingConfigs.debug
         }
     }
