@@ -3940,7 +3940,7 @@ public class MainActivity extends Activity {
         AlertDialog dialog=new FontDialog.Builder(this).setTitle("Аналитик переписки")
             .setView(viewport).setNegativeButton("Закрыть",null).create();
         dialog.setOnDismissListener(d->cancelled.set(true));
-        Button deepModel=btn("Глубокий анализ · локальная ИИ");panel.addView(deepModel,1,p(-1,48));
+        Button deepModel=btn("Глубокий анализ · локальный ИИ");panel.addView(deepModel,p(-1,48));
         deepModel.setOnClickListener(v->{if(!sameScreenRequest(source,archive,token))return;
             String initial=question.getText().toString();dialog.dismiss();
             startActivityForResult(new Intent(this,DeepAnalystActivity.class).putExtra("archive",archive).putExtra("question",initial),119);
@@ -3948,6 +3948,12 @@ public class MainActivity extends Activity {
         ask.setOnClickListener(v->{
             if(!dialog.isShowing()||!sameScreenRequest(source,archive,token))return;
             ChatQuestionAnalyst.Query query=ChatQuestionAnalyst.parse(question.getText().toString());
+            if(question.getText().toString().trim().isEmpty()){question.setError("Введите вопрос");return;}
+            if(query.kind==ChatQuestionAnalyst.Kind.UNKNOWN){
+                result.removeAllViews();analyticsText(result,"Для смыслового вопроса нужен локальный ИИ. Переписка не передаётся в интернет.",SUB,13);
+                Button semantic=btn("Ответить локальным ИИ");result.addView(semantic,p(-1,48));
+                semantic.setOnClickListener(v->deepModel.performClick());return;
+            }
             categories.setVisibility(View.GONE);suggestions.setText("Готовые вопросы  ›");
             android.view.inputmethod.InputMethodManager ime=(android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
             if(ime!=null)ime.hideSoftInputFromWindow(question.getWindowToken(),0);
