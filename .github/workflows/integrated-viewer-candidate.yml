@@ -13,9 +13,10 @@ jobs:
     if: github.event.repository.private == false
     strategy:
       fail-fast: false
+      max-parallel: 4
       matrix:
         api: [30, 35]
-        suite: [import, navigation, media, protected, backup, recovery, viewer]
+        suite: [import, navigation, media, protected, backup, recovery, viewer, documents]
     name: Android ${{ matrix.api }} / ${{ matrix.suite }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -33,7 +34,18 @@ jobs:
       - name: SDK
         run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
       - name: Assemble application and test APK, run JVM tests
-        run: gradle --no-daemon --max-workers=2 assembleProtectedArchiveQa assembleProtectedArchiveQaAndroidTest testProtectedArchiveQaUnitTest -PqaProtectedArchiveInstrumentation=true
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if gradle --no-daemon --max-workers=2 assembleProtectedArchiveQa assembleProtectedArchiveQaAndroidTest testProtectedArchiveQaUnitTest -PqaProtectedArchiveInstrumentation=true 2>&1 | tee build-attempt.log; then
+              exit 0
+            fi
+            if [[ "$attempt" == 3 ]] || ! grep -Eq 'Received status code 429|Too Many Requests' build-attempt.log; then
+              exit 1
+            fi
+            sleep "$((attempt * 30))"
+          done
+          exit 1
       - name: Verify APK signature and offline manifest
         run: |
           set -euo pipefail

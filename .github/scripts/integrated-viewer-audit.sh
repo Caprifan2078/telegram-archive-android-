@@ -7,7 +7,8 @@ case "${1:-}" in
   protected) classes=(ProtectedArchiveSessionTest) ;;
   backup) classes=(BackupDryRunRegressionTest BackupIntegrityAndroid15RegressionTest BackupSafReadbackRegressionTest FullBackupCustomAssetSafetyRegressionTest FullBackupSourceAccessRegressionTest) ;;
   recovery) classes=(PortableRestoreRegressionTest RestoreRecoveryTest ImportRollbackRegressionTest DuplicateTelegramIdSafetyTest) ;;
-  viewer) classes=(SearchLifecycleRegressionTest PerformanceRegressionTest AttachmentPreviewScreenTest) ;;
+  viewer) classes=(SearchLifecycleRegressionTest PerformanceRegressionTest) ;;
+  documents) classes=(AttachmentPreviewScreenTest) ;;
   *) echo "Unknown audit suite" >&2; exit 2 ;;
 esac
 qualified=()
@@ -16,10 +17,17 @@ for class in "${classes[@]}"; do
   qualified+=("org.openarchive.telegram.$class")
 done
 selector=$(IFS=,; echo "${qualified[*]}")
+mkdir -p app/build/ui-audit
+# Keep the emulator awake and unlocked for genuine hardware Back input.
+adb shell svc power stayon true
+adb shell input keyevent KEYCODE_WAKEUP
+adb shell wm dismiss-keyguard || true
 result=0
 gradle --no-daemon --max-workers=2 connectedProtectedArchiveQaAndroidTest -PqaProtectedArchiveInstrumentation=true "-Pandroid.testInstrumentationRunnerArguments.class=$selector" || result=$?
 mkdir -p app/build/ui-audit
 adb logcat -d -t 5000 > app/build/ui-audit/logcat.txt || true
+adb shell dumpsys window windows > app/build/ui-audit/windows.txt || true
+adb shell dumpsys activity activities > app/build/ui-audit/activities.txt || true
 if [[ "${1:-}" == navigation ]]; then
   adb pull /sdcard/Download/ app/build/ui-audit/ || true
   adb pull /sdcard/Pictures/TelegramViewerVisualAudit/ app/build/ui-audit/ || true
