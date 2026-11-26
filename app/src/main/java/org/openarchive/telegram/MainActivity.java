@@ -205,7 +205,7 @@ public class MainActivity extends Activity {
     }
 
     @Override public void onCreate(Bundle state){
-        super.onCreate(state);
+        ViewerUi.applyActivityTheme(this);super.onCreate(state);
         FontStyler.bind(this);
         try{
             RestoreJournal.recoverAll(this,getPreferences(MODE_PRIVATE));
@@ -336,16 +336,9 @@ public class MainActivity extends Activity {
         performanceMode=Math.max(0,Math.min(3,prefs.getInt("appearance_performance",0)));
         glassStyle=prefs.getBoolean("appearance_glass",true);
         thumbs.resize(PerformanceAdvisor.thumbnailCacheBytes(memoryClassMb(),performanceMode));
-        if(themeIndex==1){ // Dark graphite
-            BG=0xff101216;PANEL=0xff1e222a;INCOMING=0xff2a303b;OUTGOING=0xff2b514a;
-            FG=0xfff5f5f7;SUB=0xffb8bdc7;ACCENT=0xffb5b9ff;CHIP=0xff393e4b;HIGHLIGHT=0xff474b80;
-        }else if(themeIndex==2){ // Light pearl
-            BG=0xfff3f6fa;PANEL=0xffffffff;INCOMING=0xffe2e9f2;OUTGOING=0xffc5eade;
-            FG=0xff172b43;SUB=0xff506780;ACCENT=0xff1468a4;CHIP=0xffdce8f4;HIGHLIGHT=0xffb3d9ed;
-        }else{
-            BG=ViewerUi.BACKGROUND;PANEL=ViewerUi.SURFACE;INCOMING=0xff24364b;OUTGOING=0xff24554f;
-            FG=0xfff5f9ff;SUB=0xffafc1d4;ACCENT=0xff7ad2ff;CHIP=0xff29465f;HIGHLIGHT=0xff326e8f;
-        }
+        ViewerPalette palette=ViewerPalette.of(themeIndex);
+        BG=palette.background;PANEL=palette.surface;INCOMING=palette.incoming;OUTGOING=palette.outgoing;
+        FG=palette.text;SUB=palette.muted;ACCENT=palette.accent;CHIP=palette.chip;HIGHLIGHT=palette.highlight;
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
         applySystemBarAppearance();

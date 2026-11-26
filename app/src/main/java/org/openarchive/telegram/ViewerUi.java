@@ -24,7 +24,7 @@ final class ViewerUi {
             (Color.blue(color)*q+Color.blue(tint)*p+50)/100);
     }
     static GradientDrawable surface(Context c,int color,int radius,boolean light,boolean sheen){
-        int top= sheen?mix(color,light?Color.WHITE:0xffc7e1ff,light?4:4):color;
+        int top=sheen?mix(color,light?Color.WHITE:0xffc7e1ff,4):color;
         GradientDrawable d=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,new int[]{top,color});
         d.setCornerRadius(dp(c,radius));
         d.setStroke(Math.max(1,dp(c,1)),light?0x2070879f:0x24b2c8e4);
@@ -35,11 +35,40 @@ final class ViewerUi {
         return new RippleDrawable(ColorStateList.valueOf(light?0x201468a4:0x3681caff),surface(c,color,radius,light,false),mask);
     }
     static void styleButton(Button b,int color,int foreground,boolean light){
-        b.setAllCaps(false);b.setTextColor(foreground);
+        b.setAllCaps(false);b.setTextColor(new ColorStateList(
+            new int[][]{new int[]{-android.R.attr.state_enabled},new int[]{}},
+            new int[]{mix(foreground,color,42),foreground}));
         b.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
         b.setBackground(control(b.getContext(),color,CONTROL,light));
         b.setElevation(0);b.setStateListAnimator(null);b.setMinHeight(dp(b.getContext(),44));
         b.setMinWidth(0);b.setMinimumWidth(0);
     }
-    static boolean light(Context c){return c.getSharedPreferences("MainActivity",Context.MODE_PRIVATE).getInt("appearance_theme",0)==2;}
+    static int themeIndex(Context c){
+        // Activity.getPreferences uses the actual local class name; applicationId
+        // suffixes can make that the full Java class name instead of MainActivity.
+        String name=new android.content.ComponentName(c,MainActivity.class).getShortClassName();
+        if(name.startsWith("."))name=name.substring(1);
+        return c.getSharedPreferences(name,Context.MODE_PRIVATE).getInt("appearance_theme",0);
+    }
+    static ViewerPalette palette(Context c){return ViewerPalette.of(themeIndex(c));}
+    static boolean light(Context c){return palette(c).light;}
+    static void applyActivityTheme(android.app.Activity a){
+        a.setTheme(light(a)?R.style.AppThemeLight:R.style.AppTheme);
+    }
+    static void systemBars(android.app.Activity a,ViewerPalette p){
+        a.getWindow().setStatusBarColor(p.background);a.getWindow().setNavigationBarColor(p.background);
+        int flags=View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        View decor=a.getWindow().getDecorView();decor.setSystemUiVisibility((decor.getSystemUiVisibility()&~flags)|(p.light?flags:0));
+        if(android.os.Build.VERSION.SDK_INT>=30){
+            android.view.WindowInsetsController controller=a.getWindow().getInsetsController();
+            if(controller!=null){int mask=android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                controller.setSystemBarsAppearance(p.light?mask:0,mask);}
+        }
+    }
+    static void styleInput(android.widget.EditText v,ViewerPalette p){
+        v.setTextColor(p.text);v.setHintTextColor(p.muted);v.setTextSize(14);
+        v.setBackground(surface(v.getContext(),p.surface,CONTROL,p.light,false));
+        v.setPadding(dp(v.getContext(),12),dp(v.getContext(),8),dp(v.getContext(),12),dp(v.getContext(),8));
+        v.setMinHeight(dp(v.getContext(),48));
+    }
 }

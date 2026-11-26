@@ -43,11 +43,9 @@ public final class AttachmentPreviewActivity extends Activity {
     private int BACKGROUND=ViewerUi.BACKGROUND,FG=ViewerUi.TEXT,SUB=ViewerUi.MUTED,ACCENT=ViewerUi.ACCENT,SURFACE=ViewerUi.SURFACE;
     private boolean light;
     @Override public void onCreate(Bundle saved){
-        super.onCreate(saved);FontStyler.bind(this);
-        light=ViewerUi.light(this);
-        if(light){BACKGROUND=0xfff3f6fa;FG=0xff172b43;SUB=0xff506780;ACCENT=0xff1468a4;SURFACE=0xffffffff;}
-        getWindow().setStatusBarColor(BACKGROUND);getWindow().setNavigationBarColor(BACKGROUND);
-        if(light)getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        ViewerUi.applyActivityTheme(this);super.onCreate(saved);FontStyler.bind(this);
+        ViewerPalette palette=ViewerUi.palette(this);light=palette.light;BACKGROUND=palette.background;FG=palette.text;SUB=palette.muted;ACCENT=palette.accent;SURFACE=palette.surface;
+        ViewerUi.systemBars(this,palette);
         source=getIntent().getData();fileName=getIntent().getStringExtra("display_name");
         if(fileName==null||fileName.isEmpty())fileName=source==null?"Файл":source.getLastPathSegment();
         if(source==null){finish();return;}
