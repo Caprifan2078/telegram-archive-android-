@@ -26,6 +26,7 @@ public class DeepChatContextTest {
         String prompt=ctx.prompt("Что обсуждали?");
         assertTrue(prompt.length()<=DeepChatContext.MAX_PROMPT_CHARS);
         assertTrue(prompt.contains("[#1]"));
+        assertTrue(prompt.lastIndexOf("Вопрос: Что обсуждали?")>prompt.lastIndexOf("\n[#16] "));
         for(int i=1;i<=16;i++)assertTrue("Source missing: "+i,DeepChatContext.sentSource(prompt,i));
         assertEquals(Collections.singletonList(999L),DeepChatContext.unknownCitations("[#1] [#999]",prompt));
     }

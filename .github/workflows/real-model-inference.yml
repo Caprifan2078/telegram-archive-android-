@@ -1,19 +1,19 @@
-name: Real analyst model reliability retry
+name: Qwen evidence prompt and memory diagnostics
 on:
   pull_request:
-    branches: [qa/analyst-speed-integrity-20261127]
+    branches: [qa/consolidated-analyst-polish-20261127]
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   real_model:
-    if: github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || github.head_ref == 'qa/analyst-model-reliability-20261127')
+    if: github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || github.head_ref == 'qa/analyst-model-evidence-quality-20261127')
     name: Native model / ${{ matrix.model }}
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
-        model: [qwen06, qwen3508, huihui352]
+        model: [qwen06]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

@@ -14,7 +14,9 @@ final class AnalystFinalAnswer {
             start=s.indexOf("<think>");
         }
         if(s.startsWith("</think>"))s=s.substring(8).trim();
-        return s;
+        // Canonicalize explicit bare source references emitted by small models.
+        // Never turn ordinary numbers or times into citations; unknown IDs remain unknown.
+        return s.replaceAll("(?<![\\p{L}\\p{N}\\[＃])#([0-9]{1,18})(?![\\p{L}\\p{N}\\]])", "[#$1]");
     }
     private AnalystFinalAnswer(){}
 }
