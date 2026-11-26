@@ -1,0 +1,23 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <application android:allowBackup="false" android:dataExtractionRules="@xml/ta_data_extraction_rules" android:fullBackupContent="false" android:label="Telegram Archive 0.51 QA" android:theme="@style/AppTheme" android:usesCleartextTraffic="false">
+        <activity android:name=".ProtectedArchiveActivity" android:exported="false" />
+        <activity android:name=".DeepAnalystActivity" android:exported="false" android:process=":analyst" android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".AttachmentPreviewActivity" android:exported="false" android:enableOnBackInvokedCallback="true" />
+        <activity android:name=".DemoChatActivity" android:exported="false" />
+        <activity android:name=".MusicPlayerActivity" android:exported="false" />
+        <activity android:name=".RoundPlayerActivity" android:exported="false" android:supportsPictureInPicture="true" android:resizeableActivity="true" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" />
+        <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <provider android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files" android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/ta_note_paths" />
+        </provider>
+    </application>
+</manifest>

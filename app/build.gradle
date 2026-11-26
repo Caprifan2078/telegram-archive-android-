@@ -251,5 +251,6 @@ gradle.taskGraph.whenReady { graph ->
 // Explicit experimental opt-in: the normal lightweight Viewer does not carry a native LLM runtime.
 if (project.findProperty('qaLocalModel') == 'true') {
     android.sourceSets.main.java.srcDir 'src/localModel/java'
+    android.sourceSets.main.manifest.srcFile 'src/localModel/AndroidManifest.xml'
     dependencies { implementation 'com.google.ai.edge.litertlm:litertlm-android:0.10.2' }
 }
