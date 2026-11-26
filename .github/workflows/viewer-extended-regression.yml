@@ -1,0 +1,111 @@
+name: Viewer data integrity and extended regression
+on:
+  push:
+    branches: [qa/data-integrity-coverage-20261126]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: viewer-data-integrity-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  regression:
+    if: github.event.repository.private == false
+    name: Android ${{ matrix.api }} / ${{ matrix.suite }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [30, 35]
+        suite: [backup, recovery, viewer]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: SDK
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: Build isolated application and tests
+        run: gradle --no-daemon --max-workers=2 assembleProtectedArchiveQa assembleProtectedArchiveQaAndroidTest -PqaProtectedArchiveInstrumentation=true
+      - name: Verify signature and offline permissions
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/protectedArchiveQa/app-protectedArchiveQa.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$apk"
+          ! "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$apk" | grep -q 'android.permission.INTERNET'
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run previously omitted regression classes
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          SUITE: ${{ matrix.suite }}
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: |
+            bash -euo pipefail <<'AUDIT'
+            case "$SUITE" in
+              backup) classes=(BackupDryRunRegressionTest BackupIntegrityAndroid15RegressionTest BackupSafReadbackRegressionTest FullBackupCustomAssetSafetyRegressionTest FullBackupSourceAccessRegressionTest) ;;
+              recovery) classes=(PortableRestoreRegressionTest RestoreRecoveryTest ImportRollbackRegressionTest DuplicateTelegramIdSafetyTest) ;;
+              viewer) classes=(SearchLifecycleRegressionTest PerformanceRegressionTest AttachmentPreviewScreenTest) ;;
+              *) exit 2 ;;
+            esac
+            qualified=()
+            for class in "${classes[@]}"; do
+              test -f "app/src/androidTest/java/org/openarchive/telegram/$class.java"
+              qualified+=("org.openarchive.telegram.$class")
+            done
+            selector=$(IFS=,; echo "${qualified[*]}")
+            mkdir -p app/build/extended-audit
+            result=0
+            gradle --no-daemon --max-workers=2 connectedProtectedArchiveQaAndroidTest -PqaProtectedArchiveInstrumentation=true "-Pandroid.testInstrumentationRunnerArguments.class=$selector" || result=$?
+            adb logcat -d -t 5000 > app/build/extended-audit/logcat.txt || true
+            if [[ "$result" != 0 ]]; then exit "$result"; fi
+            python3 - "$selector" <<'PY'
+            import pathlib, sys, xml.etree.ElementTree as ET
+            expected = set(sys.argv[1].split(","))
+            counts = dict.fromkeys(expected, 0)
+            failed = []
+            for path in pathlib.Path("app/build/outputs/androidTest-results").rglob("TEST-*.xml"):
+                for case in ET.parse(path).getroot().iter("testcase"):
+                    name = case.get("classname")
+                    if name not in counts:
+                        continue
+                    if any(case.find(tag) is not None for tag in ("failure", "error", "skipped")):
+                        failed.append(name + "." + str(case.get("name")))
+                    else:
+                        counts[name] += 1
+            lines = [f"{name}: {count} passed" for name, count in sorted(counts.items())]
+            lines.append(f"Total passed: {sum(counts.values())}")
+            lines.extend("Not passed: " + name for name in failed)
+            report = "\n".join(lines) + "\n"
+            pathlib.Path("app/build/extended-audit/results.txt").write_text(report, encoding="utf-8")
+            print(report)
+            if failed or any(count == 0 for count in counts.values()):
+                sys.exit("Extended audit failed or a selected class did not execute")
+            PY
+            AUDIT
+      - name: Preserve test reports and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: extended-audit-api${{ matrix.api }}-${{ matrix.suite }}
+          retention-days: 7
+          path: |
+            app/build/outputs/androidTest-results/
+            app/build/reports/androidTests/
+            app/build/extended-audit/
