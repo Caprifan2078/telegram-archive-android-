@@ -90,7 +90,18 @@ final class ArchiveFileImport {
             if("zip".equalsIgnoreCase(suffix)){
                 // Zip4j handles plain ZIP and encrypted ZipCrypto/AES using the same
                 // extraction path. A password is requested only for encrypted entries.
-                extractZipWithPassword(ctx,uri,root,password,budget,progress);
+                try{
+                    extractZipWithPassword(ctx,uri,root,password,budget,progress);
+                }catch(Exception primary){
+                    if(!unsupportedZipCodec(primary))throw primary;
+                    progress.update("Использую дополнительный распаковщик ZIP…");
+                    deleteTree(root);
+                    if(!root.mkdirs())throw new IOException("Не удалось подготовить временную папку",primary);
+                    budget.count=0;budget.total=0;
+                    try{
+                        extractExtendedZip(ctx,uri,root,password,budget,progress);
+                    }catch(Exception fallback){fallback.addSuppressed(primary);throw fallback;}
+                }
             }else if("7z".equalsIgnoreCase(suffix)){
                 extractSevenZ(ctx,uri,root,password,budget,progress);
             }else if("rar".equalsIgnoreCase(suffix)){
@@ -177,6 +188,88 @@ final class ArchiveFileImport {
                 throw recoveryFailure;
             }finally{if(retry!=null)Arrays.fill(retry,'\0');}
         }finally{if(attempt!=null)Arrays.fill(attempt,'\0');}
+    }
+    private static boolean unsupportedZipCodec(Throwable error){
+        for(Throwable e=error;e!=null;e=e.getCause()){
+            String message=e.getMessage()==null?"":e.getMessage().toLowerCase(Locale.ROOT);
+            if((message.contains("compression")||message.contains("compress method"))&&
+                (message.contains("unsupported")||message.contains("not supported")||message.contains("unknown")))return true;
+            for(Throwable suppressed:e.getSuppressed()) {
+                String detail=suppressed.getMessage()==null?"":suppressed.getMessage().toLowerCase(Locale.ROOT);
+                if(detail.contains("compression")&&(detail.contains("unsupported")||detail.contains("not supported")||detail.contains("unknown")))return true;
+            }
+        }
+        return false;
+    }
+    /** Additional decoder only for unsupported codecs; never bypasses authentication or path policy.
+     * Commons Compress reads the central directory for independent entry metadata.
+     * The alternative decoder provides streams; it is never allowed to extract paths itself. */
+    private static void extractExtendedZip(Context ctx,Uri uri,File root,char[] password,
+            Budget budget,Progress progress)throws Exception{
+        File temporary=File.createTempFile("telegram-zip-codec-", ".zip",ctx.getCacheDir());
+        char[] secret=password==null?null:password.clone();
+        try{
+            long limit=maxTemporaryCopyForFreeBytes(ctx.getCacheDir().getUsableSpace()),copied=0;
+            try(InputStream source=ctx.getContentResolver().openInputStream(uri);
+                OutputStream out=new BufferedOutputStream(new FileOutputStream(temporary))){
+                if(source==null)throw new IOException("Не удалось открыть исходный ZIP");
+                byte[] buf=new byte[128*1024];int n;
+                while((n=source.read(buf))!=-1){
+                    copied+=n;if(copied>limit)throw new IOException("Недостаточно свободного места для дополнительного распаковщика ZIP");
+                    out.write(buf,0,n);
+                }
+            }
+            // Do not accept split archives, links, duplicate normalized paths,
+            // or entries that the alternate parser silently omits.
+            Map<String,Long> files=new LinkedHashMap<>();
+            Set<String> all=new HashSet<>();
+            try(org.apache.commons.compress.archivers.zip.ZipFile metadata=
+                    org.apache.commons.compress.archivers.zip.ZipFile.builder().setFile(temporary).get()){
+                Enumeration<org.apache.commons.compress.archivers.zip.ZipArchiveEntry> entries=metadata.getEntries();
+                while(entries.hasMoreElements()){
+                    org.apache.commons.compress.archivers.zip.ZipArchiveEntry entry=entries.nextElement();
+                    String raw=entry.getName();budget.next(raw==null?"":raw);
+                    String name=ArchiveImportPath.normalize(raw,entry.isDirectory());
+                    if(entry.isUnixSymlink())throw new IOException("Ссылки внутри ZIP не поддерживаются");
+                    if(!all.add(name))throw new IOException("Повторное имя в ZIP");
+                    if(entry.getGeneralPurposeBit().usesEncryption()&&(secret==null||secret.length==0))
+                        throw new PasswordRequired("ZIP защищён паролем. Введи пароль от архива.");
+                    if(entry.isDirectory())continue;
+                    long size=entry.getSize();
+                    if(size<0||size>MAX_ENTRY)throw new IOException("Некорректный размер файла в ZIP");
+                    files.put(name,size);
+                }
+            }
+            ru.olegcherednik.zip4jvm.UnzipIt unzip=ru.olegcherednik.zip4jvm.UnzipIt.zip(temporary.toPath());
+            if(secret!=null&&secret.length>0)unzip.password(secret);
+            ru.olegcherednik.zip4jvm.ZipFile.Reader reader=unzip.open();
+            if(reader.isSplit())throw new IOException("Многотомный ZIP не поддерживается");
+            byte[] buf=new byte[128*1024];
+            for(ru.olegcherednik.zip4jvm.ZipFile.Entry entry:reader){
+                String name=ArchiveImportPath.normalize(entry.getName(),entry.isDir());
+                if(entry.isSymlink())throw new IOException("Ссылки внутри ZIP не поддерживаются");
+                if(entry.isDir()){
+                    if(!all.contains(name))throw new IOException("Каталог ZIP отсутствует в исходном списке");
+                    continue;
+                }
+                Long size=files.remove(name);
+                if(size==null||entry.getUncompressedSize()!=size)throw new IOException("Несогласованный список файлов ZIP");
+                File target=safeFile(root,name);
+                File parent=target.getParentFile();
+                if(!parent.isDirectory()&&!parent.mkdirs())throw new IOException("Не создана папка ZIP");
+                if(target.exists())throw new IOException("Повторное имя в ZIP");
+                long written=0;
+                try(InputStream in=entry.getInputStream();OutputStream out=new BufferedOutputStream(new FileOutputStream(target))){
+                    int n;while((n=in.read(buf))!=-1){written+=n;if(written>size)throw new IOException("Размер ZIP не совпадает");budget.add(n,written);out.write(buf,0,n);}
+                }
+                if(written!=size)throw new IOException("Файл ZIP распакован не полностью");
+                emit(budget,progress);
+            }
+            if(!files.isEmpty())throw new IOException("Дополнительный распаковщик пропустил файлы ZIP");
+        }finally{
+            if(secret!=null)Arrays.fill(secret,'\0');
+            temporary.delete();
+        }
     }
     private static void extractZipStreaming(Context ctx,Uri uri,File root,char[] password,
             Budget budget,Progress progress)throws Exception{

@@ -1,0 +1,91 @@
+name: Extended ZIP decoder strict compatibility
+on:
+  push:
+    branches: [qa/extended-zip-decoder-20261126]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: extended-zip-decoder-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  audit:
+    if: github.event.repository.private == false
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        api: [30, 35]
+        suite: [zip_codec_probe, final_password_ui]
+    name: Android ${{ matrix.api }} / ${{ matrix.suite }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: SDK
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: Generate actual encrypted 7-Zip fixtures
+        run: |
+          bash .github/scripts/generate-zip-codec-probe.sh
+          bash .github/scripts/generate-external-7zip.sh
+      - name: Assemble application and test APK, run JVM tests
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if gradle --no-daemon --max-workers=2 assembleProtectedArchiveQa assembleProtectedArchiveQaAndroidTest testProtectedArchiveQaUnitTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true 2>&1 | tee build-attempt.log; then
+              exit 0
+            fi
+            if [[ "$attempt" == 3 ]] || ! grep -Eq 'Received status code 429|Too Many Requests' build-attempt.log; then
+              exit 1
+            fi
+            sleep "$((attempt * 30))"
+          done
+          exit 1
+      - name: Lint
+        if: matrix.api == 30 && matrix.suite == 'analytics'
+        run: gradle --no-daemon --max-workers=2 lintProtectedArchiveQa -PqaLocalModel=true -PqaProtectedArchiveInstrumentation=true
+      - name: Verify APK signature and explicit model-download permission
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/protectedArchiveQa/app-protectedArchiveQa.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$apk" | grep -q 'android.permission.INTERNET'
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -F "package: name='org.openarchive.telegram.qa.analyst20261126'"
+          sha256sum "$apk" > apk-before-test.sha256
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Android regression suite
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: ANALYST_QA_PACKAGE=org.openarchive.telegram.qa.analyst20261126 ORG_GRADLE_PROJECT_qaLocalModel=true bash .github/scripts/integrated-viewer-audit.sh ${{ matrix.suite }}
+      - name: Verify exact APK after emulator tests
+        run: sha256sum -c apk-before-test.sha256
+      - name: Preserve logs, test reports and synthetic screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: viewer-audit-api${{ matrix.api }}-${{ matrix.suite }}
+          retention-days: 7
+          path: |
+            app/build/outputs/androidTest-results/
+            app/build/reports/androidTests/
+            app/build/test-results/
+            app/build/ui-audit/

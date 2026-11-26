@@ -21,6 +21,12 @@ public final class EncryptedZipCodecProbeTest {
                 byte[] buf=new byte[8192];int n;while((n=in.read(buf))!=-1)out.write(buf,0,n);
             }
             byte[] before=java.nio.file.Files.readAllBytes(file.toPath());
+            try{ArchiveFileImport.extract(ctx,Uri.fromFile(file),"zip",key,null,p->{});fail("Encrypted ZIP opened without password: "+codec);}
+            catch(ArchiveFileImport.PasswordRequired expected){}
+            assertFalse(root.exists());
+            try{ArchiveFileImport.extract(ctx,Uri.fromFile(file),"zip",key,"wrong-password".toCharArray(),p->{});fail("Wrong password accepted: "+codec);}
+            catch(Exception expected){}
+            assertFalse(root.exists());
             File chat;
             try{
                 chat=ArchiveFileImport.extract(ctx,Uri.fromFile(file),"zip",key,password,p->{});
