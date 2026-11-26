@@ -31,6 +31,9 @@ public final class DeepAnalystActivity extends Activity {
     private final AtomicBoolean taskCancel=new AtomicBoolean();
     private ViewerPalette palette;
     private boolean busy;
+    private boolean modelOptionsOpen, advancedOpen;
+    private Button modelOptions,advanced;
+    private LinearLayout modelMaintenance,advancedPanel;
     private int dp(int n){return ViewerUi.dp(this,n);}
     private TextView text(String value,int size){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(palette.text);t.setPadding(dp(4),dp(5),dp(4),dp(5));return t;}
     private Button button(String value){Button b=new Button(this);b.setText(value);ViewerUi.styleButton(b,palette.raised,palette.text,palette.light);return b;}
@@ -59,13 +62,19 @@ public final class DeepAnalystActivity extends Activity {
         modelCard.setPadding(dp(12),dp(10),dp(12),dp(12));
         modelCard.setBackground(ViewerUi.surface(this,palette.surface,ViewerUi.CARD,palette.light,false));
         panel.addView(modelCard);
-        modelCard.addView(text("Модель",15));
+        modelCard.addView(text("Локальная модель",15));
         modelSelector=button("");modelSelector.setGravity(android.view.Gravity.CENTER_VERTICAL|android.view.Gravity.START);
         modelCard.addView(modelSelector);
         download=button("Скачать модель");modelCard.addView(download);
         install=button("Импортировать модель");modelCard.addView(install);
-        remove=button("Удалить выбранную модель");modelCard.addView(remove);
-        modelCheck=button("Проверить модель");modelCard.addView(modelCheck);
+        modelOptions=button("Управление моделью  ›");modelCard.addView(modelOptions);
+        modelMaintenance=new LinearLayout(this);modelMaintenance.setOrientation(LinearLayout.VERTICAL);
+        modelCard.addView(modelMaintenance);modelMaintenance.setVisibility(android.view.View.GONE);
+        remove=button("Удалить выбранную модель");modelMaintenance.addView(remove);
+        modelCheck=button("Проверить модель");modelMaintenance.addView(modelCheck);
+        modelOptions.setOnClickListener(v->{modelOptionsOpen=!modelOptionsOpen;
+            modelMaintenance.setVisibility(modelOptionsOpen?android.view.View.VISIBLE:android.view.View.GONE);
+            modelOptions.setText(modelOptionsOpen?"Управление моделью  ▾":"Управление моделью  ›");});
         modelCheck.setOnClickListener(v->checkModel());
         progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
         progress.setMax(100);progress.setProgressTintList(android.content.res.ColorStateList.valueOf(palette.accent));
@@ -75,9 +84,15 @@ public final class DeepAnalystActivity extends Activity {
         question.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(360)});
         question.setText(getIntent().getStringExtra("question"));LinearLayout.LayoutParams qlp=new LinearLayout.LayoutParams(-1,-2);qlp.topMargin=dp(12);qlp.bottomMargin=dp(8);panel.addView(question,qlp);
         ask=button("Спросить");ViewerUi.styleButton(ask,palette.chip,palette.accent,palette.light);panel.addView(ask);
-        scan=button("Полный разбор поведения · без ИИ");panel.addView(scan);
-        full=button("Весь чат нейросетью · медленно");panel.addView(full);
-        if(compareArchive!=null){scan.setVisibility(android.view.View.GONE);full.setVisibility(android.view.View.GONE);}
+        advanced=button("Дополнительный анализ  ›");panel.addView(advanced);
+        advancedPanel=new LinearLayout(this);advancedPanel.setOrientation(LinearLayout.VERTICAL);panel.addView(advancedPanel);
+        advancedPanel.setVisibility(android.view.View.GONE);
+        scan=button("Полный разбор поведения · без ИИ");advancedPanel.addView(scan);
+        full=button("Весь чат нейросетью · медленно");advancedPanel.addView(full);
+        advanced.setOnClickListener(v->{advancedOpen=!advancedOpen;
+            advancedPanel.setVisibility(advancedOpen?android.view.View.VISIBLE:android.view.View.GONE);
+            advanced.setText(advancedOpen?"Дополнительный анализ  ▾":"Дополнительный анализ  ›");});
+        if(compareArchive!=null)advanced.setVisibility(android.view.View.GONE);
         stop=button("Отменить операцию");panel.addView(stop);
         results=new LinearLayout(this);results.setOrientation(LinearLayout.VERTICAL);results.setPadding(dp(10),dp(8),dp(10),dp(8));panel.addView(results);
         FontStyler.bind(this);
@@ -106,8 +121,8 @@ public final class DeepAnalystActivity extends Activity {
         ScrollView scroll=new ScrollView(this);scroll.addView(choices);
         android.app.AlertDialog picker=new FontDialog.Builder(this).setTitle("Выбор модели").setView(scroll).setNegativeButton("Закрыть",null).create();
         String group="";
-        for(int i:AnalystModelCatalog.pickerOrder()){
-            String nextGroup=AnalystModelCatalog.group(i);
+        for(int i:AnalystModelCatalog.focusedPickerOrder(getNoBackupFilesDir(),selectedModel)){
+            String nextGroup=AnalystModelCatalog.focusedGroup(i);
             if(!group.equals(nextGroup)){group=nextGroup;TextView heading=text(group,14);heading.setTypeface(null,android.graphics.Typeface.BOLD);choices.addView(heading);}
             final int index=i;boolean custom=i==AnalystModelCatalog.CUSTOM,selected=i==selectedModel;
             File file=AnalystModelCatalog.file(getNoBackupFilesDir(),i);
@@ -117,7 +132,7 @@ public final class DeepAnalystActivity extends Activity {
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=dp(8);choices.addView(row,lp);
             TextView name=text((selected?"✓  ":"")+(custom?"Своя модель":AnalystModelCatalog.MODELS[i].label),16);
             name.setTypeface(null,android.graphics.Typeface.BOLD);row.addView(name);
-            TextView info=text((custom?"Файл LiteRT-LM":AnalystModelCatalog.MODELS[i].display())+
+            TextView info=text((custom?"Файл LiteRT-LM":AnalystModelCatalog.MODELS[i].description+" · "+String.format(java.util.Locale.ROOT,"%.2f ГБ",AnalystModelCatalog.MODELS[i].size/1e9))+
                 (AnalystModelCatalog.installed(file,i)?" · Установлена":file.exists()?" · Файл неполный":" · Не установлена")+
                 (custom?"":"\nЖелательно свободно ОЗУ от "+String.format(java.util.Locale.ROOT,"%.1f ГБ",AnalystModelCatalog.MODELS[i].suggestedFreeBytes()/1e9)+" (оценка)"),12);info.setTextColor(palette.muted);row.addView(info);
             row.setFocusable(true);row.setContentDescription(name.getText()+". "+info.getText());
@@ -139,6 +154,8 @@ public final class DeepAnalystActivity extends Activity {
         download.setEnabled(runtime&&!busy&&selectedModel<AnalystModelCatalog.CUSTOM&&checkSelfPermission(android.Manifest.permission.INTERNET)==android.content.pm.PackageManager.PERMISSION_GRANTED);
         scan.setEnabled(!busy);full.setEnabled(runtime&&present&&!busy);stop.setEnabled(busy);
         modelCheck.setVisibility(runtime&&present?android.view.View.VISIBLE:android.view.View.GONE);modelCheck.setEnabled(runtime&&present&&!busy);
+        modelOptions.setVisibility(model.exists()?android.view.View.VISIBLE:android.view.View.GONE);
+        modelMaintenance.setVisibility(model.exists()&&modelOptionsOpen?android.view.View.VISIBLE:android.view.View.GONE);
     }
     private void busy(String message){taskCancel.set(false);busy=true;modelSelector.setEnabled(false);install.setEnabled(false);remove.setEnabled(false);ask.setEnabled(false);download.setEnabled(false);scan.setEnabled(false);full.setEnabled(false);modelCheck.setEnabled(false);stop.setEnabled(true);stop.setVisibility(android.view.View.VISIBLE);status.setText(message);}
     private void downloadModel(AnalystModelCatalog.Model spec){
