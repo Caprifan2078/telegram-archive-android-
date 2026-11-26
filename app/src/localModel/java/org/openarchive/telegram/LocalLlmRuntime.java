@@ -35,10 +35,10 @@ public final class LocalLlmRuntime {
             throw failure;
         }
     }
-    private static String infer(Engine engine,String prompt,int outputLimit,AtomicBoolean cancel)throws InterruptedException{
+    private static String infer(Engine engine,String prompt,int outputLimit,AtomicBoolean cancel,boolean preserveThinking)throws InterruptedException{
         if(cancel.get())throw new InterruptedException();
         ConversationConfig config=new ConversationConfig(null,Collections.emptyList(),Collections.emptyList(),
-            new SamplerConfig(20,0.85,0.2,0),false,null,Collections.emptyMap(),null,false,outputLimit,new ThinkingConfig(false,-1),false,false,null);
+            new SamplerConfig(20,0.85,0.2,0),false,null,Collections.emptyMap(),null,false,outputLimit,preserveThinking?null:new ThinkingConfig(false,-1),false,false,null);
         try(Conversation conversation=engine.createConversation(config)){
             // The upstream API explicitly supports cancellation of an ongoing
             // conversation. Join the watcher before closing native resources.
@@ -75,7 +75,9 @@ public final class LocalLlmRuntime {
     }
     private static String single(String path,String prompt,int outputLimit,AtomicBoolean cancel)throws InterruptedException{
         if(cancel.get())throw new InterruptedException();
-        try(Engine engine=open(path,contextTokens(prompt,outputLimit))){return infer(engine,prompt,outputLimit,cancel);}
+        boolean compactLegacy=new java.io.File(path).getName().equals("analyst-qwen06.litertlm");
+        int budget=compactLegacy?Math.max(768,outputLimit):outputLimit;
+        try(Engine engine=open(path,compactLegacy?4096:contextTokens(prompt,budget))){return infer(engine,prompt,budget,cancel,compactLegacy);}
     }
     public static FullChatModelScan.Report generateFull(String path,String dbPath,String question,
             java.util.concurrent.atomic.AtomicBoolean cancel,FullChatModelScan.Progress progress)throws Exception{
@@ -86,7 +88,7 @@ public final class LocalLlmRuntime {
         if(!AnalystModelCatalog.canReuseEngine(path))
             return FullChatModelScan.read(db,question,cancel,prompt->single(path,prompt,512,cancel),progress);
         try(Engine engine=open(path,4096)){
-            return FullChatModelScan.read(db,question,cancel,prompt->infer(engine,prompt,512,cancel),progress);
+            return FullChatModelScan.read(db,question,cancel,prompt->infer(engine,prompt,512,cancel,false),progress);
         }
     }
     public static String generate(String path,String prompt)throws InterruptedException{
