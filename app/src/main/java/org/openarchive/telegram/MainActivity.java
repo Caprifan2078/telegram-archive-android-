@@ -2694,7 +2694,7 @@ public class MainActivity extends Activity {
     }
         private void chooseConversationPdf(){
         new FontDialog.Builder(this).setTitle("Сохранить переписку в PDF")
-            .setMessage("В PDF войдут текст, авторы и даты всех сообщений. Вложения будут обозначены текстом, без самих файлов. Для очень больших переписок действует ограничение: 250 страниц.")
+            .setMessage("В PDF войдут текст, авторы и даты всех сообщений. Вложения будут обозначены текстом, без самих файлов. Для одного файла — до "+ConversationPdfExporter.MAX_PAGES+" страниц; доступная память телефона может ограничить экспорт.")
             .setNegativeButton("Отмена",null).setPositiveButton("Выбрать файл",(dialog,which)->{
                 pendingPdfKey=activeKey;pendingPdfName=activeName;
                 Intent picker=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/pdf");
@@ -5360,6 +5360,15 @@ public class MainActivity extends Activity {
         if(isTimeline){
             Button monthButton=btn(month==0?"Весь год  ▾":String.format(Locale.ROOT,"%02d · месяц ▾",month));
             dates.addView(monthButton,new LinearLayout.LayoutParams(0,-1,1));monthButton.setOnClickListener(v->chooseDualMonth());
+        }
+        if(!isTimeline){
+            Button deep=btn("Сравнить содержание локальным ИИ");list.addView(deep,p(-1,-2));
+            deep.setMinHeight(px(48));deep.setOnClickListener(v->{
+                if(token!=loadToken||!first.equals(activeKey)||!second.equals(dualSecondKey))return;
+                startActivityForResult(new Intent(this,DeepAnalystActivity.class)
+                    .putExtra("archive",first).putExtra("compare_archive",second)
+                    .putExtra("question","Сравни манеру общения, конфликты, поддержку и изменения в двух переписках."),119);
+            });
         }
         TextView progress=text("Сверяю локальные базы в режиме чтения…",13,SUB);list.addView(progress,p(-1,-2));
         final String firstName=activeName,secondName=dualSecondName;
