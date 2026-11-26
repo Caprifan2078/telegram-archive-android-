@@ -5064,30 +5064,7 @@ public class MainActivity extends Activity {
                                     if(event.note!=null&&event.note.length()>115)
                                         analyticsText(details,event.note,FG,13);
                                     if(event.linkedCount>0){
-                                        TextView loading=text("Загружаю вложения…",12,SUB);
-                                        details.addView(loading);
-                                        worker.execute(()->{
-                                            try{
-                                                List<MessageDb.Attachment> attachments=source.relationshipMedia(event.id);
-                                                runOnUiThread(()->{
-                                                    if(isFinishing()||token!=loadToken||!key.equals(activeKey)
-                                                            ||db!=source||!details.isAttachedToWindow())return;
-                                                    details.removeView(loading);
-                                                    for(MessageDb.Attachment attachment:attachments){
-                                                        LinearLayout fileRow=row();details.addView(fileRow,p(-1,48));
-                                                        Button open=btn(mediaLabel(attachment.kind)+" · открыть");fileRow.addView(open,new LinearLayout.LayoutParams(0,-1,1));
-                                                        open.setOnClickListener(w->openMedia(attachment));
-                                                        Button unlink=btn("✕");unlink.setContentDescription("Открепить "+mediaLabel(attachment.kind));
-                                                        fileRow.addView(unlink,p(44,44));unlink.setOnClickListener(w->unlinkEventAttachment(event.id,attachment));
-                                                    }
-                                                    if(event.linkedCount>100)analyticsText(details,"Показано до 100 ссылок. Остальные могут быть доступны после открепления показанных.",SUB,12);
-                                                    else if(attachments.size()<event.linkedCount)analyticsText(details,"Некоторые ссылки больше не соответствуют исходному вложению.",SUB,12);
-                                                });
-                                            }catch(Exception error){
-                                                runOnUiThread(()->{if(details.isAttachedToWindow())
-                                                    loading.setText("Не удалось загрузить вложения");});
-                                            }
-                                        });
+                                        loadEventAttachmentPage(details,event,source,key,token,0);
                                     }
                                 }
                                 details.setVisibility(opening?View.VISIBLE:View.GONE);
@@ -5126,6 +5103,32 @@ public class MainActivity extends Activity {
                 });
             }catch(Exception e){runOnUiThread(()->{if(token==loadToken)status.setText("Ошибка событий: "+e.getMessage());});}
         });
+    }
+    private void loadEventAttachmentPage(LinearLayout target,MessageDb.RelationshipEvent event,MessageDb source,String key,int token,int offset){
+        TextView loading=text("Загружаю вложения…",12,SUB);target.addView(loading);
+        worker.execute(()->{try{
+            List<MessageDb.Attachment> items=source.relationshipMediaPage(event.id,offset,26);
+            runOnUiThread(()->{
+                if(!sameScreenRequest(source,key,token)||!target.isAttachedToWindow())return;
+                target.removeView(loading);int shown=Math.min(25,items.size());
+                for(int i=0;i<shown;i++){
+                    MessageDb.Attachment attachment=items.get(i);
+                    LinearLayout fileRow=row();target.addView(fileRow,p(-1,48));
+                    Button open=btn(mediaLabel(attachment.kind)+" · открыть");fileRow.addView(open,new LinearLayout.LayoutParams(0,-1,1));
+                    open.setOnClickListener(v->openMedia(attachment));
+                    Button unlink=btn("✕");unlink.setContentDescription("Открепить "+mediaLabel(attachment.kind));
+                    fileRow.addView(unlink,p(44,44));unlink.setOnClickListener(v->unlinkEventAttachment(event.id,attachment));
+                }
+                if(items.size()>25){
+                    Button more=btn("Показать ещё вложения");target.addView(more,p(-1,48));
+                    more.setOnClickListener(v->{target.removeView(more);loadEventAttachmentPage(target,event,source,key,token,offset+shown);});
+                }else if(offset+shown<event.linkedCount)analyticsText(target,"Некоторые ссылки не соответствуют исходному вложению.",SUB,12);
+            });
+        }catch(Exception error){runOnUiThread(()->{
+            if(!sameScreenRequest(source,key,token)||!target.isAttachedToWindow())return;
+            target.removeView(loading);Button retry=btn("Повторить загрузку");target.addView(retry,p(-1,48));
+            retry.setOnClickListener(v->{target.removeView(retry);loadEventAttachmentPage(target,event,source,key,token,offset);});
+        });}});
     }
     private void chooseRelationshipAttachment(long eventId,int offset){
         final MessageDb source=db;final String key=activeKey;final int token=loadToken;

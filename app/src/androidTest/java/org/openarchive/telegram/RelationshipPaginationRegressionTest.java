@@ -72,4 +72,22 @@ public final class RelationshipPaginationRegressionTest {
             assertEquals(1,db.attachmentsForMessage(anchor).size());
         }finally{db.close();context.deleteDatabase("telegram_"+key+".db");}
     }
+    @Test public void attachmentPagesExposeLinksBeyondOneHundredWithoutRemovingAny(){
+        android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key="qa_event_media_pages_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb db=new MessageDb(context,key);
+        try{
+            SQLiteDatabase sql=db.getWritableDatabase();db.clearStage(sql);
+            long anchor=db.stage(sql,"QA","2026-01-01","Synthetic",null,"");
+            for(int i=0;i<105;i++)db.stageAttachment(sql,anchor,"photos/qa_"+i+".jpg","image");
+            db.publishStaged(sql);
+            long event=db.addRelationshipEvent("Test","",anchor,0);
+            for(MessageDb.Attachment file:db.attachmentsForMessage(anchor))db.linkRelationshipMedia(event,file.id);
+            java.util.Set<Long> found=new java.util.HashSet<>();
+            for(int offset=0;offset<105;offset+=25)
+                for(MessageDb.Attachment file:db.relationshipMediaPage(event,offset,25))assertTrue(found.add(file.id));
+            assertEquals(105,found.size());assertEquals(105,db.relationshipEvents().get(0).linkedCount);
+            assertEquals(105,db.attachmentsForMessage(anchor).size());
+        }finally{db.close();context.deleteDatabase("telegram_"+key+".db");}
+    }
 }

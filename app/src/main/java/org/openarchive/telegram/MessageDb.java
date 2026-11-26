@@ -241,12 +241,14 @@ class MessageDb extends SQLiteOpenHelper {
         d.setTransactionSuccessful();
         }finally{d.endTransaction();}
     }
-    List<Attachment> relationshipMedia(long eventId){
+    List<Attachment> relationshipMedia(long eventId){return relationshipMediaPage(eventId,0,100);}
+    List<Attachment> relationshipMediaPage(long eventId,int offset,int limit){
+        if(offset<0||limit<1||limit>100)throw new IllegalArgumentException("Неверная страница вложений");
         ArrayList<Attachment> out=new ArrayList<>();
         String sql="SELECT a.id,a.message_id,a.path,a.kind FROM relationship_links l "+
             "INNER JOIN attachments a ON a.id=l.attachment_id AND a.path=l.path "+
-            "WHERE l.event_id=? ORDER BY a.id LIMIT 100";
-        try(Cursor c=getReadableDatabase().rawQuery(sql,new String[]{String.valueOf(eventId)})){
+            "WHERE l.event_id=? ORDER BY a.id LIMIT ? OFFSET ?";
+        try(Cursor c=getReadableDatabase().rawQuery(sql,new String[]{String.valueOf(eventId),Integer.toString(limit),Integer.toString(offset)})){
             while(c.moveToNext()){Attachment a=new Attachment();a.id=c.getLong(0);a.messageId=c.getLong(1);
                 a.path=c.getString(2);a.kind=c.getString(3);out.add(a);}
         }
