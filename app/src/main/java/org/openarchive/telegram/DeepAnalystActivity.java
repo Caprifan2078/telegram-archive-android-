@@ -16,7 +16,7 @@ public final class DeepAnalystActivity extends Activity {
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private final AtomicBoolean stopped=new AtomicBoolean();
     private static final AtomicBoolean MODEL_BUSY=new AtomicBoolean();
-    private String archive;
+    private String archive,compareArchive;
     private File model;
     private int selectedModel;
     private Button modelSelector;
@@ -40,6 +40,11 @@ public final class DeepAnalystActivity extends Activity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         archive=getIntent().getStringExtra("archive");
         try{if(!getDatabasePath(DeepChatContext.dbName(archive)).isFile()){finish();return;}}catch(IllegalArgumentException bad){finish();return;}
+        compareArchive=getIntent().getStringExtra("compare_archive");
+        if(compareArchive!=null){
+            try{if(archive.equals(compareArchive)||!getDatabasePath(DeepChatContext.dbName(compareArchive)).isFile()){finish();return;}}
+            catch(IllegalArgumentException bad){finish();return;}
+        }
         android.content.SharedPreferences prefs=getSharedPreferences(MODEL_PREFS,MODE_PRIVATE);
         selectedModel=AnalystModelCatalog.initialSelection(prefs.getString("selected_key",null),
             prefs.getInt("selected",-1),AnalystModelCatalog.file(getNoBackupFilesDir(),AnalystModelCatalog.CUSTOM).isFile());
@@ -47,8 +52,8 @@ public final class DeepAnalystActivity extends Activity {
         model=AnalystModelCatalog.file(getNoBackupFilesDir(),selectedModel);
         ScrollView scroll=new ScrollView(this);panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(16),dp(16),dp(16),dp(24));panel.setBackgroundColor(palette.background);scroll.addView(panel);setContentView(scroll);
-        TextView title=text("Глубокий анализ",22);title.setTypeface(null,android.graphics.Typeface.BOLD);panel.addView(title);
-        panel.addView(text("Локальный ИИ · быстрый вопрос или полный проход. Ответы могут ошибаться.",14));
+        TextView title=text(compareArchive==null?"Глубокий анализ":"Сравнение двух переписок",22);title.setTypeface(null,android.graphics.Typeface.BOLD);panel.addView(title);
+        panel.addView(text(compareArchive==null?"Локальный ИИ · быстрый вопрос или полный проход. Ответы могут ошибаться.":"Локальный ИИ · отдельные выборки А и Б. Сравнение по цитатам, не полный проход.",14));
         status=text("",13);panel.addView(status);
         modelCard=new LinearLayout(this);modelCard.setOrientation(LinearLayout.VERTICAL);
         modelCard.setPadding(dp(12),dp(10),dp(12),dp(12));
@@ -72,6 +77,7 @@ public final class DeepAnalystActivity extends Activity {
         ask=button("Спросить");ViewerUi.styleButton(ask,palette.chip,palette.accent,palette.light);panel.addView(ask);
         scan=button("Полный разбор поведения · без ИИ");panel.addView(scan);
         full=button("Весь чат нейросетью · медленно");panel.addView(full);
+        if(compareArchive!=null){scan.setVisibility(android.view.View.GONE);full.setVisibility(android.view.View.GONE);}
         stop=button("Отменить операцию");panel.addView(stop);
         results=new LinearLayout(this);results.setOrientation(LinearLayout.VERTICAL);results.setPadding(dp(10),dp(8),dp(10),dp(8));panel.addView(results);
         FontStyler.bind(this);
@@ -286,11 +292,19 @@ public final class DeepAnalystActivity extends Activity {
         worker.execute(()->{
             try{
                 verifyModelForRun();
-                DeepChatContext context=DeepChatContext.read(getDatabasePath(DeepChatContext.dbName(archive)),q,taskCancel);
+                DeepChatContext first=DeepChatContext.read(getDatabasePath(DeepChatContext.dbName(archive)),q,taskCancel);
+                final DualAnalystContext dual;
+                if(compareArchive!=null){
+                    if(taskCancel.get()||stopped.get())throw new IOException("Cancelled");
+                    DeepChatContext second=DeepChatContext.read(getDatabasePath(DeepChatContext.dbName(compareArchive)),q,taskCancel);
+                    if(first.sources.isEmpty()||second.sources.isEmpty())throw new IOException("Missing comparison evidence");
+                    dual=DualAnalystContext.combine(archive,first,compareArchive,second);
+                }else dual=null;
+                DeepChatContext context=dual==null?first:dual.context;
                 if(taskCancel.get())throw new IOException("Cancelled");
                 if(stopped.get())return;
                 if(context.sources.isEmpty())throw new IOException("No sources");
-                String prompt=context.prompt(q);
+                String prompt=dual==null?context.prompt(q):dual.prompt(q);
                 String response=(String)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
                     .getMethod("generate",String.class,String.class,AtomicBoolean.class).invoke(null,model.getAbsolutePath(),prompt,taskCancel);
                 if(taskCancel.get())throw new IOException("Cancelled");
@@ -308,7 +322,11 @@ public final class DeepAnalystActivity extends Activity {
                         if(!DeepChatContext.sentSource(prompt,src.id))continue;
                         Button source=button("[#"+src.id+"] "+src.author+" · "+src.date+"\n"+src.body);
                         source.setAllCaps(false);results.addView(source);
-                        source.setOnClickListener(v->{setResult(RESULT_OK,new Intent().putExtra("archive",archive).putExtra("message",src.id));finish();});
+                        source.setOnClickListener(v->{
+                            DualAnalystContext.Link link=dual==null?null:dual.links.get(src.id);
+                            setResult(RESULT_OK,new Intent().putExtra("archive",link==null?archive:link.archive)
+                                .putExtra("message",link==null?src.id:link.messageId));finish();
+                        });
                     }
                 });
             }catch(Exception|LinkageError error){runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();status.setText(modelFailure(error,"Не удалось выполнить анализ: проверь совместимость модели и доступную память."));});}
