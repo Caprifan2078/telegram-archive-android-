@@ -1,0 +1,94 @@
+name: Unified handoff APK
+on:
+  pull_request:
+    branches: [qa/unified-handoff-20261127]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    if: github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'qa/unified-handoff-source-20261127'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: SDK
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: Build and JVM tests
+        run: |
+          set -o pipefail
+          for attempt in 1 2 3; do
+            if gradle --no-daemon --max-workers=2 assembleProtectedArchiveQa testProtectedArchiveQaUnitTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true -PqaUnifiedHandoff=true -PqaVersionCode=79 2>&1 | tee build.log; then exit 0; fi
+            if [[ "$attempt" == 3 ]] || ! grep -Eq '429|Too Many Requests' build.log; then exit 1; fi
+            sleep $((attempt * 30))
+          done
+      - name: Verify APK and prepare handoff
+        run: |
+          mkdir -p handoff
+          cp app/build/outputs/apk/protectedArchiveQa/app-protectedArchiveQa.apk handoff/Telegram-Archive-Viewer-unified-20261127.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose handoff/*.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging handoff/*.apk | tee handoff/apk-info.txt
+          grep -F "package: name='org.openarchive.telegram.qa.unified20261127'" handoff/apk-info.txt
+          grep -F "native-code:" handoff/apk-info.txt | grep -F "arm64-v8a"
+          (cd handoff && sha256sum *.apk > SHA256SUMS.txt)
+          git rev-parse HEAD > handoff/commit.txt
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install and launch exact handoff APK on Android 15
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          emulator-boot-timeout: 420
+          script: |
+            adb install handoff/Telegram-Archive-Viewer-unified-20261127.apk
+            adb shell am start -W -n org.openarchive.telegram.qa.unified20261127/org.openarchive.telegram.MainActivity | tee handoff/launch.txt
+            grep -q 'Status: ok' handoff/launch.txt
+            sleep 3
+            adb shell pidof org.openarchive.telegram.qa.unified20261127
+            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | grep -F org.openarchive.telegram.qa.unified20261127
+            adb exec-out screencap -p > handoff/launch.png
+      - name: Verify same APK
+        run: cd handoff && sha256sum -c SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unified-handoff-apk
+          path: handoff/
+          retention-days: 14
+  publish:
+    needs: build
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'qa/unified-handoff-source-20261127'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: unified-handoff-apk
+          path: handoff
+      - name: Publish explicitly experimental APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          cd handoff
+          sha256sum -c SHA256SUMS.txt
+          test "$(cat commit.txt)" = "$HEAD_SHA"
+          tag="unified-qa-20261127-${HEAD_SHA:0:8}"
+          gh release create "$tag" *.apk SHA256SUMS.txt --target "$HEAD_SHA" --prerelease --title "Unified Android QA ${HEAD_SHA:0:8}" --notes "Experimental standalone APK, signed with QA debug key. JVM tests and Android 15 launch checked, not a stable release or a physical-device validation. Separate app ID; existing archives are not migrated. Models download separately."
