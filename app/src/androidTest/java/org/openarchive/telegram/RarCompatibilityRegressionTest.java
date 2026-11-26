@@ -75,7 +75,7 @@ public class RarCompatibilityRegressionTest {
             assertTrue(root.mkdirs());
             try{
                 unpack.invoke(null,ctx,Uri.fromFile(source),root,"junrar".toCharArray(),
-                    new ArchiveFileImport.Budget(),(ArchiveFileImport.Progress)info->{});
+                    new ArchiveFileImport.Budget(0,0,root),(ArchiveFileImport.Progress)info->{});
                 File actual=new File(root,"file1.txt");
                 assertTrue("Encrypted RAR member was not materialized",actual.isFile());
                 assertEquals("file1\n",new String(java.nio.file.Files.readAllBytes(actual.toPath()),

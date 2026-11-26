@@ -90,7 +90,7 @@ public final class DrawerAesZipRegressionTest {
             }
             assertTrue(root.mkdirs());
             ArchiveFileImport.extractZipFromCentralDirectory(context,Uri.fromFile(archive),
-                root,password,new ArchiveFileImport.Budget(),message->{});
+                root,password,new ArchiveFileImport.Budget(0,0,root),message->{});
             File restored=new File(root,"TelegramExport/messages.html");
             assertTrue(restored.isFile());
             assertTrue(restored.length()>50);
@@ -124,7 +124,7 @@ public final class DrawerAesZipRegressionTest {
             assertTrue(root.mkdirs());
             try{
                 ArchiveFileImport.extractZipFromCentralDirectory(context,Uri.fromFile(archive),
-                    root,"wrong-password".toCharArray(),new ArchiveFileImport.Budget(),m->{});
+                    root,"wrong-password".toCharArray(),new ArchiveFileImport.Budget(0,0,root),m->{});
                 fail("Wrong AES key must never extract a file");
             }catch(net.lingala.zip4j.exception.ZipException expected){
                 assertFalse(new File(root,"messages.html").length()>0);

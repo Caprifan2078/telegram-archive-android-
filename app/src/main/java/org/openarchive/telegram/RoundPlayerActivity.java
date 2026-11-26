@@ -70,7 +70,7 @@ public class RoundPlayerActivity extends Activity {
         return b;
     }
     private static String clock(int ms){int v=Math.max(0,ms)/1000;return String.format(Locale.ROOT,"%02d:%02d",v/60,v%60);}
-    private int motionDuration(){return ValueAnimator.areAnimatorsEnabled()?170:0;}
+    private int motionDuration(){return ViewerUi.motionDuration(this,170);}
     private void toggleControls(){
         controlsVisible=!controlsVisible;
         animateControl(topBar,controlsVisible,-dp(8));

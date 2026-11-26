@@ -88,6 +88,36 @@ public class SevenZTelegramImportRegressionTest {
             assertTrue("Original must remain present",archive.isFile());
         }finally{prior.close();ctx.deleteDatabase("telegram_"+old+".db");java.util.Arrays.fill(password,'\0');archive.delete();ArchiveFileImport.deleteTree(existing);}
     }
+    @Test public void encryptedSevenZWithRenamedTelegramHtmlImportsSameAsStandalone()throws Exception{
+        char[] password="synthetic-7z-import".toCharArray();
+        String next=key();File archive=fixture("Export/Conversation.html",password);
+        byte[] original=java.nio.file.Files.readAllBytes(archive.toPath());
+        try{
+            File chat=ArchiveFileImport.extract(ctx,Uri.fromFile(archive),"7z",next,password,p->{});
+            assertTrue(new File(chat,"Conversation.html").isFile());
+            MessageDb db=new MessageDb(ctx,next);
+            try{
+                assertEquals(1,TelegramImporter.importFiles(ctx.getContentResolver(),
+                    new DocumentFolder(ctx.getContentResolver(),chat),db,p->{}));
+                assertEquals(1,db.totalMessages());
+                assertTrue(db.page(0,1,"",false,"",false,false).get(0).body.contains("Synthetic 7z chat"));
+            }finally{db.close();}
+            assertArrayEquals(original,java.nio.file.Files.readAllBytes(archive.toPath()));
+        }finally{java.util.Arrays.fill(password,'\0');archive.delete();ArchiveFileImport.deleteTree(directory(next));ctx.deleteDatabase("telegram_"+next+".db");}
+    }
+    @Test public void encryptedSevenZWithNonHtmlReportsDiscoveryNotPassword()throws Exception{
+        char[] password="synthetic-7z-import".toCharArray();
+        String next=key();File archive=fixture("Export/readme.txt",password);
+        try{
+            try{ArchiveFileImport.extract(ctx,Uri.fromFile(archive),"7z",next,password,p->{});fail("Non-HTML file was accepted");}
+            catch(ArchiveFileImport.ExportNotFound expected){
+                assertTrue(expected.getMessage().contains("Файлов: 1"));
+                assertTrue(expected.getMessage().contains("HTML: 0"));
+                assertFalse(ArchiveFileImport.isPasswordFailure(expected));
+            }
+            assertFalse(directory(next).exists());
+        }finally{java.util.Arrays.fill(password,'\0');archive.delete();ArchiveFileImport.deleteTree(directory(next));}
+    }
     @Test public void parentTraversalFailsAndRollsBackStaging()throws Exception{
         File archive=fixture("../messages.html",null);String next=key();
         try{

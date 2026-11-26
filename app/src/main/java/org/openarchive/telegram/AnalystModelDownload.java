@@ -18,12 +18,13 @@ final class AnalystModelDownload {
             (h.equals("huggingface.co")||h.equals("cdn-lfs.huggingface.co")||h.equals("cdn-lfs-us-1.huggingface.co")||
              h.equals("cdn-lfs.hf.co")||h.equals("cdn-lfs-us-1.hf.co")||h.equals("cas-bridge.xethub.hf.co"));
     }
-    static void fetch(File model,AtomicBoolean cancel,LongConsumer progress)throws Exception{
-        File dir=model.getParentFile();if(dir==null||dir.getUsableSpace()<SIZE+128L*1024*1024)throw new IOException("Not enough storage");
+    static void fetch(AnalystModelCatalog.Model spec,File model,AtomicBoolean cancel,LongConsumer progress)throws Exception{
+        final long size=spec.size;
+        File dir=model.getParentFile();if(dir==null||dir.getUsableSpace()<size+128L*1024*1024)throw new IOException("Not enough storage");
         File tmp=File.createTempFile("analyst-download-",".tmp",dir);
         HttpURLConnection conn=null;
         try{
-            URI url=URI.create(URL);
+            URI url=URI.create(spec.url);
             for(int redirects=0;;redirects++){
                 if(cancel.get()||redirects>5||!allowed(url))throw new IOException("Blocked redirect");
                 conn=(HttpURLConnection)url.toURL().openConnection();
@@ -36,20 +37,20 @@ final class AnalystModelDownload {
                 }
                 if(code!=200)throw new IOException("HTTP "+code);break;
             }
-            long expected=conn.getContentLengthLong();if(expected>=0&&expected!=SIZE)throw new IOException("Wrong size");
+            long expected=conn.getContentLengthLong();if(expected>=0&&expected!=size)throw new IOException("Wrong size");
             MessageDigest sha=MessageDigest.getInstance("SHA-256");
             try(InputStream in=new BufferedInputStream(conn.getInputStream());FileOutputStream out=new FileOutputStream(tmp)){
                 byte[] buffer=new byte[262144];long total=0,last=0;int n;
                 while(!cancel.get()&&(n=in.read(buffer))!=-1){
-                    total+=n;if(total>SIZE)throw new IOException("Size overflow");
+                    total+=n;if(total>size)throw new IOException("Size overflow");
                     sha.update(buffer,0,n);out.write(buffer,0,n);
                     if(total-last>=2L*1024*1024){progress.accept(total);last=total;}
                 }
-                if(cancel.get()||total!=SIZE)throw new IOException("Incomplete");
+                if(cancel.get()||total!=size)throw new IOException("Incomplete");
                 out.getFD().sync();
             }
             StringBuilder hex=new StringBuilder();for(byte b:sha.digest())hex.append(String.format(java.util.Locale.ROOT,"%02x",b&255));
-            if(!SHA.equals(hex.toString())||cancel.get())throw new IOException("Integrity check failed");
+            if(!spec.sha.equals(hex.toString())||cancel.get())throw new IOException("Integrity check failed");
             java.nio.file.Files.move(tmp.toPath(),model.toPath(),java.nio.file.StandardCopyOption.ATOMIC_MOVE,java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         }finally{if(conn!=null)conn.disconnect();if(tmp.exists())tmp.delete();}
     }

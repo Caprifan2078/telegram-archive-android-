@@ -1,0 +1,5 @@
+# Strict final verification — 2026-11-26
+
+Previous commit 2f90e78f3f3dbb35c9ef22e5646b3bdcec717b9d: CI run 45763150174 passed 5/6 groups; Android 35 media failed on Qa00MediaLifecycleTest.searchResultsPositionAndQuerySurviveHelpRoundTrip with StaleObjectException (UiObject2.getAccessibilityNodeInfo). The remaining 21/22 media tests passed. No evidence yet proves a product regression or absence of one.
+
+Changes: bounded fresh-node access for query entry/read and scroll bounds, taps dispatched exactly once. Existing marker and exact query assertions retained; direct main-thread inspection additionally verifies applied query, visible input, same message loaded and fully visible inside scroll viewport. No product code or success thresholds changed. Run the six named suites on both API 30 and 35, all JVM tests and lint. Publish final handoff artifact only after every matrix job succeeds. Candidate comes from API35 analytics and its checksum is checked; separate runners build from identical commit, not necessarily byte-identical signatures. Actual local model generation with downloaded weights is not part of these tests and remains unverified. No private data used.

@@ -639,8 +639,8 @@ public class MainActivity extends Activity {
                     else dialog.setItems(labels,(d,which)->jump(found.get(which).id,"relationships"));
                     dialog.setNeutralButton("Другая дата",(d,which)->{
                         LocalDate today=LocalDate.now();
-                        new DatePickerDialog(this,(picker,year,mo,dt)->showOnThisDay(mo+1,dt),
-                            today.getYear(),month-1,day).show();
+                        FontDialog.date(this,(picker,year,mo,dt)->showOnThisDay(mo+1,dt),
+                            today.getYear(),month-1,day);
                     });
                     dialog.show();
                 });
@@ -2641,16 +2641,6 @@ public class MainActivity extends Activity {
             else activateArchive(choices.get(i).optString("key"));
         }).show();
     }
-    private void moreMenu(View anchor){
-        PopupMenu menu=new PopupMenu(this,anchor);menu.getMenu().add("⇈ В начало");menu.getMenu().add("⇊ В конец");menu.getMenu().add("📌 Закреплённые");menu.getMenu().add("Мои архивы");menu.getMenu().add("▥ Анализ переписки");menu.getMenu().add("Цвета участников");
-        menu.setOnMenuItemClickListener(item->{String x=item.getTitle().toString();
-            if(x.contains("начало")){chatOffset=0;showPage();}
-            else if(x.contains("конец")){worker.execute(()->{int n=db.totalMessages();runOnUiThread(()->{chatOffset=Math.max(0,n-PAGE);showPage();});});}
-            else if(x.contains("Закрепл"))showPinList();
-            else if(x.contains("Анализ")){analyticsSection="overview";screen="analytics";showPage();}
-            else if(x.contains("Цвета"))participantSettings();else chatPicker();return true;
-        });menu.show();
-    }
     private void openChatMediaFromHeader(){
         if(home||!"chat".equals(screen)||importing)return;
         rememberChatPositionForReturn();
@@ -2748,7 +2738,7 @@ public class MainActivity extends Activity {
                 TextView unpin=text("✕",20,SUB);unpin.setGravity(Gravity.CENTER);bar.addView(unpin,p(32,45));
                 unpin.setOnClickListener(v->unpinMessage(current.id));
                 bar.setOnLongClickListener(v->{showPinList();return true;});
-                bar.setAlpha(0f);bar.setTranslationY(-px(8));bar.animate().alpha(1f).translationY(0).setDuration(260).setInterpolator(new DecelerateInterpolator()).start();
+                bar.setAlpha(1f);bar.setTranslationY(0f); // Stable pinned preview: no repeated entrance during refresh.
             });
         });
     }
@@ -3174,7 +3164,7 @@ public class MainActivity extends Activity {
         if(home||db==null)return;
         final MessageDb source=db;final String key=activeKey;final int token=loadToken;
         Calendar c=Calendar.getInstance();
-        new DatePickerDialog(this,(view,y,m,d)->{
+        FontDialog.date(this,(view,y,m,d)->{
             if(!sameScreenRequest(source,key,token))return;
             final String requested=String.format(Locale.ROOT,"%04d-%02d-%02d",y,m+1,d);
             status.setText("Ищу переписку по дате "+requested+"…");
@@ -3189,7 +3179,7 @@ public class MainActivity extends Activity {
                     if(!requested.equals(found.day))toast("Ближайшая дата переписки: "+found.day);
                 });
             });
-        },c.get(Calendar.YEAR),c.get(Calendar.MONTH),c.get(Calendar.DAY_OF_MONTH)).show();
+        },c.get(Calendar.YEAR),c.get(Calendar.MONTH),c.get(Calendar.DAY_OF_MONTH));
     }
     /** One tap on Add Chat opens the Android file picker; no duplicate import modal. */
     private void chooseFolder(){
@@ -3527,18 +3517,25 @@ public class MainActivity extends Activity {
         ViewerUi.styleInput(archivePassword,ViewerPalette.of(themeIndex));
         LinearLayout passwordForm=column();passwordForm.setPadding(px(20),px(10),px(20),px(6));
         passwordForm.addView(archivePassword,p(-1,-2));
+        android.widget.CheckBox reveal=new android.widget.CheckBox(this);reveal.setText("Показать пароль");reveal.setTextColor(FG);
+        reveal.setButtonTintList(android.content.res.ColorStateList.valueOf(ACCENT));passwordForm.addView(reveal,p(-1,-2));
+        reveal.setOnCheckedChangeListener((box,checked)->{
+            int cursor=archivePassword.getSelectionEnd();
+            archivePassword.setTransformationMethod(checked?android.text.method.HideReturnsTransformationMethod.getInstance():android.text.method.PasswordTransformationMethod.getInstance());
+            if(cursor>=0)archivePassword.setSelection(Math.min(cursor,archivePassword.length()));
+        });
         android.app.AlertDialog passwordDialog=new FontDialog.Builder(this).setTitle("Этот архив защищён паролем")
             .setMessage("Введи пароль для открытия "+displayName+". Пароль не сохраняется.")
             .setView(passwordForm).setNegativeButton("Отмена",null)
             .setPositiveButton("Открыть",null).create();
-        passwordDialog.setOnShowListener(ignored->passwordDialog.getButton(-1).setOnClickListener(v->{
+        passwordDialog.setOnShowListener(ignored->{FontDialog.decorate(passwordDialog);passwordDialog.getButton(-1).setOnClickListener(v->{
                 if(archivePassword.length()==0){archivePassword.setError("Введи пароль");return;}
                 char[] password=new char[archivePassword.length()];
                 archivePassword.getText().getChars(0,archivePassword.length(),password,0);
                 archivePassword.getText().clear();
                 passwordDialog.dismiss();
                 importCompressed(source,ext,displayName,password);
-            }));
+            });});
         archivePasswordDialog=passwordDialog;
         passwordDialog.setOnDismissListener(d->{archivePassword.getText().clear();if(archivePasswordDialog==passwordDialog)archivePasswordDialog=null;});
         if(passwordDialog.getWindow()!=null)
@@ -3553,10 +3550,12 @@ public class MainActivity extends Activity {
         beginImportProgress("Распаковываю «"+label+"»…");
         String key=UUID.randomUUID().toString().replace("-","");
         worker.execute(()->{
+            boolean extracted=false;
             try{
                 java.io.File root=ArchiveFileImport.extract(this,source,extension,key,password,
                     this::postImportProgress);
-                postImportProgress("Читаю сообщения Telegram…");
+                extracted=true;
+                postImportProgress("Архив распакован. Читаю сообщения Telegram…");
                 MessageDb fresh=new MessageDb(this,key);
                 try{
                     TelegramImporter.importFiles(getContentResolver(),
@@ -3587,7 +3586,9 @@ public class MainActivity extends Activity {
                     lowerMessage.contains("не поддерж");
                 // Unsupported compression and malformed files are not proof of
                 // an incorrect password. Still let users enter one manually.
-                boolean auth=!unsupported&&((error instanceof Exception&&ArchiveFileImport.isPasswordFailure((Exception)error))
+                final boolean contentMissing=error instanceof ArchiveFileImport.ExportNotFound;
+                final boolean decoded=extracted||contentMissing;
+                boolean auth=!decoded&&!unsupported&&((error instanceof Exception&&ArchiveFileImport.isPasswordFailure((Exception)error))
                     ||(!missing&&"7z".equalsIgnoreCase(extension)&&
                         (lowerMessage.contains("crc")||lowerMessage.contains("checksum"))));
                 runOnUiThread(()->{
@@ -3605,13 +3606,13 @@ public class MainActivity extends Activity {
                             .setPositiveButton("Другой пароль",(d,w)->confirmArchiveImport(source,extension,label)).show();
                         return;
                     }
-                    new FontDialog.Builder(this).setTitle("Не удалось импортировать архив")
-                        .setMessage(message+"\nИсходный файл не изменён. Проверь, что внутри есть экспорт Telegram в HTML.")
+                    AlertDialog.Builder failure=new FontDialog.Builder(this)
+                        .setTitle(decoded?"Архив распакован, но переписка не прочитана":"Не удалось распаковать архив")
+                        .setMessage("Формат: "+extension.toUpperCase(Locale.ROOT)+"\nЭтап: "+(contentMissing?"поиск HTML переписки":decoded?"индексация HTML":"распаковка")+"\n"+message+"\nИсходный файл не изменён.")
                         .setNegativeButton("Закрыть",null)
-                        .setNeutralButton("Повторить",(d,w)->importCompressed(source,extension,label,null))
-                        .setPositiveButton(missing?"Ввести пароль":"Другой пароль",
-                            (d,w)->confirmArchiveImport(source,extension,label))
-                        .show();
+                        .setNeutralButton("Повторить",(d,w)->importCompressed(source,extension,label,null));
+                    if(!decoded)failure.setPositiveButton(missing?"Ввести пароль":"Другой пароль",(d,w)->confirmArchiveImport(source,extension,label));
+                    failure.show();
                 });
             }finally{if(password!=null)java.util.Arrays.fill(password,'\0');}
         });
@@ -3937,6 +3938,8 @@ public class MainActivity extends Activity {
             if(!dialog.isShowing()||!sameScreenRequest(source,archive,token))return;
             ChatQuestionAnalyst.Query query=ChatQuestionAnalyst.parse(question.getText().toString());
             categories.setVisibility(View.GONE);suggestions.setText("Готовые вопросы  ›");
+            android.view.inputmethod.InputMethodManager ime=(android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
+            if(ime!=null)ime.hideSoftInputFromWindow(question.getWindowToken(),0);
             ask.setEnabled(false);result.removeAllViews();analyticsText(result,"Читаю локальную переписку…",SUB,13);
             worker.execute(()->{
                 try{
@@ -3962,6 +3965,8 @@ public class MainActivity extends Activity {
             });
         });
         dialog.show();
+        if(dialog.getWindow()!=null)dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN|android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        viewport.setFocusableInTouchMode(true);viewport.requestFocus();
     }
 
     private void renderAnalytics(ChatAnalytics.Snapshot r){
@@ -5070,7 +5075,7 @@ public class MainActivity extends Activity {
         historyDestination(advanced,"Паузы между сообщениями","Длительные промежутки без сообщений.",this::showConversationPauses);
         TextView explain=secondaryDisclosure("Как работают инструменты  ›");advanced.addView(explain,p(-1,48));
         explain.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Инструменты истории")
-            .setMessage("Событие — отметка на одном сообщении. Этап — между двумя сообщениями. Период — любые даты.\n\n"+RelationshipFeatureGuide.STAGES+"\n\n"+RelationshipFeatureGuide.ECHO+"\n\n"+RelationshipFeatureGuide.COMPARE+"\n\n"+RelationshipFeatureGuide.MEMORIES+"\n\n"+RelationshipFeatureGuide.CALENDARS+"\n\nПаузы не доказывают потерю сообщений.\n\n"+RelationshipFeatureGuide.INTRO)
+             .setMessage(RelationshipFeatureGuide.INTRO+"\n\nСобытие — отметка на одном сообщении. Этап — между двумя сообщениями. Период — любые даты.\n\n"+RelationshipFeatureGuide.STAGES+"\n\n"+RelationshipFeatureGuide.ECHO+"\n\n"+RelationshipFeatureGuide.COMPARE+"\n\n"+RelationshipFeatureGuide.MEMORIES+"\n\n"+RelationshipFeatureGuide.CALENDARS+"\n\nПаузы не доказывают потерю сообщений.")
             .setPositiveButton("Понятно",null).show());
         }
         LinearLayout eventsHolder=column();list.addView(eventsHolder,p(-1,-2));
