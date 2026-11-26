@@ -54,7 +54,11 @@ if [[ "${1:-}" == navigation || "${1:-}" == premium_ui || "${1:-}" == chat_polis
     if [[ "$result" == 0 ]]; then result=4; fi
   fi
 fi
-if [[ "$result" != 0 ]]; then exit "$result"; fi
+grep -E 'AnalystPerf:' app/build/ui-audit/logcat.txt | tail -n 20 || true
+if [[ "$result" != 0 ]]; then
+  grep -E 'PatternSyntaxException|ExceptionInInitializerError|Caused by:|AssertionError' app/build/ui-audit/logcat.txt | tail -n 60 || true
+  exit "$result"
+fi
 python3 - "$selector" <<'PY'
 import pathlib, sys, xml.etree.ElementTree as ET
 expected = set(sys.argv[1].split(","))
