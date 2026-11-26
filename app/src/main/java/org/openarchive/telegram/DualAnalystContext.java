@@ -30,7 +30,8 @@ final class DualAnalystContext {
         if(i>=count)return;
         // Sample across the chronological evidence list, not only its earliest rows.
         int at=count<=1?0:i*(size-1)/(count-1);
-        DeepChatContext.Source src=c.sources.get(at);
+        // When retrieval has actual relevance priorities, preserve them before sampling filler.
+        DeepChatContext.Source src=c.priority.isEmpty()?c.sources.get(at):c.compactSources().get(i);
         long id=rows.size()+1;
         rows.add(new DeepChatContext.Source(id,side+": "+src.author,src.date,src.body));
         links.put(id,new Link(id,src.id,key,side));
