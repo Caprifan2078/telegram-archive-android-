@@ -11,6 +11,8 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.uiautomator.By;
 import androidx.test.uiautomator.UiDevice;
 import androidx.test.uiautomator.UiObject2;
+import androidx.test.uiautomator.StaleObjectException;
+import android.os.SystemClock;
 import androidx.test.uiautomator.Until;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -92,13 +94,44 @@ public class Qa00MediaLifecycleTest {
         assertNotNull("Chat viewport missing",area);Rect b=area.getVisibleBounds();
         assertTrue("Chat viewport too small",b.height()>100);
         for(int i=0;i<4;i++){device.swipe(b.centerX(),b.top+b.height()*3/4,b.centerX(),b.top+b.height()/4,30);device.waitForIdle();}
-        for(UiObject2 v:device.findObjects(By.textContains("QA_LIFE_"))){
-            Rect pos=v.getVisibleBounds();
-            if(!pos.isEmpty()&&pos.top>=b.top&&pos.bottom<=b.bottom){
-                String marker=v.getText();assertFalse("No real scrolling occurred",marker.contains("_001"));return marker;
-            }
-        }
+        String marker=visibleMarker();
+        assertFalse("No real scrolling occurred",marker.contains("_001"));
+        return marker;
+    }
+    // Accessibility nodes can be replaced while asynchronous rows finish layout.
+    // Reacquire fresh nodes within a bounded timeout; never skip viewport assertions.
+    private String visibleMarker(){
+        long end=SystemClock.uptimeMillis()+15000;
+        do{
+            try{
+                UiObject2 area=device.findObject(By.clazz("android.widget.ScrollView"));
+                if(area!=null){
+                    Rect bounds=area.getVisibleBounds();
+                    for(UiObject2 v:device.findObjects(By.textContains("QA_LIFE_"))){
+                        Rect pos=v.getVisibleBounds();String marker=v.getText();
+                        if(marker!=null&&marker.startsWith("QA_LIFE_")&&!pos.isEmpty()
+                            &&pos.top>=bounds.top&&pos.bottom<=bounds.bottom)return marker;
+                    }
+                }
+            }catch(StaleObjectException ignored){/* Re-query the current tree. */}
+            SystemClock.sleep(100);
+        }while(SystemClock.uptimeMillis()<end);
         throw new AssertionError("No synthetic message visible after scrolling");
+    }
+    private void requireRestoredMarker(String marker){
+        long end=SystemClock.uptimeMillis()+15000;
+        do{
+            try{
+                UiObject2 view=device.findObject(By.clazz("android.widget.ScrollView"));
+                UiObject2 restored=device.findObject(By.text(marker));
+                if(view!=null&&restored!=null){
+                    Rect b=view.getVisibleBounds(),pos=restored.getVisibleBounds();
+                    if(!pos.isEmpty()&&pos.top>=b.top&&pos.bottom<=b.bottom)return;
+                }
+            }catch(StaleObjectException ignored){/* Re-query the current tree. */}
+            SystemClock.sleep(100);
+        }while(SystemClock.uptimeMillis()<end);
+        throw new AssertionError("Restored message missing or outside viewport: "+marker);
     }
     private void openPhotoFilter(){
         openMediaFromChat();tap("Фото");
@@ -124,11 +157,7 @@ public class Qa00MediaLifecycleTest {
             openHelpFromCurrentScreen(scenario);
             assertNotNull("Help did not open",device.wait(Until.findObject(By.text("СПРАВОЧНИК")),15000));
             device.pressBack();device.waitForIdle();
-            UiObject2 restored=device.wait(Until.findObject(By.text(marker)),15000);
-            assertNotNull("Search result position lost after help: "+marker,restored);
-            UiObject2 view=device.wait(Until.findObject(By.clazz("android.widget.ScrollView")),15000);
-            assertNotNull(view);Rect b=view.getVisibleBounds(),pos=restored.getVisibleBounds();
-            assertTrue("Result outside viewport: "+marker,!pos.isEmpty()&&pos.top>=b.top&&pos.bottom<=b.bottom);
+            requireRestoredMarker(marker);
             UiObject2 restoredInput=device.wait(Until.findObject(By.desc("Поиск по сообщениям")),15000);
             assertNotNull(restoredInput);assertEquals("Search query changed","QA",restoredInput.getText());
         });
@@ -139,12 +168,7 @@ public class Qa00MediaLifecycleTest {
             openHelpFromCurrentScreen(scenario);
             assertNotNull("Help did not open",device.wait(Until.findObject(By.text("СПРАВОЧНИК")),15000));
             device.pressBack();device.waitForIdle();
-            UiObject2 restored=device.wait(Until.findObject(By.text(marker)),15000);
-            assertNotNull("Chat position lost after help: "+marker,restored);
-            UiObject2 view=device.wait(Until.findObject(By.clazz("android.widget.ScrollView")),15000);
-            assertNotNull(view);Rect b=view.getVisibleBounds(),pos=restored.getVisibleBounds();
-            assertTrue("Restored message outside chat viewport: "+marker,
-                !pos.isEmpty()&&pos.top>=b.top&&pos.bottom<=b.bottom);
+            requireRestoredMarker(marker);
         });
     }
     @Test public void recreationInMediaRestoresPreviousChatPosition()throws Exception{
@@ -178,10 +202,7 @@ public class Qa00MediaLifecycleTest {
                 device.swipe(area.centerX(),area.top+area.height()*2/3,
                     area.centerX(),area.top+area.height()/2,35);
                 device.waitForIdle();
-                for(UiObject2 v:device.findObjects(By.textContains("QA_LIFE_"))){
-                    Rect pos=v.getVisibleBounds();
-                    if(!pos.isEmpty()&&pos.top>=area.top&&pos.bottom<=area.bottom){marker=v.getText();break;}
-                }
+                marker=visibleMarker();
             }
             openPhotoFilter();
             final long[] saved={-1};

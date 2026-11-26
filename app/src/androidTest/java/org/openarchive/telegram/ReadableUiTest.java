@@ -49,8 +49,8 @@ public class ReadableUiTest {
         try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
             scenario.onActivity(a->{try{
                 Field mode=MainActivity.class.getDeclaredField("deep");mode.setAccessible(true);mode.set(a,false);
-                Method highlight=MainActivity.class.getDeclaredMethod("highlighted",String.class,String.class);highlight.setAccessible(true);
-                android.text.Spanned text=(android.text.Spanned)highlight.invoke(a,"İx 😀x","x");
+                Method highlight=MainActivity.class.getDeclaredMethod("highlighted",String.class,String.class,int.class);highlight.setAccessible(true);
+                android.text.Spanned text=(android.text.Spanned)highlight.invoke(a,"İx 😀x","x",ViewerPalette.of(0).background);
                 android.text.style.BackgroundColorSpan[] spans=text.getSpans(0,text.length(),android.text.style.BackgroundColorSpan.class);
                 assertEquals(2,spans.length);
                 assertEquals(1,text.getSpanStart(spans[0]));assertEquals(2,text.getSpanEnd(spans[0]));
