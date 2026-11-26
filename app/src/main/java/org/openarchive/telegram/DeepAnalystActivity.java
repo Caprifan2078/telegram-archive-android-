@@ -297,6 +297,11 @@ public final class DeepAnalystActivity extends Activity {
     private String modelFailure(Throwable error,String fallback){
         if(taskCancel.get())return "Операция отменена.";
         if(error instanceof InvalidModelFile)return "Файл модели повреждён или недоступен. Удали выбранную модель и скачай её заново.";
+        Throwable root=error;
+        for(int i=0;i<8&&root.getCause()!=null&&root.getCause()!=root;i++)root=root.getCause();
+        if(root instanceof LinkageError||String.valueOf(root.getMessage()).contains("JNI ABI mismatch"))
+            return "Движок этой сборки несовместим с моделью. Можно открыть найденные источники без ИИ.";
+        if(root instanceof OutOfMemoryError)return "Не хватило памяти для модели. Выбери более лёгкую или просмотри источники.";
         return fallback;
     }
     private void checkModel(){
@@ -323,7 +328,12 @@ public final class DeepAnalystActivity extends Activity {
         });
     }
     private void scanWithModel(){
-        if(!canStartModel())return;
+        if(!canStartModel()){
+            new FontDialog.Builder(this).setTitle("Модель сейчас не готова")
+                .setMessage(status.getText()+"\nМожно посмотреть найденные сообщения без запуска модели.")
+                .setNegativeButton("Закрыть",null).setPositiveButton("Найти источники",(d,n)->findEvidence(q)).show();
+            return;
+        }
         if(!MODEL_BUSY.compareAndSet(false,true)){status.setText("Предыдущий запрос ещё завершается.");return;}
         String input=question.getText().toString().trim();
         final String q=input.isEmpty()?"Разбери поведение обоих участников, конфликты, поддержку и изменения общения.":input;
@@ -446,7 +456,11 @@ public final class DeepAnalystActivity extends Activity {
                         });
                     }
                 });
-            }catch(Exception|LinkageError error){runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();status.setText(modelFailure(error,"Не удалось выполнить анализ: проверь совместимость модели и доступную память."));});}
+            }catch(Exception|LinkageError error){runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();status.setText(modelFailure(error,"Не удалось выполнить анализ: проверь совместимость модели и доступную память."));
+                if(!taskCancel.get()){
+                    Button retry=button("Посмотреть источники без ИИ");results.addView(retry);
+                    retry.setOnClickListener(v->{if(!busy)findEvidence(q);});
+                }});}
             finally{MODEL_BUSY.set(false);}
         });
     }
