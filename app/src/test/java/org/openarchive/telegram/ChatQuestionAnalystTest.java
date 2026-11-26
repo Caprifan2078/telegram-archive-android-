@@ -39,6 +39,26 @@ public class ChatQuestionAnalystTest {
         a=query("Что писали 01.02.2026?");
         a.add(1,"А","2026-02-01 12:00","текст");a.add(2,"Б","2026-02-02","другое");assertEquals(1,a.finish().sources.size());
     }
+    @Test public void allPresetQuestionsHaveSupportedIntent(){
+        for(String[] group:ChatQuestionAnalyst.PRESETS)for(int i=1;i<group.length;i++)
+            assertNotEquals(group[i],ChatQuestionAnalyst.Kind.UNKNOWN,ChatQuestionAnalyst.parse(group[i]).kind);
+    }
+    @Test public void calendarRhythmWorksWithUnsortedMessages(){
+        ChatQuestionAnalyst.Accumulator a=query("Самый долгий перерыв?");
+        a.add(1,"A","2026-02-05","");a.add(2,"A","2026-02-01","");a.add(3,"B","bad","");
+        assertTrue(a.finish().text.contains("3 полных календарных дней"));
+        assertTrue(a.finish().text.contains("неизвестной датой: 1"));
+        a=query("Самый активный день?");
+        a.add(1,"A","2026-02-05","");a.add(2,"B","2026-02-05","");a.add(3,"B","2026-02-01","");
+        assertTrue(a.finish().text.contains("Максимум за день: 2"));
+    }
+    @Test public void questionCountIsNotSemanticAndAuthorNameIsExact(){
+        ChatQuestionAnalyst.Accumulator a=query("Сколько сообщений с вопросами?");
+        a.add(1,"Аня","","Как дела?");a.add(2,"Аня","","Что? Как?");a.add(3,"Борис","","Да");
+        assertTrue(a.finish().text.contains("2 из 3"));
+        a=query("Сколько сообщений написала «Аня»?");
+        a.add(1,"АНЯ","","");a.add(2,"Аня П.","","");assertTrue(a.finish().text.contains("1 из 2"));
+    }
     @Test public void examplesAreBoundedButCountIsExact(){
         ChatQuestionAnalyst.Accumulator a=query("Найди «тест»");
         for(int i=0;i<1000;i++)a.add(i,"А","2026-02-01 12:00","тест");
