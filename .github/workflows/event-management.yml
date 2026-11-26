@@ -45,6 +45,8 @@ jobs:
             sleep "$((attempt * 30))"
           done
           exit 1
+      - name: Static Android lint
+        run: gradle --no-daemon --max-workers=2 lintProtectedArchiveQa -PqaProtectedArchiveInstrumentation=true
       - name: Verify APK signature and offline manifest
         run: |
           set -euo pipefail
