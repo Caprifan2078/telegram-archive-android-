@@ -62,6 +62,22 @@ public final class ArchivePipeTestProvider extends ContentProvider {
             // this as a whole file, but openInputStream still succeeds.
             return new android.content.res.AssetFileDescriptor(pair[0],0,bytes.length);
         }
+        if(uri.getPathSegments().size()==2&&"layout".equals(uri.getPathSegments().get(0))){
+            if(!"r".equals(mode)||!"solid-header".equals(uri.getLastPathSegment()))
+                throw new java.io.FileNotFoundException("Unknown fixture");
+            final java.io.InputStream asset;
+            try{asset=getContext().getAssets().open("external7zip/layout-solid-header.7z");}
+            catch(IOException failure){throw new java.io.FileNotFoundException("Missing layout asset");}
+            ParcelFileDescriptor[] pair;
+            try{pair=ParcelFileDescriptor.createPipe();}
+            catch(IOException failure){try{asset.close();}catch(IOException ignored){}throw new java.io.FileNotFoundException("Pipe unavailable");}
+            Thread writer=new Thread(()->{
+                try(java.io.InputStream in=asset;FileOutputStream out=new ParcelFileDescriptor.AutoCloseOutputStream(pair[1])){
+                    byte[] bytes=new byte[8192];int n;while((n=in.read(bytes))!=-1)out.write(bytes,0,n);
+                }catch(IOException ignored){}
+            },"synthetic-layout-stream");writer.setDaemon(true);writer.start();
+            return new android.content.res.AssetFileDescriptor(pair[0],0,android.content.res.AssetFileDescriptor.UNKNOWN_LENGTH);
+        }
         return super.openAssetFile(uri,mode);
     }
 
