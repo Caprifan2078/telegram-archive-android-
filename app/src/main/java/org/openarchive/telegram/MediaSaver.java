@@ -20,6 +20,28 @@ final class MediaSaver {
         Result(Uri uri,long bytes){this.uri=uri;this.bytes=bytes;}
     }
     private MediaSaver(){ }
+    /** Separate from write failures: callers must never delete an aliased original. */
+    static final class SameSourceException extends IOException {
+        SameSourceException(){super("Нельзя сохранять поверх исходного файла");}
+    }
+    static void requireDistinct(Context context,Uri source,Uri destination)throws IOException{
+        if(source==null||destination==null)throw new IOException("Не выбран файл");
+        if(source.equals(destination))throw new SameSourceException();
+        if("file".equals(source.getScheme())&&"file".equals(destination.getScheme())){
+            java.io.File a=new java.io.File(source.getPath()).getCanonicalFile();
+            java.io.File b=new java.io.File(destination.getPath()).getCanonicalFile();
+            if(a.equals(b)||(a.exists()&&b.exists()&&java.nio.file.Files.isSameFile(a.toPath(),b.toPath())))
+                throw new SameSourceException();
+        }
+        if("content".equals(source.getScheme())&&"content".equals(destination.getScheme())&&
+            java.util.Objects.equals(source.getAuthority(),destination.getAuthority())){
+            try{
+                if(DocumentsContract.isDocumentUri(context,source)&&DocumentsContract.isDocumentUri(context,destination)&&
+                    DocumentsContract.getDocumentId(source).equals(DocumentsContract.getDocumentId(destination)))
+                    throw new SameSourceException();
+            }catch(IllegalArgumentException ignored){/* not a document URI */}
+        }
+    }
     static Result saveToLibrary(Context context, Uri source, MediaSavePolicy.Spec spec) throws IOException {
         if(Build.VERSION.SDK_INT<29)throw new IOException("На Android 8–9 выберите папку через системное окно");
         ContentResolver resolver=context.getContentResolver();
@@ -54,23 +76,28 @@ final class MediaSaver {
             if(resolver.update(destination,publish,null,null)!=1)throw new IOException("Android не подтвердил сохранение файла");
             finished=true;
             return new Result(destination,bytes);
+        } catch(SameSourceException alias) {
+            finished=true; // Do not remove the original on an unexpected alias.
+            throw alias;
         } finally {
             if(!finished)try{resolver.delete(destination,null,null);}catch(Exception ignored){}
         }
     }
     static long copy(Context context,Uri source,Uri destination) throws IOException {
-        if(source==null||destination==null)throw new IOException("Не выбран файл");
+        requireDistinct(context,source,destination);
         ContentResolver resolver=context.getContentResolver();
-        try(InputStream input=resolver.openInputStream(source);
-            OutputStream output=resolver.openOutputStream(destination,"w")) {
-            if(input==null||output==null)throw new IOException("Нет доступа к файлу");
-            byte[] buffer=new byte[128*1024];long count=0;
-            for(int n;(n=input.read(buffer))!=-1;){
-                if(n==0)continue;
-                count+=n;
-                output.write(buffer,0,n);
+        try(InputStream input=resolver.openInputStream(source)) {
+            if(input==null)throw new IOException("Нет доступа к исходному файлу");
+            try(OutputStream output=resolver.openOutputStream(destination,"w")){
+                if(output==null)throw new IOException("Нет доступа к файлу назначения");
+                byte[] buffer=new byte[128*1024];long count=0;
+                for(int n;(n=input.read(buffer))!=-1;){
+                    if(Thread.currentThread().isInterrupted())throw new java.io.InterruptedIOException("Сохранение отменено");
+                    if(n==0)continue;
+                    output.write(buffer,0,n);count+=n;
+                }
+                output.flush();return count;
             }
-            output.flush();return count;
         }
     }
     static void discardIncompleteDocument(Context context, Uri uri){

@@ -10,6 +10,13 @@ case "${1:-}" in
   viewer) classes=(SearchLifecycleRegressionTest PerformanceRegressionTest) ;;
   documents) classes=(AttachmentPreviewScreenTest) ;;
   analytics) classes=(AnalyticsIntegrationTest AnalyticsSectionNavigationRegressionTest LightAnalyticsVisualTest TrendsIntegrationTest RelationshipAnalyticsExplanationUiTest RelationshipPaginationRegressionTest) ;;
+  archive_deep) classes=(ArchiveIntegrationTest ArchivePreviewIntegrationTest LargeHtmlImportRegressionTest MultipleChatArchiveRegressionTest QaStandaloneHtmlImportRegressionTest RealTelegramExportStructureRegressionTest ZipFooterIntegrityRegressionTest) ;;
+  media_export) classes=(ExportMediaFilenameRegressionTest MediaSaveIntegrationTest MediaAssetsRegressionTest MediaClassifierTest MediaGridResponsiveAndroidTest MediaTabsIsolationTest MissingMediaPlaybackRegressionTest OpusSeekDiagnosticTest TgsRenderingIntegrationTest) ;;
+  chat_storage) classes=(CollectionsDatabaseTest CustomizationGroupTest MultiConversationRegistryRegressionTest QaTrashRestoreRegressionTest QuoteSavedStoreIntegrationTest TelegramReplyIntegrationTest) ;;
+  migrations) classes=(ConversationPeriodsMigrationTest LocalProfileMigrationTest RelationshipsMigrationTest SchemaCollisionMigrationTest) ;;
+  reading) classes=(PinnedFocusNavigationRegressionTest Qa01ChatListSizeTest Qa01ReadingPositionTest Qa01TwoChatsTest Qa02MissingAnchorTest Qa02ReadingPositionIsolationTest Qa02ReadingProgressIsolationTest) ;;
+  ui_legacy) classes=(Qa00HelpLifecycleTest Qa00MediaFilterTest Qa00NavigationCoreTest Qa00RotationLifecycleTest QaUiChatNavigationRegressionTest ReadableUiTest UiSmokeTest) ;;
+  history_export) classes=(ConversationPdfExporterTest GroupTimelineReadOnlyRegressionTest GroupTimelineScreenRegressionTest) ;;
   *) echo "Unknown audit suite" >&2; exit 2 ;;
 esac
 qualified=()
