@@ -35,6 +35,17 @@ final class DualAnalystContext {
         rows.add(new DeepChatContext.Source(id,side+": "+src.author,src.date,src.body));
         links.put(id,new Link(id,src.id,key,side));
     }
+    boolean citesBoth(String answer,String prompt){
+        boolean a=false,b=false;
+        java.util.regex.Matcher matches=java.util.regex.Pattern.compile("\\[#(\\d{1,18})\\]").matcher(answer==null?"":answer);
+        while(matches.find()){
+            long id=Long.parseLong(matches.group(1));
+            Link link=links.get(id);
+            if(link==null||!DeepChatContext.sentSource(prompt,id))continue;
+            if("А".equals(link.side))a=true;else if("Б".equals(link.side))b=true;
+        }
+        return a&&b;
+    }
     String prompt(String question){
         return context.prompt("Сравни А и Б отдельно, приводи цитаты обеих сторон, не считай одинаковые имена одним человеком. "+DeepChatContext.clip(question,250));
     }

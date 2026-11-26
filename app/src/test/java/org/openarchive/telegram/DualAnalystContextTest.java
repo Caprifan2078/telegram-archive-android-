@@ -34,4 +34,13 @@ public class DualAnalystContextTest {
     @Test(expected=IllegalArgumentException.class) public void sameArchiveRejected(){
         DualAnalystContext.combine("same",sample("A",1),"same",sample("B",1));
     }
+
+    @Test public void comparativeAnswerMustCiteBothRealSources(){
+        DualAnalystContext d=DualAnalystContext.combine("first",sample("A",1),"second",sample("B",1));
+        String prompt=d.prompt("Сравни чаты");
+        assertTrue(d.citesBoth("[#1] и [#2]",prompt));
+        assertFalse(d.citesBoth("[#1] и [#999]",prompt));
+        assertFalse(d.citesBoth("[#1] [#1]",prompt));
+        assertFalse(d.citesBoth("",prompt));
+    }
 }

@@ -19,10 +19,14 @@ public class DeepChatContextIntegrationTest {
             long answer=db.stage(sql,"B","2026-01-03 10:00","Заберу ноутбук",null,"");
             db.stageTelegramId(sql,answer,1002);db.stageReply(sql,answer,1001);
             db.publishStaged(sql);
+            try(android.database.Cursor link=sql.rawQuery("SELECT target_message_id FROM message_replies WHERE message_id=?",new String[]{Long.toString(answer)})){
+                assertTrue("Telegram reply must be persisted",link.moveToFirst());
+                assertEquals("Reply must resolve to original message",target,link.getLong(0));
+            }
             DeepChatContext result=DeepChatContext.read(c.getDatabasePath(DeepChatContext.dbName(key)),"ноутбук",new AtomicBoolean());
-            assertTrue(result.sources.stream().anyMatch(x->x.id==target));
-            assertTrue(result.sources.stream().anyMatch(x->x.id==answer));
-            assertTrue(result.method.contains("ответы Telegram"));
+            assertTrue("Distant replied-to message missing: "+result.method,result.sources.stream().anyMatch(x->x.id==target));
+            assertTrue("Topic search hit missing: "+result.method,result.sources.stream().anyMatch(x->x.id==answer));
+            assertTrue("Reply provenance missing: "+result.method,result.method.contains("ответы Telegram"));
             assertEquals(42,db.totalMessages());
         }finally{db.close();c.deleteDatabase(DeepChatContext.dbName(key));}
     }

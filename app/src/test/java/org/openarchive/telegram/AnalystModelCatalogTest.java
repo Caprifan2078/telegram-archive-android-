@@ -48,4 +48,16 @@ public class AnalystModelCatalogTest {
         for(String url:new String[]{"http://huggingface.co/model","https://huggingface.co.evil.test/model","https://evil.test","https://user@huggingface.co/file","https://huggingface.co:444/file"})
             assertFalse(AnalystModelDownload.allowed(URI.create(url)));
     }
+
+    @Test public void focusedPickerHasThreePrimaryChoicesAndPreservesLegacyDownloads()throws Exception{
+        File dir=java.nio.file.Files.createTempDirectory("focused-catalog").toFile();
+        File old=AnalystModelCatalog.file(dir,4);
+        try{
+            assertArrayEquals(new int[]{0,1,6,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,0));
+            assertTrue(old.createNewFile());
+            assertArrayEquals(new int[]{0,1,6,4,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,0));
+            assertArrayEquals(new int[]{0,1,6,4,7,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,7));
+            assertEquals(4,AnalystModelCatalog.initialSelection("qwen352",3,false));
+        }finally{old.delete();dir.delete();}
+    }
 }

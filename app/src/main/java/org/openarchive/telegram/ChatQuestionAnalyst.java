@@ -45,6 +45,17 @@ final class ChatQuestionAnalyst {
         if(m.matches()){ChatTrends.Moment t=ChatTrends.parse(m.group(1));if(t!=null)return new Query(Kind.DAY,"",t.day);}
         return new Query(Kind.UNKNOWN,"",null);
     }
+    static boolean supports(String question){return parse(question).kind!=Kind.UNKNOWN;}
+    static Answer readOnly(java.io.File file,Query query,java.util.concurrent.atomic.AtomicBoolean cancelled){
+        Accumulator result=new Accumulator(query);
+        if(cancelled.get())return null;
+        if(query.kind==Kind.UNKNOWN)return result.finish();
+        try(android.database.sqlite.SQLiteDatabase database=android.database.sqlite.SQLiteDatabase.openDatabase(file.getAbsolutePath(),null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY);
+            android.database.Cursor rows=database.rawQuery("SELECT id,author,date_text,body FROM messages ORDER BY id",null)){
+            while(!cancelled.get()&&rows.moveToNext())result.add(rows.getLong(0),rows.getString(1),rows.getString(2),rows.getString(3));
+        }
+        return cancelled.get()?null:result.finish();
+    }
     static final class Evidence {
         final long id;final String author,date,excerpt;
         final LocalDate day;final LocalDateTime time;

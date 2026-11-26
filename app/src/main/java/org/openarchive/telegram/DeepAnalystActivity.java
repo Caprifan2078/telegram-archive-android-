@@ -31,6 +31,9 @@ public final class DeepAnalystActivity extends Activity {
     private final AtomicBoolean taskCancel=new AtomicBoolean();
     private ViewerPalette palette;
     private boolean busy;
+    private boolean modelOptionsOpen, advancedOpen;
+    private Button modelOptions,advanced;
+    private LinearLayout modelMaintenance,advancedPanel;
     private int dp(int n){return ViewerUi.dp(this,n);}
     private TextView text(String value,int size){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(palette.text);t.setPadding(dp(4),dp(5),dp(4),dp(5));return t;}
     private Button button(String value){Button b=new Button(this);b.setText(value);ViewerUi.styleButton(b,palette.raised,palette.text,palette.light);return b;}
@@ -59,13 +62,19 @@ public final class DeepAnalystActivity extends Activity {
         modelCard.setPadding(dp(12),dp(10),dp(12),dp(12));
         modelCard.setBackground(ViewerUi.surface(this,palette.surface,ViewerUi.CARD,palette.light,false));
         panel.addView(modelCard);
-        modelCard.addView(text("Модель",15));
+        modelCard.addView(text("Локальная модель",15));
         modelSelector=button("");modelSelector.setGravity(android.view.Gravity.CENTER_VERTICAL|android.view.Gravity.START);
         modelCard.addView(modelSelector);
         download=button("Скачать модель");modelCard.addView(download);
         install=button("Импортировать модель");modelCard.addView(install);
-        remove=button("Удалить выбранную модель");modelCard.addView(remove);
-        modelCheck=button("Проверить модель");modelCard.addView(modelCheck);
+        modelOptions=button("Управление моделью  ›");modelCard.addView(modelOptions);
+        modelMaintenance=new LinearLayout(this);modelMaintenance.setOrientation(LinearLayout.VERTICAL);
+        modelCard.addView(modelMaintenance);modelMaintenance.setVisibility(android.view.View.GONE);
+        remove=button("Удалить выбранную модель");modelMaintenance.addView(remove);
+        modelCheck=button("Проверить модель");modelMaintenance.addView(modelCheck);
+        modelOptions.setOnClickListener(v->{modelOptionsOpen=!modelOptionsOpen;
+            modelMaintenance.setVisibility(modelOptionsOpen?android.view.View.VISIBLE:android.view.View.GONE);
+            modelOptions.setText(modelOptionsOpen?"Управление моделью  ▾":"Управление моделью  ›");});
         modelCheck.setOnClickListener(v->checkModel());
         progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
         progress.setMax(100);progress.setProgressTintList(android.content.res.ColorStateList.valueOf(palette.accent));
@@ -75,9 +84,34 @@ public final class DeepAnalystActivity extends Activity {
         question.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(360)});
         question.setText(getIntent().getStringExtra("question"));LinearLayout.LayoutParams qlp=new LinearLayout.LayoutParams(-1,-2);qlp.topMargin=dp(12);qlp.bottomMargin=dp(8);panel.addView(question,qlp);
         ask=button("Спросить");ViewerUi.styleButton(ask,palette.chip,palette.accent,palette.light);panel.addView(ask);
-        scan=button("Полный разбор поведения · без ИИ");panel.addView(scan);
-        full=button("Весь чат нейросетью · медленно");panel.addView(full);
-        if(compareArchive!=null){scan.setVisibility(android.view.View.GONE);full.setVisibility(android.view.View.GONE);}
+        Button presets=button("Идеи вопросов  ›");panel.addView(presets);
+        presets.setOnClickListener(v->{
+            if(busy)return;
+            String[] examples=compareArchive==null?new String[]{
+                "Кто первый написал?","Сколько сообщений?","Кто больше всего писал?",
+                "Как менялось общение со временем?","В каких ситуациях участники поддерживали друг друга?",
+                "Из-за чего возникали конфликты и как они разрешались?",
+                "Какие повторяющиеся модели поведения видны?","Какие обещания и договорённости обсуждали?"}:
+                new String[]{"Чем отличается манера общения в А и Б?","Сравни взаимную поддержку и реакцию на конфликты.",
+                    "Как менялось общение со временем в каждом чате?","Сравни инициативу и взаимность, приведи конкретные цитаты."};
+            new FontDialog.Builder(this).setTitle("Выбери вопрос").setItems(examples,(d,i)->{
+                if(!busy){question.setText(examples[i]);question.setSelection(question.length());}
+            }).setNegativeButton("Закрыть",null).show();
+        });
+        question.addTextChangedListener(new android.text.TextWatcher(){
+            public void beforeTextChanged(CharSequence s,int start,int count,int after){}
+            public void onTextChanged(CharSequence s,int start,int before,int count){updateAsk();}
+            public void afterTextChanged(android.text.Editable s){}
+        });
+        advanced=button("Дополнительный анализ  ›");panel.addView(advanced);
+        advancedPanel=new LinearLayout(this);advancedPanel.setOrientation(LinearLayout.VERTICAL);panel.addView(advancedPanel);
+        advancedPanel.setVisibility(android.view.View.GONE);
+        scan=button("Полный разбор поведения · без ИИ");advancedPanel.addView(scan);
+        full=button("Весь чат нейросетью · медленно");advancedPanel.addView(full);
+        advanced.setOnClickListener(v->{advancedOpen=!advancedOpen;
+            advancedPanel.setVisibility(advancedOpen?android.view.View.VISIBLE:android.view.View.GONE);
+            advanced.setText(advancedOpen?"Дополнительный анализ  ▾":"Дополнительный анализ  ›");});
+        if(compareArchive!=null)advanced.setVisibility(android.view.View.GONE);
         stop=button("Отменить операцию");panel.addView(stop);
         results=new LinearLayout(this);results.setOrientation(LinearLayout.VERTICAL);results.setPadding(dp(10),dp(8),dp(10),dp(8));panel.addView(results);
         FontStyler.bind(this);
@@ -106,8 +140,8 @@ public final class DeepAnalystActivity extends Activity {
         ScrollView scroll=new ScrollView(this);scroll.addView(choices);
         android.app.AlertDialog picker=new FontDialog.Builder(this).setTitle("Выбор модели").setView(scroll).setNegativeButton("Закрыть",null).create();
         String group="";
-        for(int i:AnalystModelCatalog.pickerOrder()){
-            String nextGroup=AnalystModelCatalog.group(i);
+        for(int i:AnalystModelCatalog.focusedPickerOrder(getNoBackupFilesDir(),selectedModel)){
+            String nextGroup=AnalystModelCatalog.focusedGroup(i);
             if(!group.equals(nextGroup)){group=nextGroup;TextView heading=text(group,14);heading.setTypeface(null,android.graphics.Typeface.BOLD);choices.addView(heading);}
             final int index=i;boolean custom=i==AnalystModelCatalog.CUSTOM,selected=i==selectedModel;
             File file=AnalystModelCatalog.file(getNoBackupFilesDir(),i);
@@ -117,7 +151,7 @@ public final class DeepAnalystActivity extends Activity {
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=dp(8);choices.addView(row,lp);
             TextView name=text((selected?"✓  ":"")+(custom?"Своя модель":AnalystModelCatalog.MODELS[i].label),16);
             name.setTypeface(null,android.graphics.Typeface.BOLD);row.addView(name);
-            TextView info=text((custom?"Файл LiteRT-LM":AnalystModelCatalog.MODELS[i].display())+
+            TextView info=text((custom?"Файл LiteRT-LM":AnalystModelCatalog.MODELS[i].description+" · "+String.format(java.util.Locale.ROOT,"%.2f ГБ",AnalystModelCatalog.MODELS[i].size/1e9))+
                 (AnalystModelCatalog.installed(file,i)?" · Установлена":file.exists()?" · Файл неполный":" · Не установлена")+
                 (custom?"":"\nЖелательно свободно ОЗУ от "+String.format(java.util.Locale.ROOT,"%.1f ГБ",AnalystModelCatalog.MODELS[i].suggestedFreeBytes()/1e9)+" (оценка)"),12);info.setTextColor(palette.muted);row.addView(info);
             row.setFocusable(true);row.setContentDescription(name.getText()+". "+info.getText());
@@ -130,7 +164,7 @@ public final class DeepAnalystActivity extends Activity {
         boolean runtime=runtimeAvailable(),present=AnalystModelCatalog.installed(model,selectedModel);
         status.setText(!runtime?"В этой лёгкой сборке нет движка нейросети. Нужна экспериментальная ИИ-сборка.":present?"Выбранная модель установлена локально · "+(model.length()/1000000)+" МБ.":selectedModel==AnalystModelCatalog.CUSTOM?"Выбери совместимую модель LiteRT-LM из файлов телефона.":"Скачай выбранную модель. Для слабого телефона начни с Qwen3-0.6B.");
         modelSelector.setText((selectedModel==AnalystModelCatalog.CUSTOM?"Своя модель":AnalystModelCatalog.MODELS[selectedModel].label)+"  ›");
-        modelSelector.setEnabled(!busy);install.setEnabled(runtime&&!busy&&selectedModel==AnalystModelCatalog.CUSTOM);remove.setEnabled(model.exists()&&!busy);ask.setEnabled(runtime&&present&&!busy);
+        modelSelector.setEnabled(!busy);install.setEnabled(runtime&&!busy&&selectedModel==AnalystModelCatalog.CUSTOM);remove.setEnabled(model.exists()&&!busy);updateAsk();
         install.setVisibility(selectedModel==AnalystModelCatalog.CUSTOM?android.view.View.VISIBLE:android.view.View.GONE);
         download.setVisibility(selectedModel<AnalystModelCatalog.CUSTOM&&!present?android.view.View.VISIBLE:android.view.View.GONE);
         remove.setVisibility(model.exists()?android.view.View.VISIBLE:android.view.View.GONE);
@@ -139,6 +173,39 @@ public final class DeepAnalystActivity extends Activity {
         download.setEnabled(runtime&&!busy&&selectedModel<AnalystModelCatalog.CUSTOM&&checkSelfPermission(android.Manifest.permission.INTERNET)==android.content.pm.PackageManager.PERMISSION_GRANTED);
         scan.setEnabled(!busy);full.setEnabled(runtime&&present&&!busy);stop.setEnabled(busy);
         modelCheck.setVisibility(runtime&&present?android.view.View.VISIBLE:android.view.View.GONE);modelCheck.setEnabled(runtime&&present&&!busy);
+        modelOptions.setVisibility(model.exists()?android.view.View.VISIBLE:android.view.View.GONE);
+        modelMaintenance.setVisibility(model.exists()&&modelOptionsOpen?android.view.View.VISIBLE:android.view.View.GONE);
+    }
+    private boolean factualQuestion(){
+        return compareArchive==null&&question!=null&&ChatQuestionAnalyst.supports(question.getText().toString());
+    }
+    private void updateAsk(){
+        if(ask==null||question==null)return;
+        boolean exact=factualQuestion();
+        ask.setText(exact?"Ответить по фактам":"Спросить ИИ");
+        ask.setEnabled(!busy&&!question.getText().toString().trim().isEmpty()&&
+            (exact||(runtimeAvailable()&&AnalystModelCatalog.installed(model,selectedModel))));
+    }
+    private void analyzeFacts(String q){
+        busy("Проверяю факты по всей переписке…");results.removeAllViews();
+        worker.execute(()->{
+            try{
+                ChatQuestionAnalyst.Answer answer=ChatQuestionAnalyst.readOnly(getDatabasePath(DeepChatContext.dbName(archive)),
+                    ChatQuestionAnalyst.parse(q),taskCancel);
+                runOnUiThread(()->{
+                    if(stopped.get())return;busy=false;refresh();
+                    if(answer==null||taskCancel.get()){status.setText("Операция отменена.");return;}
+                    results.addView(text("Точный расчёт по архиву · без нейросети",18));
+                    results.addView(text(answer.text,15));
+                    for(ChatQuestionAnalyst.Evidence src:answer.sources){
+                        Button link=button(src.author+" · "+src.date+"\n"+src.excerpt);
+                        link.setAllCaps(false);results.addView(link);
+                        link.setOnClickListener(v->{setResult(RESULT_OK,new Intent().putExtra("archive",archive).putExtra("message",src.id));finish();});
+                    }
+                });
+            }catch(Exception failure){runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();
+                status.setText(taskCancel.get()?"Операция отменена.":"Не удалось прочитать переписку.");});}
+        });
     }
     private void busy(String message){taskCancel.set(false);busy=true;modelSelector.setEnabled(false);install.setEnabled(false);remove.setEnabled(false);ask.setEnabled(false);download.setEnabled(false);scan.setEnabled(false);full.setEnabled(false);modelCheck.setEnabled(false);stop.setEnabled(true);stop.setVisibility(android.view.View.VISIBLE);status.setText(message);}
     private void downloadModel(AnalystModelCatalog.Model spec){
@@ -286,7 +353,9 @@ public final class DeepAnalystActivity extends Activity {
         });
     }
     private void analyze(){
-        String q=question.getText().toString().trim();if(q.isEmpty()||!canStartModel())return;
+        String q=question.getText().toString().trim();if(q.isEmpty()||busy)return;
+        if(factualQuestion()){analyzeFacts(q);return;}
+        if(!canStartModel())return;
         if(!MODEL_BUSY.compareAndSet(false,true)){status.setText("Предыдущий запрос ещё завершает работу.");return;}
         busy("Подбираю сообщения, затем запускаю модель…");results.removeAllViews();
         worker.execute(()->{
@@ -313,6 +382,7 @@ public final class DeepAnalystActivity extends Activity {
                 runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();results.removeAllViews();
                     results.addView(text("Ответ модели · не проверенный факт",18));
                     results.addView(text(answer.isEmpty()?"Модель не вернула текст.":DeepChatContext.clip(answer,16000),15));
+                    if(dual!=null&&!dual.citesBoth(answer,prompt))results.addView(text("Сравнение не подтверждено цитатами из обеих переписок. Проверь выводы.",14));
                     if(!DeepChatContext.unknownCitations(answer,prompt).isEmpty())results.addView(text("Внимание: ответ содержит неизвестные номера источников. Перепроверь выводы.",14));
                     if(!answer.matches("(?s).*\\[#\\d+\\].*"))results.addView(text("Модель не сослалась на конкретные сообщения. Выводы не подтверждены.",14));
                     long sent=context.sources.stream().filter(src->DeepChatContext.sentSource(prompt,src.id)).count();
@@ -321,6 +391,7 @@ public final class DeepAnalystActivity extends Activity {
                         // Only offer sources that were actually sent to the model.
                         if(!DeepChatContext.sentSource(prompt,src.id))continue;
                         Button source=button("[#"+src.id+"] "+src.author+" · "+src.date+"\n"+src.body);
+                        source.setGravity(android.view.Gravity.START|android.view.Gravity.CENTER_VERTICAL);
                         source.setAllCaps(false);results.addView(source);
                         source.setOnClickListener(v->{
                             DualAnalystContext.Link link=dual==null?null:dual.links.get(src.id);
