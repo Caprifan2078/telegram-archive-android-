@@ -388,8 +388,8 @@ final class ArchiveFileImport {
                     File parent=target.getParentFile();
                     if(!parent.isDirectory()&&!parent.mkdirs())throw new IOException("Не удалось создать каталог RAR");
                     if(target.exists())throw new IOException("Повторный файл в RAR");
-                    try(OutputStream raw=new BufferedOutputStream(new FileOutputStream(target))){
-                        OutputStream bounded=new FilterOutputStream(raw){
+                    try(OutputStream rawOutput=new BufferedOutputStream(new FileOutputStream(target))){
+                        OutputStream bounded=new FilterOutputStream(rawOutput){
                             long size;
                             @Override public void write(int one) throws IOException{
                                 size++;budget.add(1,size);out.write(one);
