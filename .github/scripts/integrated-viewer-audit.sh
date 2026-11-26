@@ -24,6 +24,7 @@ case "${1:-}" in
   current_help) classes=(Qa00HelpLifecycleTest Qa00MediaFilterTest Qa00NavigationCoreTest UiMenuTourRegressionTest Qa01TwoChatsTest ConversationPdfExporterTest) ;;
   chat_polish) classes=(ChatVisualConsistencyRegressionTest ViewerThemeRegressionTest UiChromeOverlapRegressionTest QaVisualAuditScreenshotsTest LightAnalyticsVisualTest MediaGridResponsiveAndroidTest) ;;
   section_clarity) classes=(SavedWorkspaceRegressionTest QuoteSavedStoreIntegrationTest Qa00NavigationCoreTest ChronologyHubRegressionTest RelationshipAnalyticsExplanationUiTest RelationshipPaginationRegressionTest AnalyticsSectionNavigationRegressionTest LightAnalyticsVisualTest QaVisualAuditScreenshotsTest GroupTimelineScreenRegressionTest) ;;
+  event_management) classes=(RelationshipPaginationRegressionTest RelationshipsMigrationTest HistoryEventSearchRegressionTest ChronologyHubRegressionTest RelationshipAnalyticsExplanationUiTest) ;;
   *) echo "Unknown audit suite" >&2; exit 2 ;;
 esac
 qualified=()

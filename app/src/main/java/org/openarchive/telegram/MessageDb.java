@@ -201,6 +201,20 @@ class MessageDb extends SQLiteOpenHelper {
         }
         return out;
     }
+    void updateRelationshipEvent(long id,String title,String note){
+        if(id<=0||title==null||title.trim().isEmpty()||title.trim().length()>90)
+            throw new IllegalArgumentException("Название события: 1–90 символов");
+        if(note!=null&&note.length()>2500)throw new IllegalArgumentException("Описание: до 2500 символов");
+        ContentValues v=new ContentValues();v.put("title",title.trim());v.put("note",note==null?"":note.trim());
+        if(getWritableDatabase().update("relationship_events",v,"id=?",new String[]{Long.toString(id)})!=1)
+            throw new IllegalArgumentException("Событие не найдено");
+    }
+    /** Remove only a personal annotation link, never an attachment or original file. */
+    void unlinkRelationshipMedia(long eventId,long attachmentId){
+        if(eventId==0||attachmentId<=0)throw new IllegalArgumentException("Неверная ссылка");
+        getWritableDatabase().delete("relationship_links","event_id=? AND attachment_id=?",
+            new String[]{Long.toString(eventId),Long.toString(attachmentId)});
+    }
     void removeRelationshipEvent(long id){
         SQLiteDatabase d=getWritableDatabase();d.beginTransaction();
         try{d.delete("relationship_links","event_id=?",new String[]{String.valueOf(id)});
@@ -209,7 +223,8 @@ class MessageDb extends SQLiteOpenHelper {
         }finally{d.endTransaction();}
     }
     void linkRelationshipMedia(long eventId,long attachmentId){
-        SQLiteDatabase d=getWritableDatabase();
+        SQLiteDatabase d=getWritableDatabase();d.beginTransaction();
+        try{
         if(eventId==0)throw new IllegalArgumentException("Неверная отметка");
         String table=eventId>0?"relationship_events":"conversation_periods";
         try(Cursor check=d.rawQuery("SELECT 1 FROM "+table+" WHERE id=?",
@@ -223,6 +238,8 @@ class MessageDb extends SQLiteOpenHelper {
         }
         ContentValues v=new ContentValues();v.put("event_id",eventId);v.put("attachment_id",attachmentId);v.put("path",path);
         d.insertWithOnConflict("relationship_links",null,v,SQLiteDatabase.CONFLICT_IGNORE);
+        d.setTransactionSuccessful();
+        }finally{d.endTransaction();}
     }
     List<Attachment> relationshipMedia(long eventId){
         ArrayList<Attachment> out=new ArrayList<>();
