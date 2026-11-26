@@ -80,6 +80,9 @@ public final class LocalLlmRuntime {
             if(prompt.length()>1500)throw new IllegalArgumentException("Candidate requires short prompt");
             try(Engine engine=open(path,1280)){return infer(engine,prompt,256,cancel,true);}
         }
+        if(name.equals("analyst-qwen2515.litertlm")){
+            try(Engine engine=open(path,4096)){return infer(engine,prompt,512,cancel,true);}
+        }
         boolean compactLegacy=name.equals("analyst-qwen06.litertlm");
         int budget=compactLegacy?Math.max(768,outputLimit):outputLimit;
         try(Engine engine=open(path,compactLegacy?4096:contextTokens(prompt,budget))){return infer(engine,prompt,budget,cancel,compactLegacy);}
