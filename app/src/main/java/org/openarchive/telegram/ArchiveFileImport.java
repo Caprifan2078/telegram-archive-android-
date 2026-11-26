@@ -73,6 +73,8 @@ final class ArchiveFileImport {
     }
     static final class Budget {
         long total; int count;
+        int sevenZDeclared=-1,sevenZHtml=-1;
+        long sevenZSourceBytes=-1;
         void next(String name) throws IOException{
             if(++count>MAX_FILES)throw new IOException("Слишком много файлов в архиве");
             if(name.length()>1500)throw new IOException("Очень длинное имя файла в архиве");
@@ -114,7 +116,17 @@ final class ArchiveFileImport {
             }
             else throw new IOException("Ожидался ZIP, 7z или RAR");
             progress.update("Распаковка завершена. Ищу HTML переписки…");
-            File selected=findChatRoot(root,0);
+            File selected;
+            try{selected=findChatRoot(root,0);}
+            catch(ExportNotFound notFound){
+                if(budget.sevenZDeclared>=0)
+                    throw new ExportNotFound(notFound.getMessage()+"\n7z: записей в заголовке "+budget.sevenZDeclared+
+                        ", стандартных HTML в заголовке "+budget.sevenZHtml+
+                        ", обработано записей "+budget.count+
+                        ", распаковано байт "+budget.total+
+                        ", размер прочитанного архива "+budget.sevenZSourceBytes+" байт.");
+                throw notFound;
+            }
             progress.update("Распаковано файлов: "+budget.count+"; найден экспорт Telegram");
             return selected;
         }catch(Exception fail){
@@ -428,6 +440,24 @@ final class ArchiveFileImport {
                 org.apache.commons.compress.archivers.sevenz.SevenZFile.builder()
                     .setSeekableByteChannel(channel).setPassword(password)
                     .setMaxMemoryLimitKiB(131072).get()){
+            // Compare the decoder's header inventory with actual extraction;
+            // a successful return must not hide missing or truncated entries.
+            int declared=0,canonical=0;
+            long declaredBytes=0;
+            for(org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry header:archive.getEntries()){
+                if(++declared>MAX_FILES)throw new IOException("Слишком много файлов в 7z");
+                if(header.isAntiItem())throw new IOException("7z содержит записи удаления, не обычный экспорт Telegram");
+                String name=ArchiveImportPath.normalize(header.getName(),header.isDirectory());
+                if(header.isDirectory())continue;
+                long size=header.getSize();
+                if(size<0||size>MAX_ENTRY||declaredBytes>MAX_TOTAL-size)
+                    throw new IOException("Лимит безопасной распаковки 7z превышен");
+                declaredBytes+=size;
+                if(TelegramExportHtml.canonical(new File(name).getName()))canonical++;
+            }
+            budget.sevenZDeclared=declared;budget.sevenZHtml=canonical;
+            budget.sevenZSourceBytes=channel.size();
+            progress.update("7z: "+declared+" записей, "+canonical+" стандартных HTML. Распаковываю…");
             org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry entry;
             byte[] bytes=new byte[128*1024];
             while((entry=archive.getNextEntry())!=null){
@@ -442,11 +472,16 @@ final class ArchiveFileImport {
                 long written=0;
                 try(OutputStream out=new BufferedOutputStream(new FileOutputStream(target))){
                     int count;while((count=archive.read(bytes))!=-1){
-                        written+=count;budget.add(count,written);out.write(bytes,0,count);
+                        written+=count;
+                        if(written>entry.getSize())throw new IOException("Размер распакованного файла 7z превышает объявленный");
+                        budget.add(count,written);out.write(bytes,0,count);
                     }
                 }
+                if(written!=entry.getSize())throw new IOException("Файл 7z распакован не полностью");
                 emit(budget,progress);
             }
+            if(budget.count!=declared||budget.total!=declaredBytes)
+                throw new IOException("7z распакован не полностью: обработано "+budget.count+" из "+declared+" записей");
         }
     }
     private static void extractRar(Context ctx,Uri uri,File root,char[] password,Budget budget,Progress progress) throws Exception{
