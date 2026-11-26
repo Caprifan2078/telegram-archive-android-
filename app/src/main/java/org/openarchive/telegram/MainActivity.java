@@ -3106,9 +3106,9 @@ public class MainActivity extends Activity {
                 filterActions.addView(resetFilters,p(132,44));searchArea.addView(filterActions,p(-1,-2));resetFilters.setOnClickListener(v->resetSearchFilters());
             }else{
                 if(!byAuthor.isEmpty()||onlyMedia){
-                    String applied="Неактивные фильтры: "+(byAuthor.isEmpty()?"":"автор «"+byAuthor+"»")+
+                    String applied="Фильтры не применяются в быстром поиске: "+(byAuthor.isEmpty()?"":"автор «"+byAuthor+"»")+
                         (!byAuthor.isEmpty()&&onlyMedia?", ":"")+(onlyMedia?"только с медиа":"");
-                    TextView filterNotice=text(applied,11,SUB);filterNotice.setContentDescription(applied);filterNotice.setPadding(px(7),px(4),px(7),px(4));
+                    TextView filterNotice=text(applied,11,SUB);filterNotice.setContentDescription("Фильтры глубокого поиска (в быстром режиме не применяются)");filterNotice.setPadding(px(7),px(4),px(7),px(4));
                     searchArea.addView(filterNotice,p(-1,-2));
                     Button reset=btn("Сбросить фильтры");reset.setContentDescription("Сбросить фильтры поиска");
                     searchArea.addView(reset,p(-1,48));
