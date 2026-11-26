@@ -35,7 +35,8 @@ public class Qa00HelpLifecycleTest {
             if(item==null&&section!=null&&!section.getVisibleBounds().isEmpty()){section.click();device.waitForIdle();continue;}
             if(item!=null&&!item.getVisibleBounds().isEmpty()){item.click();device.waitForIdle();return;}
             UiObject2 scroll=device.findObject(By.clazz("android.widget.ScrollView"));
-            assertNotNull("Drawer scroll area missing",scroll);Rect b=scroll.getVisibleBounds();
+            assertNotNull("Drawer scroll area missing",scroll);Rect b;
+            try{b=scroll.getVisibleBounds();}catch(androidx.test.uiautomator.StaleObjectException stale){device.waitForIdle();continue;}
             device.swipe(b.centerX(),b.top+b.height()*3/4,b.centerX(),b.top+b.height()/4,25);device.waitForIdle();
         }
         fail("Help entry unavailable in drawer");

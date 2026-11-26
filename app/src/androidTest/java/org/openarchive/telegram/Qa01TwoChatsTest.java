@@ -84,7 +84,7 @@ public class Qa01TwoChatsTest {
                 assertNotNull(device.wait(Until.findObject(By.desc("Всего чатов: 2")),8000));
                 tap("QA01 Альфа");
                 requireMessage("QA01_ONLY_ALPHA");
-                assertNull("Wrong chat message visible",device.findObject(By.textContains("QA01_ONLY_BETA")));
+                assertTrue("Wrong chat message visible",device.wait(Until.gone(By.textContains("QA01_ONLY_BETA")),5000));
                 UiObject2 pdf=device.wait(Until.findObject(By.desc("Сохранить переписку в PDF")),5000);
                 assertNotNull("Dedicated PDF action missing",pdf);pdf.click();device.waitForIdle();
                 assertNotNull("PDF explanation missing",device.wait(Until.findObject(By.textContains("Вложения будут обозначены")),5000));
@@ -105,12 +105,12 @@ public class Qa01TwoChatsTest {
                 assertNotNull(locate("Мои переписки"));
                 tap("QA01 Бета");
                 requireMessage("QA01_ONLY_BETA");
-                assertNull("Wrong chat message visible",device.findObject(By.textContains("QA01_ONLY_ALPHA")));
+                assertTrue("Wrong chat message visible",device.wait(Until.gone(By.textContains("QA01_ONLY_ALPHA")),5000));
                 device.executeShellCommand("screencap -p /sdcard/Download/ta_qa01_beta.png");
                 scenario.recreate();
                 device.waitForIdle();
                 requireMessage("QA01_ONLY_BETA");
-                assertNull("Wrong chat after Activity recreation",device.findObject(By.textContains("QA01_ONLY_ALPHA")));
+                assertTrue("Wrong chat after Activity recreation",device.wait(Until.gone(By.textContains("QA01_ONLY_ALPHA")),5000));
                 device.pressBack();device.waitForIdle();
                 UiObject2 beta=locate("QA01 Бета");
                 assertNotNull("Second chat card missing",beta);

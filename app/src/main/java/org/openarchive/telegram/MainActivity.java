@@ -2543,6 +2543,16 @@ public class MainActivity extends Activity {
     }
     private void activateArchive(String key){activateArchive(key,-1);}
     /** Direct jump from grouped timeline avoids the old chat's saved-scroll restoration. */
+    /** Remove all old archive content before a potentially slow reading-anchor lookup. */
+    private void clearArchiveTransition(){
+        list.animate().cancel();list.setAlpha(1f);list.setTranslationY(0f);
+        list.removeAllViews();list.setTag(null);renderedMessageViews.clear();
+        list.setBackgroundColor(BG);scroll.scrollTo(0,0);
+        hideGalleryOverlay();scroll.setVisibility(View.VISIBLE);
+        pinnedBar.removeAllViews();filterBar.removeAllViews();searchArea.removeAllViews();
+        savedComposer.setVisibility(View.GONE);bottomPager.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
+        highlightId=-1;refreshTabs();status.setText("Открываю переписку…");status.setVisibility(View.VISIBLE);
+    }
     private void activateArchive(String key,long exactMessageId){
         saveReadingProgress();
         if(importing){toast("Импорт ещё идёт");return;}
@@ -2556,6 +2566,7 @@ public class MainActivity extends Activity {
         chatOffset=searchOffset=mediaOffset=favOffset=0;autoLoaded=PAGE;home=false;screen="chat";returnScreen="";searchReturnsToAnalytics=false;chatOffset=getPreferences(MODE_PRIVATE).getInt("read_offset_"+activeKey,0);
         pendingRestoreId=getPreferences(MODE_PRIVATE).getLong("read_id_"+activeKey,-1);
         pendingRestoreTop=getPreferences(MODE_PRIVATE).getInt("read_top_"+activeKey,0);
+        clearArchiveTransition();
         if(exactMessageId>0){
             pendingRestoreId=-1;
             jump(exactMessageId,"multi_timeline");
@@ -2564,7 +2575,7 @@ public class MainActivity extends Activity {
         if(pendingRestoreId>0){
             final String openedKey=activeKey;
             final MessageDb restoreDb=db;
-            final long messageId=pendingRestoreId;
+            final long messageId=pendingRestoreId;final int restoreToken=loadToken;
             worker.execute(()->{
                 if(!openedKey.equals(activeKey)||restoreDb!=db)return;
                 int restoredPos;
@@ -2574,14 +2585,14 @@ public class MainActivity extends Activity {
                 try{restoredPos=restoreDb.hasMessage(messageId)?restoreDb.positionFor(messageId):-1;}
                 catch(RuntimeException closedOrInvalid){
                     runOnUiThread(()->{
-                        if(isFinishing()||!openedKey.equals(activeKey)||restoreDb!=db)return;
+                        if(!sameScreenRequest(restoreDb,openedKey,restoreToken)||!"chat".equals(screen))return;
                         pendingRestoreId=-1;showPage();
                     });
                     return;
                 }
                 final int pos=restoredPos;
                 runOnUiThread(()->{
-                    if(isFinishing()||!openedKey.equals(activeKey)||restoreDb!=db)return;
+                    if(!sameScreenRequest(restoreDb,openedKey,restoreToken)||!"chat".equals(screen))return;
                     if(pos<0){pendingRestoreId=-1;showPage();return;}
                     chatOffset=Math.max(0,pos-3);showPage();
                 });
@@ -4607,7 +4618,7 @@ public class MainActivity extends Activity {
             final View restored=renderedMessageViews.get(pendingRestoreId);
             final int top=pendingRestoreTop;
             pendingRestoreId=-1;
-            if(restored!=null){scroll.post(()->scroll.scrollTo(0,Math.max(0,restored.getTop()-top)));return;}
+            if(restored!=null){final int restoreToken=loadToken;scroll.post(()->{if(restoreToken==loadToken&&"chat".equals(screen)&&!home&&restored.getParent()==list)scroll.scrollTo(0,Math.max(0,restored.getTop()-top));});return;}
         }
         final View target=focus;
         final View targetBubble=glowBubble;

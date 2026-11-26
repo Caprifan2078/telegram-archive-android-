@@ -55,4 +55,17 @@ public final class InterfaceFunctionRegressionTest {
             assertNotNull(find(list,"В переписке нет медиа"));assertNull(find(list,"Показать все файлы"));
         }catch(Exception e){throw new AssertionError(e);}});
     }
+    @Test public void archiveTransitionImmediatelyRemovesOldViewsAndRestoresHeader(){
+        MainActivity a=rule.getActivity();
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{try{
+            LinearLayout list=(LinearLayout)field("list").get(a);
+            TextView previous=new TextView(a);previous.setText("OLD_ARCHIVE_SENTINEL");list.addView(previous);list.setTag("home-list");
+            field("home").set(a,false);field("screen").set(a,"chat");field("activeName").set(a,"New synthetic chat");
+            call(a,"clearArchiveTransition");
+            assertEquals(0,list.getChildCount());assertNull(list.getTag());
+            assertEquals("New synthetic chat",((TextView)field("title").get(a)).getText().toString());
+            assertEquals(View.VISIBLE,((View)field("status").get(a)).getVisibility());
+            assertEquals(View.GONE,((View)field("mediaRecycler").get(a)).getVisibility());
+        }catch(Exception e){throw new AssertionError(e);}});
+    }
 }

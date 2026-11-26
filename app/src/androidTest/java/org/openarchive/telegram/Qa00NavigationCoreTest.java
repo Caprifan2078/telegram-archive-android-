@@ -61,6 +61,16 @@ public class Qa00NavigationCoreTest {
         v.click();
         device.waitForIdle();
     }
+    private void awaitScreen(MainActivity a,String expected)throws Exception{
+        long deadline=android.os.SystemClock.uptimeMillis()+5000;
+        java.util.concurrent.atomic.AtomicReference<String> actual=new java.util.concurrent.atomic.AtomicReference<>();
+        do{
+            inst.runOnMainSync(()->{try{actual.set((String)field(a,"screen"));}catch(Exception e){throw new AssertionError(e);}});
+            if(expected.equals(actual.get()))return;
+            Thread.sleep(50);
+        }while(android.os.SystemClock.uptimeMillis()<deadline);
+        assertEquals("Screen did not settle",expected,actual.get());
+    }
     private void shown(String label) {
         assertNotNull("Expected UI text missing: "+label,visible(label));
     }
@@ -129,8 +139,7 @@ public class Qa00NavigationCoreTest {
         shown("Добавить переписку");
         try{
             tap("Добавить переписку");
-            assertNotEquals("One tap should leave the app for Android's document picker",
-                activity.getActivity().getPackageName(),device.getCurrentPackageName());
+            assertTrue("One tap must open Android document picker",device.wait(Until.hasObject(By.pkg(java.util.regex.Pattern.compile(".*documentsui.*"))),12000));
             assertNull("Unexpected two-choice import dialog",visible("Импорт переписки"));
         }finally{
             device.pressBack();device.waitForIdle();
@@ -245,7 +254,7 @@ public class Qa00NavigationCoreTest {
                 assertEquals("media",field(a,"screen"));
                 shown("Медиа");
                 tap("‹");
-                assertEquals("chat",field(a,"screen"));
+                awaitScreen(a,"chat");
                 shown("Медиа — по названию чата");
             }
         }finally {
