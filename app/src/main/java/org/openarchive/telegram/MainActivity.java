@@ -1546,8 +1546,9 @@ public class MainActivity extends Activity {
             item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2e6fc6f4),outlined(PANEL,14,false),null));
             LinearLayout.LayoutParams margins=p(-1,70);margins.setMargins(px(2),px(1),px(2),px(5));list.addView(item,margins);
             String letter=name.isEmpty()?"?":name.substring(0,1).toUpperCase(Locale.ROOT);
-            TextView avatar=text(letter,20,FG);avatar.setTypeface(null,Typeface.BOLD);avatar.setGravity(Gravity.CENTER);
-            avatar.setBackground(gradient(participantColors[i%participantColors.length],0xff294968,100));
+            int avatarColor=participantColors[(key.hashCode()&Integer.MAX_VALUE)%participantColors.length];
+            TextView avatar=text(letter,20,ChatSurfacePolicy.avatarText(avatarColor));avatar.setTypeface(null,Typeface.BOLD);avatar.setGravity(Gravity.CENTER);
+            avatar.setBackground(shape(avatarColor,100));
             Bitmap picture=PersonalImages.load(this,getPreferences(MODE_PRIVATE).getString(PersonalImages.chatAvatarKey(key),""));
             if(picture!=null){avatar.setText("");avatar.setBackground(new android.graphics.drawable.BitmapDrawable(getResources(),PersonalImages.circular(picture,px(46))));}
             item.addView(avatar,p(46,46));
@@ -1562,7 +1563,7 @@ public class MainActivity extends Activity {
             preview.setSingleLine(true);preview.setEllipsize(TextUtils.TruncateAt.END);preview.setPadding(0,px(4),0,0);
             info.addView(preview);
             if(!isChatHidden(key))loadHomePreview(key,preview,homeToken);
-            Button actions=btn("⋮");actions.setContentDescription("Управление чатом "+name);
+            Button actions=btn("⋯");actions.setContentDescription("Управление чатом "+name);
             item.addView(actions,p(39,42));
             actions.setOnClickListener(v->showChatActions(key,name));
             item.setOnClickListener(v->{item.animate().cancel();item.setAlpha(1f);activateArchive(key);});
@@ -4502,20 +4503,21 @@ public class MainActivity extends Activity {
             if(parsed!=null)label=parsed.day.format(java.time.format.DateTimeFormatter.ofPattern("d MMMM yyyy",Locale.forLanguageTag("ru-RU")));
         }catch(Exception ignored){} // Unrecognized export dates remain visible verbatim.
         TextView d=text(label,11,SUB);d.setGravity(Gravity.CENTER);
-        d.setPadding(px(12),px(7),px(12),px(7));d.setBackground(shape(0xff23384b,14));
+        d.setPadding(px(12),px(7),px(12),px(7));d.setBackground(ViewerUi.surface(this,PANEL,14,themeIndex==2,false));
         LinearLayout r=row();r.setGravity(Gravity.CENTER);LinearLayout.LayoutParams rp=p(-1,38);rp.topMargin=px(10);list.addView(r,rp);r.addView(d);
     }
-    private CharSequence highlighted(String body,String find){
+    private CharSequence highlighted(String body,String find,int background){
         if(body==null)return "";if(find==null||find.trim().isEmpty())return body;
         SpannableString span=new SpannableString(body);
         for(int[] range:SearchHighlightPolicy.ranges(body,find,deep))
-            span.setSpan(new BackgroundColorSpan(0xffa37528),range[0],range[1],Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            span.setSpan(new BackgroundColorSpan(ChatSurfacePolicy.searchHighlight(ViewerPalette.of(themeIndex),background)),range[0],range[1],Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         return span;
     }
     private void renderMessages(List<MessageDb.Item> messages,Map<Long,List<MessageDb.Attachment>> files,Map<Long,MessageDb.ReplyInfo> replies,boolean results,boolean append){
         if(messages.isEmpty())return;
         if(!append)renderedMessageViews.clear();
         String last=append?lastRenderedDay:"",previousSender=null;
+        ViewerPalette palette=ViewerPalette.of(themeIndex);
         View focus=null;View glowBubble=null;int glowBase=0;long glowId=-1;
         for(MessageDb.Item m:messages){
             String date=day(m.date),sender=m.author==null?"":m.author.trim();
@@ -4532,7 +4534,7 @@ public class MainActivity extends Activity {
                     // Keep message text aligned with the first bubble in the group.
                     line.addView(new View(this),p(36,1));
                 }else{
-                    TextView avatar=text(initial(m.author),13,FG);avatar.setTypeface(null,Typeface.BOLD);
+                    TextView avatar=text(initial(m.author),13,ChatSurfacePolicy.avatarText(authorColor(m.author)));avatar.setTypeface(null,Typeface.BOLD);
                     avatar.setGravity(Gravity.CENTER);avatar.setBackground(shape(authorColor(m.author),100));
                     String avatarFile=getPreferences(MODE_PRIVATE).getString(PersonalImages.avatarKey(activeKey,m.author),"");
                     Bitmap portrait=PersonalImages.circularCached(this,avatarFile,px(29));
@@ -4549,11 +4551,12 @@ public class MainActivity extends Activity {
             int chosenColor=authorColor(m.author);
             // Colored avatars remain a useful sender cue; huge saturated message
             // backgrounds are tiring to read. Use muted author-tinted slate bubbles.
-            int bubbleColor=mixColors(0xff24394d,chosenColor,.32f);
+            int bubbleColor=ChatSurfacePolicy.bubble(palette,chosenColor,own);
+            int displayedColor=m.id==highlightId?ChatSurfacePolicy.highlight(palette,bubbleColor):bubbleColor;
+            int detailColor=ChatSurfacePolicy.secondary(palette,displayedColor);
             if(roundOnly)bubble.setBackgroundColor(Color.TRANSPARENT);
-            else bubble.setBackground(gradient(m.id==highlightId?HIGHLIGHT:bubbleColor,
-                m.id==highlightId?HIGHLIGHT:darken(bubbleColor),bubbleRadius));
-            if(m.id==highlightId){glowBubble=bubble;glowBase=chosenColor;glowId=m.id;line.setBackground(shape(0x443ad0fc,12));}
+            else bubble.setBackground(gradient(displayedColor,displayedColor,bubbleRadius));
+            if(m.id==highlightId){glowBubble=bubble;glowBase=bubbleColor;glowId=m.id;line.setBackground(shape(0x443ad0fc,12));}
             LinearLayout.LayoutParams bp=p(-2,-2);line.addView(bubble,bp);
             if(own){
                 String ownFile=getPreferences(MODE_PRIVATE).getString(PersonalImages.avatarKey(activeKey,m.author),"");
@@ -4565,12 +4568,12 @@ public class MainActivity extends Activity {
                     line.addView(ownAvatar,avatarParams);
                 }
             }
-            int maxWidth=getResources().getDisplayMetrics().widthPixels-px(93);
-            if(maxWidth<px(190))maxWidth=px(240);final int mw=maxWidth;
+            int viewport=list.getWidth()>0?list.getWidth():getResources().getDisplayMetrics().widthPixels;
+            int maxWidth=Math.max(px(96),viewport-list.getPaddingLeft()-list.getPaddingRight()-px(56+2*bubbleInset()));final int mw=maxWidth;
             bubble.setOnLongClickListener(v->{messageActions(m);return true;});
             String author=m.author==null||m.author.isEmpty()?"Неизвестный отправитель":m.author;
             if(!roundOnly&&!continued){
-                TextView from=text(author,12,0xffd9ebfb);from.setMaxWidth(mw);
+                TextView from=text(author,12,detailColor);from.setMaxWidth(mw);
                 from.setTypeface(null,Typeface.BOLD);bubble.addView(from);
                 from.setOnLongClickListener(v->{pickAuthorColor(author);return true;});
             }
@@ -4580,26 +4583,27 @@ public class MainActivity extends Activity {
                     "↪ "+(reply.author.isEmpty()?"Ответ на сообщение":reply.author)+" · "+
                     (reply.preview.isEmpty()?"Сообщение с вложением":reply.preview):
                     "↪ Ответ на сообщение Telegram #"+reply.telegramId+" (оригинал отсутствует)";
-                TextView link=text(reference,12,reply.targetId>0?0xffd9faff:SUB);
+                int replySurface=ChatSurfacePolicy.blend(displayedColor,palette.accent,8);
+                TextView link=text(reference,12,ChatSurfacePolicy.secondary(palette,replySurface));
                 link.setMaxWidth(mw);link.setMaxLines(2);link.setEllipsize(TextUtils.TruncateAt.END);
                 link.setPadding(px(10),px(8),px(10),px(8));
-                link.setBackground(shape(0x44345b76,8));
+                link.setBackground(shape(replySurface,8));
                 bubble.addView(link,p(-1,-2));
                 if(reply.targetId>0)link.setOnClickListener(v->jump(reply.targetId,""));
             }
             if(m.body!=null&&!m.body.isEmpty()&&!roundOnly){
-                TextView body=text("",14,FG);body.setMaxWidth(mw);body.setText(highlighted(m.body,results?q:""));
+                TextView body=text("",15,FG);body.setMaxWidth(mw);body.setText(highlighted(m.body,results?q:"",displayedColor));
                 body.setPadding(0,px(3),0,px(2));body.setLineSpacing(px(2),1.0f);bubble.addView(body);
             }
             if(attachments!=null)for(MessageDb.Attachment a:attachments)bubble.addView(mediaTile(a,false),p(-2,-2));
             LinearLayout footer=row();footer.setGravity(Gravity.RIGHT);
-            TextView time=text(clock(m.date),11,SUB);
+            TextView time=text(clock(m.date),11,roundOnly?SUB:detailColor);
             footer.addView(time);
             if(roundOnly){time.setTextSize(10);time.setTextColor(SUB);}
             bubble.addView(footer);
             // Favorites are changed only in the long-press actions menu: no accidental tap targets.
             if(results){
-                TextView open=text("↗ К сообщению в чате",12,ACCENT);open.setPadding(0,px(8),0,px(2));bubble.addView(open);
+                TextView open=text("↗ К сообщению в чате",12,detailColor);open.setPadding(0,px(8),0,px(2));bubble.addView(open);
                 open.setOnClickListener(v->jump(m.id,"search"));
                 bubble.setOnClickListener(v->jump(m.id,"search"));
             }
@@ -4646,15 +4650,18 @@ public class MainActivity extends Activity {
         android.graphics.drawable.Drawable drawable=bubble.getBackground();
         if(!(drawable instanceof GradientDrawable))return;
         GradientDrawable bg=(GradientDrawable)drawable;
+        int duration=motionDuration(1750);
+        if(duration==0){bg.setColors(new int[]{background,background});highlightId=-1;return;}
+        final int start=ChatSurfacePolicy.highlight(ViewerPalette.of(themeIndex),background);final int token=loadToken;
         ValueAnimator animator=ValueAnimator.ofFloat(0f,1f);
-        animator.setDuration(1750);animator.setInterpolator(new DecelerateInterpolator());
+        animator.setDuration(duration);animator.setInterpolator(new DecelerateInterpolator());
         animator.addUpdateListener(animation->{
-            if(bubble.getParent()==null)return;
+            if(bubble.getParent()==null||token!=loadToken)return;
             float t=(float)animation.getAnimatedValue();
-            bg.setColors(new int[]{mixColors(0xff78cae4,background,t),mixColors(0xff397c9d,darken(background),t)});
+            int color=mixColors(start,background,t);bg.setColors(new int[]{color,color});
         });
         animator.start();
-        handler.postDelayed(()->{if(highlightId==id)highlightId=-1;},1850);
+        handler.postDelayed(()->{if(token==loadToken&&highlightId==id)highlightId=-1;},duration+100);
     }
     private String initial(String s){if(s==null||s.isEmpty())return "?";return s.substring(0,1).toUpperCase(Locale.ROOT);}
     private void messageActions(MessageDb.Item m){
@@ -5774,7 +5781,7 @@ public class MainActivity extends Activity {
     /** Media grid is independent of the message ScrollView. RecyclerView recycles
      * thumbnails so a chat with thousands of rounds never retains thousands of views. */
     private boolean mediaGridEnabled(){
-        return getPreferences(MODE_PRIVATE).getBoolean("gallery_grid_"+mediaKind,
+        return MediaGalleryState.supportsGrid(mediaKind)&&getPreferences(MODE_PRIVATE).getBoolean("gallery_grid_"+mediaKind,
             MediaGalleryState.defaultGrid(mediaKind));
     }
     private void updateMediaLayout(boolean preservePosition){
@@ -6226,7 +6233,7 @@ public class MainActivity extends Activity {
             if("sticker".equals(a.kind)&&isTgsPath(a.path)){
                 loadTgsPreview(a.path,box);
             }else loadThumbnail(a.path,isVideoStickerPath(a.path)?"video":a.kind,image);
-            if(a.kind.equals("video")||isVideoStickerPath(a.path)||a.kind.equals("gif")&&a.path.toLowerCase(Locale.ROOT).matches(".*\\.(mp4|webm|m4v)(\\?.*)?$")){TextView play=text("▶",27,FG);play.setGravity(Gravity.CENTER);box.addView(play,new FrameLayout.LayoutParams(-1,-1));}
+            if(a.kind.equals("video")||isVideoStickerPath(a.path)||a.kind.equals("gif")&&a.path.toLowerCase(Locale.ROOT).matches(".*\\.(mp4|webm|m4v)(\\?.*)?$")){TextView play=text("▶",24,Color.WHITE);play.setGravity(Gravity.CENTER);play.setBackground(shape(0xbb0b111b,100));FrameLayout.LayoutParams playSize=new FrameLayout.LayoutParams(px(52),px(52),Gravity.CENTER);box.addView(play,playSize);}
             box.setOnClickListener(v->openMedia(a));box.setOnLongClickListener(v->{mediaActions(a);return true;});
             FrameLayout outer=new FrameLayout(this);outer.addView(box,new FrameLayout.LayoutParams(px(size),px(gallery?84:Math.min(280,size))));return outer;
         }
@@ -6243,7 +6250,7 @@ public class MainActivity extends Activity {
         });holder.setClipToOutline(true);
         ImageView preview=new ImageView(this);preview.setScaleType(ImageView.ScaleType.CENTER_CROP);
         holder.addView(preview,new FrameLayout.LayoutParams(-1,-1));loadThumbnail(a.path,"round",preview);
-        TextView overlay=text("▶",size>130?38:28,FG);overlay.setGravity(Gravity.CENTER);
+        TextView overlay=text("▶",size>130?38:28,Color.WHITE);overlay.setGravity(Gravity.CENTER);
         overlay.setBackgroundColor(0x38000000);holder.addView(overlay,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout wrap=column();wrap.setGravity(Gravity.CENTER_HORIZONTAL);
         wrap.addView(holder,p(size,size));
