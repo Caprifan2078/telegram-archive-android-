@@ -130,9 +130,9 @@ final class ArchiveFileImport {
             try(ZipInputStream zip=new ZipInputStream(new BufferedInputStream(source,128*1024))){
                 ZipEntry entry;byte[] bytes=new byte[128*1024];
                 while((entry=zip.getNextEntry())!=null){
-                    String name=entry.getName();
-                    budget.next(name==null?"":name);
-                    BackupEntryPolicy.requireSafe(name,entry.isDirectory());
+                    String raw=entry.getName();
+                    budget.next(raw==null?"":raw);
+                    String name=ArchiveImportPath.normalize(raw,entry.isDirectory());
                     if(entry.isDirectory()){zip.closeEntry();continue;}
                     File file=safeFile(root,name);
                     if(entry.getSize()>MAX_ENTRY)throw new IOException("Слишком большой файл в ZIP");
@@ -188,11 +188,9 @@ final class ArchiveFileImport {
                 net.lingala.zip4j.model.LocalFileHeader entry;
                 byte[] bytes=new byte[128*1024];
                 while((entry=zip.getNextEntry())!=null){
-                    String name=entry.getFileName();
-                    budget.next(name==null?"":name);
-                    String safeName=entry.isDirectory()&&name!=null&&!name.endsWith("/")
-                        ?name+"/":name;
-                    BackupEntryPolicy.requireSafe(safeName,entry.isDirectory());
+                    String raw=entry.getFileName();
+                    budget.next(raw==null?"":raw);
+                    String name=ArchiveImportPath.normalize(raw,entry.isDirectory());
                     if(entry.isEncrypted()&&(password==null||password.length==0))
                         throw new PasswordRequired("ZIP защищён паролем. Введи пароль от архива.");
                     if(entry.isDirectory())continue;
@@ -238,11 +236,9 @@ final class ArchiveFileImport {
                 List<net.lingala.zip4j.model.FileHeader> entries=archive.getFileHeaders();
                 byte[] buffer=new byte[128*1024];
                 for(net.lingala.zip4j.model.FileHeader entry:entries){
-                    String name=entry.getFileName();
-                    budget.next(name==null?"":name);
-                    String safeName=entry.isDirectory()&&name!=null&&!name.endsWith("/")
-                        ?name+"/":name;
-                    BackupEntryPolicy.requireSafe(safeName,entry.isDirectory());
+                    String raw=entry.getFileName();
+                    budget.next(raw==null?"":raw);
+                    String name=ArchiveImportPath.normalize(raw,entry.isDirectory());
                     if(entry.isEncrypted()&&(password==null||password.length==0))
                         throw new PasswordRequired("ZIP защищён паролем. Введи пароль от архива.");
                     if(entry.isDirectory())continue;
@@ -335,13 +331,8 @@ final class ArchiveFileImport {
             org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry entry;
             byte[] bytes=new byte[128*1024];
             while((entry=archive.getNextEntry())!=null){
-                String name=entry.getName();budget.next(name==null?"":name);
-                // Unlike ZIP, 7z stores real directory entries without a trailing
-                // slash (e.g. "round_video_messages"). Validate them as directories
-                // while preserving traversal, absolute-path and link protection.
-                String safeName=entry.isDirectory()&&name!=null&&!name.endsWith("/")
-                    ?name+"/":name;
-                BackupEntryPolicy.requireSafe(safeName,entry.isDirectory());
+                String raw=entry.getName();budget.next(raw==null?"":raw);
+                String name=ArchiveImportPath.normalize(raw,entry.isDirectory());
                 if(entry.isDirectory())continue;
                 if(entry.getSize()>MAX_ENTRY)throw new IOException("7z содержит слишком большой файл");
                 File target=safeFile(root,name);
@@ -385,8 +376,9 @@ final class ArchiveFileImport {
                     .password(password).maxDictionarySize(128L*1024*1024).build())){
                 for(FileHeader entry:rar.getFileHeaders()){
                     // Even skipped directories and links consume the bounded entry budget.
-                    String name=entry.getFileName();
-                    budget.next(name==null?"":name);
+                    String raw=entry.getFileName();
+                    budget.next(raw==null?"":raw);
+                    String name=ArchiveImportPath.normalize(raw,entry.isDirectory());
                     if(entry.isDirectory())continue;
                     if(entry.getRedirection()!=null)continue; // never materialize archive links
                     if(entry.isEncrypted()&&(password==null||password.length==0))
@@ -396,8 +388,8 @@ final class ArchiveFileImport {
                     File parent=target.getParentFile();
                     if(!parent.isDirectory()&&!parent.mkdirs())throw new IOException("Не удалось создать каталог RAR");
                     if(target.exists())throw new IOException("Повторный файл в RAR");
-                    try(OutputStream raw=new BufferedOutputStream(new FileOutputStream(target))){
-                        OutputStream bounded=new FilterOutputStream(raw){
+                    try(OutputStream rawOutput=new BufferedOutputStream(new FileOutputStream(target))){
+                        OutputStream bounded=new FilterOutputStream(rawOutput){
                             long size;
                             @Override public void write(int one) throws IOException{
                                 size++;budget.add(1,size);out.write(one);
