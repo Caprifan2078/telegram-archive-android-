@@ -12,6 +12,12 @@ import static org.junit.Assert.*;
 /** Actual public Qwen weights, actual Android SQLite archive and native inference.
  * A missing model, network error, native crash or wrong answer must fail the test. */
 public final class RealLocalModelSmokeTest {
+    private static void logMemory(Context context,String stage){
+        android.app.ActivityManager manager=(android.app.ActivityManager)context.getSystemService(Context.ACTIVITY_SERVICE);
+        android.app.ActivityManager.MemoryInfo memory=new android.app.ActivityManager.MemoryInfo();manager.getMemoryInfo(memory);
+        android.os.Debug.MemoryInfo process=new android.os.Debug.MemoryInfo();android.os.Debug.getMemoryInfo(process);
+        android.util.Log.i("ModelSmoke","Memory "+stage+" availableMiB="+memory.availMem/1048576+" totalMiB="+memory.totalMem/1048576+" pssMiB="+process.getTotalPss()/1024+" lowMemory="+memory.lowMemory);
+    }
     @Test public void downloadedModelAnswersSyntheticChatQuestion() throws Exception {
         Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
         String key="model_smoke_"+UUID.randomUUID().toString().replace("-","");
@@ -52,10 +58,12 @@ public final class RealLocalModelSmokeTest {
             String prompt=selected.prompt("Во сколько назначили встречу? Укажи время цифрами и номер источника.");
             assertTrue(DeepChatContext.sentSource(prompt,evidence));
             android.util.Log.i("ModelSmoke","Stage: first native generation");
+            logMemory(context,"before-single");
             long inferenceStart=android.os.SystemClock.elapsedRealtime();
             String answer=(String)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
                 .getMethod("generate",String.class,String.class).invoke(null,model.getAbsolutePath(),prompt);
             android.util.Log.i("ModelSmoke","Single question ms="+(android.os.SystemClock.elapsedRealtime()-inferenceStart));
+            logMemory(context,"after-single");
             assertNotNull("Native model returned null",answer);
             android.util.Log.i("ModelSmoke","Synthetic answer: "+DeepChatContext.clip(answer,2000));
             assertFalse("Native model returned empty text",answer.trim().isEmpty());
@@ -73,10 +81,12 @@ public final class RealLocalModelSmokeTest {
                 "b",new DeepChatContext(b,1,"Одно сообщение","QA"));
             String comparisonPrompt=dual.prompt("Назови время встречи в А и Б цифрами, со ссылками [#1] и [#2].");
             android.util.Log.i("ModelSmoke","Stage: second native generation");
+            logMemory(context,"before-comparison");
             long comparisonStart=android.os.SystemClock.elapsedRealtime();
             String comparison=(String)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
                 .getMethod("generate",String.class,String.class).invoke(null,model.getAbsolutePath(),comparisonPrompt);
             android.util.Log.i("ModelSmoke","Comparison ms="+(android.os.SystemClock.elapsedRealtime()-comparisonStart));
+            logMemory(context,"after-comparison");
             assertNotNull(comparison);
             android.util.Log.i("ModelSmoke","Synthetic comparison: "+DeepChatContext.clip(comparison,2000));
             if(!comparison.contains("17:45")||!comparison.contains("09:30"))defects.add("comparison: incorrect time");
