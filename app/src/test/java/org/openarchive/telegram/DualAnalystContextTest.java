@@ -35,6 +35,14 @@ public class DualAnalystContextTest {
         DualAnalystContext.combine("same",sample("A",1),"same",sample("B",1));
     }
 
+    @Test public void compactPromptIncludesBothSidesAndHasSmallBudget(){
+        DualAnalystContext d=DualAnalystContext.combine("first",sample("A",16),"second",sample("B",16));
+        String prompt=d.context.compactPrompt("Сравни чаты",true);
+        assertTrue(prompt.length()<1500);
+        assertTrue(d.citesBoth("[#1] [#2]",prompt));
+        assertFalse(d.citesBoth("[#1] [#16]",prompt));
+        assertFalse(DeepChatContext.sentSource(prompt,16));
+    }
     @Test public void comparativeAnswerMustCiteBothRealSources(){
         DualAnalystContext d=DualAnalystContext.combine("first",sample("A",1),"second",sample("B",1));
         String prompt=d.prompt("Сравни чаты");
