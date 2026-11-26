@@ -53,7 +53,7 @@ final class ViewerUi {
     static ViewerPalette palette(Context c){return ViewerPalette.of(themeIndex(c));}
     static boolean light(Context c){return palette(c).light;}
     static void applyActivityTheme(android.app.Activity a){
-        a.setTheme(light(a)?R.style.AppThemeLight:R.style.AppTheme);
+        int index=themeIndex(a);a.setTheme(index==2?R.style.AppThemeLight:index==1?R.style.AppThemeGraphite:R.style.AppTheme);
     }
     static void systemBars(android.app.Activity a,ViewerPalette p){
         a.getWindow().setStatusBarColor(p.background);a.getWindow().setNavigationBarColor(p.background);

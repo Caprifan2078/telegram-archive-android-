@@ -964,7 +964,7 @@ public class MainActivity extends Activity {
         sideMenuItem(items,dialog,pane,"Личные заметки","Заметки, цитаты и избранное",()->{
             savedFavoritesOnly=false;home=false;screen="saved";renderSaved();});
         sideMenuItem(items,dialog,pane,"Корзина","Вернуть убранные переписки",this::showChatTrash);
-        View divider=new View(this);divider.setBackgroundColor(0xff2a455c);
+        View divider=new View(this);divider.setBackgroundColor(ViewerUi.mix(PANEL,SUB,24));
         LinearLayout.LayoutParams dividerMargin=p(-1,1);
         dividerMargin.setMargins(px(8),px(10),px(8),px(7));items.addView(divider,dividerMargin);
         sideMenuSection(items,"Архивы и резервные копии",false,group->{
@@ -1155,7 +1155,7 @@ public class MainActivity extends Activity {
         String key=FontPolicy.KEYS[index];
         TextView sample=new TextView(this);
         sample.setText("Telegram Archive\nСъешь ещё этих мягких французских булок\n1234567890 · Жизнь — это мгновения");
-        sample.setTextColor(0xff122639);sample.setTextSize(18);
+        sample.setTextColor(FG);sample.setTextSize(18);sample.setBackground(ViewerUi.surface(this,PANEL,ViewerUi.CARD,themeIndex==2,false));
         sample.setPadding(px(16),px(16),px(16),px(16));
         android.graphics.Typeface chosen;
         switch(key){
@@ -2669,7 +2669,7 @@ public class MainActivity extends Activity {
         // The app bar already explains tapping the chat title for media.
         // Omit the duplicate instruction inside the action sheet.
         String[] labels={"Найти сообщение","Перейти к дате","Анализ диалога","Хронология","Управление чатом","Все инструменты"};
-        String[] descriptions={"Поиск по тексту, автору и вложениям","Открыть сообщения выбранного дня","Количество сообщений, активность и участники","События, этапы, воспоминания и сравнения","Название, аватар, закрепление и корзина","Общие настройки, поиск по всем чатам и резервные копии"};
+        String[] descriptions={"Текст, автор, вложения","Сообщения выбранного дня","Активность и участники","События и периоды","Название, аватар, корзина","Настройки и общие инструменты"};
         Runnable[] actions={
             ()->openChatTool("search"),
             this::chooseDate,
@@ -3035,7 +3035,7 @@ public class MainActivity extends Activity {
                     @Override public void onStopTrackingTouch(android.widget.SeekBar seek){}
                 });
             }else{
-                TextView hint=text("Нажми на файл или удерживай для действий",11,SUB);
+                TextView hint=text("Удерживай для действий",12,SUB);
                 hint.setSingleLine(true);hint.setEllipsize(TextUtils.TruncateAt.END);
                 mediaTools.addView(hint,new LinearLayout.LayoutParams(0,px(42),1));
             }
@@ -3098,7 +3098,8 @@ public class MainActivity extends Activity {
             LinearLayout controls=row();quickButton=btn("По словам");deepButton=btn("По фразе и фильтрам");
             controls.addView(quickButton,new LinearLayout.LayoutParams(0,px(43),1));controls.addView(deepButton,new LinearLayout.LayoutParams(0,px(43),1));
             searchArea.addView(controls,p(-1,49));
-            quickButton.setBackground(shape(!deep?HIGHLIGHT:PANEL,10));deepButton.setBackground(shape(deep?HIGHLIGHT:PANEL,10));
+            quickButton.setBackground(ViewerUi.control(this,!deep?HIGHLIGHT:PANEL,10,themeIndex==2));deepButton.setBackground(ViewerUi.control(this,deep?HIGHLIGHT:PANEL,10,themeIndex==2));
+            quickButton.setSelected(!deep);deepButton.setSelected(deep);
             quickButton.setOnClickListener(v->switchSearchMode(false));
             deepButton.setOnClickListener(v->switchSearchMode(true));
             if(deep){
@@ -3109,12 +3110,13 @@ public class MainActivity extends Activity {
                 mediaOnly=new CheckBox(this);mediaOnly.setText("Только сообщения с медиа");mediaOnly.setTextColor(FG);mediaOnly.setTextSize(12);
                 mediaOnly.setChecked(restoredMediaDraft!=null?restoredMediaDraft:onlyMedia);restoredMediaDraft=null;searchArea.addView(mediaOnly,p(-1,39));
                 Button resetFilters=btn("Сбросить фильтры");resetFilters.setContentDescription("Сбросить фильтры поиска");
-                searchArea.addView(resetFilters,p(-1,48));resetFilters.setOnClickListener(v->resetSearchFilters());
-                TextView hint=text("Ищет сочетание букв, даже внутри слова. Можно ограничить результаты автором и наличием вложений.",12,SUB);
-                hint.setPadding(px(7),0,0,px(6));searchArea.addView(hint,p(-1,-2));
+                LinearLayout filterActions=row();filterActions.setGravity(Gravity.CENTER_VERTICAL);
+                TextView hint=text("Поиск в том числе внутри слова",12,SUB);hint.setPadding(px(7),0,px(5),0);
+                filterActions.addView(hint,new LinearLayout.LayoutParams(0,-2,1));
+                filterActions.addView(resetFilters,p(132,44));searchArea.addView(filterActions,p(-1,-2));resetFilters.setOnClickListener(v->resetSearchFilters());
             }else{
                 if(!byAuthor.isEmpty()||onlyMedia){
-                    String applied="Фильтры глубокого поиска (в быстром режиме не применяются): "+(byAuthor.isEmpty()?"":"автор «"+byAuthor+"»")+
+                    String applied="Неактивные фильтры: "+(byAuthor.isEmpty()?"":"автор «"+byAuthor+"»")+
                         (!byAuthor.isEmpty()&&onlyMedia?", ":"")+(onlyMedia?"только с медиа":"");
                     TextView filterNotice=text(applied,11,SUB);filterNotice.setContentDescription(applied);filterNotice.setPadding(px(7),px(4),px(7),px(4));
                     searchArea.addView(filterNotice,p(-1,-2));
@@ -3122,7 +3124,7 @@ public class MainActivity extends Activity {
                     searchArea.addView(reset,p(-1,48));
                     reset.setOnClickListener(v->resetSearchFilters());
                 }
-                TextView hint=text("Ищет слова и их начала по индексу. Нажми результат, чтобы открыть сообщение.",12,SUB);
+                TextView hint=text("Слова и их начала",12,SUB);
                 hint.setPadding(px(7),0,0,px(4));searchArea.addView(hint,p(-1,-2));
             }
             searchInput.setOnEditorActionListener((v,action,event)->{applySearch();return true;});
