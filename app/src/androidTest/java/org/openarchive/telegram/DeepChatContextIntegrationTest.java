@@ -135,4 +135,39 @@ public class DeepChatContextIntegrationTest {
             assertEquals(2,db.totalMessages());
         }finally{db.close();c.deleteDatabase(DeepChatContext.dbName(key));}
     }
+    @Test public void optimizedFactsMatchReferenceScannerOnLargeMessages(){
+        Context c=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key="fast_facts_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb db=new MessageDb(c,key);
+        try{
+            SQLiteDatabase sql=db.getWritableDatabase();
+            String[] names={"А"," А ","Б","","Неизвестный отправитель"};
+            String[] dates={"2026-02-01 12:00","bad","2026-02-03","2026-02-04 20:00","2026-02-02 12:30"};
+            String body=String.join("",java.util.Collections.nCopies(300,"Длинный текст. "));
+            sql.beginTransaction();
+            try{
+                for(int i=0;i<1000;i++)db.stage(sql,names[i%5],dates[i%5],body,null,"");
+                sql.setTransactionSuccessful();
+            }finally{sql.endTransaction();}
+            db.publishStaged(sql);
+            for(String question:new String[]{"Сколько сообщений?","Кто больше всего писал?","Кто меньше всего писал?","Сколько участников?","Сколько дней общались?","Самый активный день?","Самый долгий перерыв?","Сколько сообщений в активный день?","Самый активный час?","Сколько сообщений по выходным?"}){
+                ChatQuestionAnalyst.Query q=ChatQuestionAnalyst.parse(question);
+                ChatQuestionAnalyst.Accumulator reference=new ChatQuestionAnalyst.Accumulator(q);
+                long start=android.os.SystemClock.elapsedRealtime();
+                try(android.database.Cursor rows=sql.rawQuery("SELECT id,author,date_text,body FROM messages ORDER BY id",null)){
+                    while(rows.moveToNext())reference.add(rows.getLong(0),rows.getString(1),rows.getString(2),rows.getString(3));
+                }
+                long baseline=android.os.SystemClock.elapsedRealtime()-start;
+                start=android.os.SystemClock.elapsedRealtime();
+                ChatQuestionAnalyst.Answer fast=ChatQuestionAnalyst.readOnly(c.getDatabasePath(DeepChatContext.dbName(key)),q,new AtomicBoolean());
+                long optimized=android.os.SystemClock.elapsedRealtime()-start;
+                assertNotNull(fast);
+                assertEquals(question,reference.finish().text,fast.text);
+                assertEquals(reference.finish().sources.size(),fast.sources.size());
+                android.util.Log.i("AnalystPerf","facts "+q.kind+" reference_ms="+baseline+" optimized_ms="+optimized);
+            }
+            assertNull(ChatQuestionAnalyst.readOnly(c.getDatabasePath(DeepChatContext.dbName(key)),ChatQuestionAnalyst.parse("Сколько сообщений?"),new AtomicBoolean(true)));
+            assertEquals(1000,db.totalMessages());
+        }finally{db.close();c.deleteDatabase(DeepChatContext.dbName(key));}
+    }
 }
