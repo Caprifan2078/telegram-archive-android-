@@ -3,7 +3,7 @@ set -euo pipefail
 mkdir -p app/build/ui-audit
 result=0
 model=${1:-qwen06}
-case "$model" in qwen06|qwen17|qwen3508|huihui352|qwen25unc15) ;; *) echo 'Unknown benchmark model'; exit 2;; esac
+case "$model" in qwen06|qwen17|qwen3508|huihui352|qwen25unc15|qwen06q4|qwen2515) ;; *) echo 'Unknown benchmark model'; exit 2;; esac
 extra=()
 if [[ "$model" == qwen25unc15 ]]; then
   [[ "${PROBE_REVISION:-}" =~ ^[a-f0-9]{40}$ && "${PROBE_SHA:-}" =~ ^[a-f0-9]{64}$ ]] || exit 3
