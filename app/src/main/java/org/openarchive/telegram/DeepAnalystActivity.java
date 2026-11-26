@@ -18,6 +18,9 @@ public final class DeepAnalystActivity extends Activity {
     private static final AtomicBoolean MODEL_BUSY=new AtomicBoolean();
     private String archive;
     private File model;
+    private int selectedModel;
+    private Spinner modelSelector;
+    private static final String MODEL_PREFS="analyst_model_selection";
     private LinearLayout panel,results;
     private TextView status;
     private EditText question;
@@ -34,13 +37,23 @@ public final class DeepAnalystActivity extends Activity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         archive=getIntent().getStringExtra("archive");
         try{if(!getDatabasePath(DeepChatContext.dbName(archive)).isFile()){finish();return;}}catch(IllegalArgumentException bad){finish();return;}
-        model=new File(getNoBackupFilesDir(),"analyst.litertlm");
+        selectedModel=AnalystModelCatalog.safeIndex(getSharedPreferences(MODEL_PREFS,MODE_PRIVATE).getInt("selected",0));
+        // Existing manually installed model remains accessible; never overwrite it with a catalog file.
+        if(!getSharedPreferences(MODEL_PREFS,MODE_PRIVATE).contains("selected")&&AnalystModelCatalog.file(getNoBackupFilesDir(),AnalystModelCatalog.CUSTOM).isFile())selectedModel=AnalystModelCatalog.CUSTOM;
+        model=AnalystModelCatalog.file(getNoBackupFilesDir(),selectedModel);
         ScrollView scroll=new ScrollView(this);panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(16),dp(16),dp(16),dp(24));panel.setBackgroundColor(palette.background);scroll.addView(panel);setContentView(scroll);
         panel.addView(text("Глубокий анализ · локальная ИИ",22));
         panel.addView(text("Экспериментальный режим. Модель получает только выбранные выдержки и статистику этого чата, не всю переписку. Ответы могут ошибаться.",14));
         status=text("",13);panel.addView(status);
-        download=button("Скачать лёгкую модель · 614 МБ");panel.addView(download);
+        modelSelector=new Spinner(this);
+        java.util.ArrayList<String> options=new java.util.ArrayList<>();
+        for(AnalystModelCatalog.Model spec:AnalystModelCatalog.MODELS)options.add(spec.display()+(spec.file(getNoBackupFilesDir()).isFile()?" · установлена":""));
+        options.add("Своя модель из файла");
+        ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,options);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        modelSelector.setAdapter(adapter);modelSelector.setSelection(selectedModel);panel.addView(modelSelector);
+        download=button("Скачать выбранную модель");panel.addView(download);
         install=button("Выбрать свою модель .litertlm");panel.addView(install);
         remove=button("Удалить локальную модель");panel.addView(remove);
         question=new EditText(this);ViewerUi.styleInput(question,palette);question.setHint("Например, о чём договаривались насчёт встречи?");
@@ -51,6 +64,13 @@ public final class DeepAnalystActivity extends Activity {
         full=button("Весь чат нейросетью · медленно");panel.addView(full);
         stop=button("Отменить операцию");panel.addView(stop);
         results=new LinearLayout(this);results.setOrientation(LinearLayout.VERTICAL);panel.addView(results);
+        modelSelector.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
+            public void onItemSelected(android.widget.AdapterView<?> parent,android.view.View view,int index,long id){
+                if(busy)return;selectedModel=AnalystModelCatalog.safeIndex(index);model=AnalystModelCatalog.file(getNoBackupFilesDir(),selectedModel);
+                getSharedPreferences(MODEL_PREFS,MODE_PRIVATE).edit().putInt("selected",selectedModel).apply();refresh();
+            }
+            public void onNothingSelected(android.widget.AdapterView<?> parent){}
+        });
         install.setOnClickListener(v->{Intent picker=new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*");startActivityForResult(picker,1);});
         remove.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Удалить только файл модели?").setMessage("Переписки останутся без изменений.").setNegativeButton("Отмена",null).setPositiveButton("Удалить",(d,n)->{if(!busy){if(model.exists()&&!model.delete())status.setText("Не удалось удалить модель");else refresh();}}).show());
         ask.setOnClickListener(v->analyze());
@@ -59,22 +79,29 @@ public final class DeepAnalystActivity extends Activity {
             .setMessage("Модель прочитает текст по блокам. Большой архив может занять часы, нагреть телефон и разрядить аккумулятор. Конспект сжимается, поэтому отдельные детали могут потеряться. Можно отменить между блоками.")
             .setNegativeButton("Отмена",null).setPositiveButton("Начать",(d,n)->scanWithModel()).show());
         stop.setOnClickListener(v->{taskCancel.set(true);status.setText("Отмена запрошена…");});
-        download.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Скачать Qwen3-0.6B?").setMessage("614 МБ, лучше по Wi-Fi. Скачивается только публичный файл модели с Hugging Face; переписка и вопросы не передаются.").setNegativeButton("Отмена",null).setPositiveButton("Скачать",(d,n)->downloadModel()).show());
+        download.setOnClickListener(v->{
+            if(selectedModel>=AnalystModelCatalog.CUSTOM)return;
+            AnalystModelCatalog.Model spec=AnalystModelCatalog.MODELS[selectedModel];
+            new FontDialog.Builder(this).setTitle("Скачать "+spec.label+"?")
+                .setMessage(spec.display()+"\nЛучше по Wi-Fi. Публичный файл Hugging Face, проверка SHA-256. Переписка и вопросы не передаются. Совместимость с телефоном и отсутствие отказов модели не гарантируются.")
+                .setNegativeButton("Отмена",null).setPositiveButton("Скачать",(d,n)->downloadModel(spec)).show();
+        });
         refresh();
     }
     private void refresh(){
         boolean runtime=runtimeAvailable(),present=model.isFile();
-        status.setText(!runtime?"В этой лёгкой сборке нет движка нейросети. Нужна экспериментальная ИИ-сборка.":present?"Модель установлена локально.":"Выбери совместимую модель LiteRT-LM из файлов телефона.");
-        install.setEnabled(runtime&&!busy);remove.setEnabled(present&&!busy);ask.setEnabled(runtime&&present&&!busy);
-        download.setEnabled(runtime&&!busy&&checkSelfPermission(android.Manifest.permission.INTERNET)==android.content.pm.PackageManager.PERMISSION_GRANTED);
+        status.setText(!runtime?"В этой лёгкой сборке нет движка нейросети. Нужна экспериментальная ИИ-сборка.":present?"Выбранная модель установлена локально · "+(model.length()/1000000)+" МБ.":selectedModel==AnalystModelCatalog.CUSTOM?"Выбери совместимую модель LiteRT-LM из файлов телефона.":"Скачай выбранную модель. Для слабого телефона начни с Qwen3-0.6B.");
+        modelSelector.setEnabled(!busy);install.setEnabled(runtime&&!busy&&selectedModel==AnalystModelCatalog.CUSTOM);remove.setEnabled(present&&!busy);ask.setEnabled(runtime&&present&&!busy);
+        download.setEnabled(runtime&&!busy&&selectedModel<AnalystModelCatalog.CUSTOM&&checkSelfPermission(android.Manifest.permission.INTERNET)==android.content.pm.PackageManager.PERMISSION_GRANTED);
         scan.setEnabled(!busy);full.setEnabled(runtime&&present&&!busy);stop.setEnabled(busy);
     }
-    private void busy(String message){taskCancel.set(false);busy=true;install.setEnabled(false);remove.setEnabled(false);ask.setEnabled(false);download.setEnabled(false);scan.setEnabled(false);full.setEnabled(false);stop.setEnabled(true);status.setText(message);}
-    private void downloadModel(){
-        if(busy)return;busy("Скачиваю модель…");
+    private void busy(String message){taskCancel.set(false);busy=true;modelSelector.setEnabled(false);install.setEnabled(false);remove.setEnabled(false);ask.setEnabled(false);download.setEnabled(false);scan.setEnabled(false);full.setEnabled(false);stop.setEnabled(true);status.setText(message);}
+    private void downloadModel(AnalystModelCatalog.Model spec){
+        if(busy||selectedModel>=AnalystModelCatalog.CUSTOM||spec!=AnalystModelCatalog.MODELS[selectedModel])return;
+        final File destination=spec.file(getNoBackupFilesDir());busy("Скачиваю модель…");
         worker.execute(()->{
             String error=null;
-            try{AnalystModelDownload.fetch(model,taskCancel,n->runOnUiThread(()->{if(!stopped.get()&&!taskCancel.get())status.setText("Загружено "+(n*100/AnalystModelDownload.SIZE)+"%");}));}
+            try{AnalystModelDownload.fetch(spec,destination,taskCancel,n->runOnUiThread(()->{if(!stopped.get()&&!taskCancel.get())status.setText("Загружено "+(n*100/spec.size)+"%");}));}
             catch(Exception e){error=taskCancel.get()?"Загрузка отменена.":"Загрузка не завершена: проверь сеть, свободное место и целостность файла.";}
             final String failure=error;
             runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();if(failure!=null)status.setText(failure);});
@@ -102,7 +129,7 @@ public final class DeepAnalystActivity extends Activity {
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
-        if(request!=1||result!=RESULT_OK||data==null||data.getData()==null||busy)return;
+        if(request!=1||result!=RESULT_OK||data==null||data.getData()==null||busy||selectedModel!=AnalystModelCatalog.CUSTOM)return;
         Uri uri=data.getData();busy("Копирую модель в приватное хранилище…");
         worker.execute(()->{
             File tmp=new File(getNoBackupFilesDir(),"analyst-install-"+java.util.UUID.randomUUID()+".tmp");String error=null;

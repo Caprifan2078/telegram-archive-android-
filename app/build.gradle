@@ -217,7 +217,7 @@ android {
     buildTypes {
         protectedArchiveQa {
             initWith compactQa
-            applicationIdSuffix '.premium20261126'
+            applicationIdSuffix (project.findProperty('qaLocalModel') == 'true' ? '.analyst20261126' : '.premium20261126')
             signingConfig signingConfigs.debug
         }
     }
