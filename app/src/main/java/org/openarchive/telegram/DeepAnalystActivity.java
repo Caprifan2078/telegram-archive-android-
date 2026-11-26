@@ -169,7 +169,7 @@ public final class DeepAnalystActivity extends Activity {
         ScrollView scroll=new ScrollView(this);scroll.addView(choices);
         android.app.AlertDialog picker=new FontDialog.Builder(this).setTitle("Выбор модели").setView(scroll).setNegativeButton("Закрыть",null).create();
         choices.addView(text(fit.summary()+"\nОценка совместимости, не гарантия запуска.",13));
-        String[] filters={"Основные","По ОЗУ","Без цензуры*","Все"};
+        String[] filters={"Основные","По ОЗУ","Без цензуры*","Все","Резервные"};
         Button filter=button("Показать: "+filters[mode]+"  ▾");choices.addView(filter);
         filter.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Фильтр моделей").setSingleChoiceItems(filters,mode,(d,n)->{d.dismiss();picker.dismiss();showModelPicker(n);}).show());
         if(mode==2)choices.addView(text("*Сторонние модификации с ослабленными ограничениями; отсутствие отказов и качество не гарантированы.",12));
@@ -210,7 +210,7 @@ public final class DeepAnalystActivity extends Activity {
         stop.setVisibility(busy?android.view.View.VISIBLE:android.view.View.GONE);
         progress.setVisibility(downloading?android.view.View.VISIBLE:android.view.View.GONE);
         download.setEnabled(runtime&&!busy&&selectedModel<AnalystModelCatalog.CUSTOM&&checkSelfPermission(android.Manifest.permission.INTERNET)==android.content.pm.PackageManager.PERMISSION_GRANTED);
-        scan.setEnabled(!busy);full.setEnabled(runtime&&present&&!busy);stop.setEnabled(busy);
+        scan.setEnabled(!busy);full.setEnabled(runtime&&present&&!busy&&!AnalystModelCatalog.shortContext(selectedModel));stop.setEnabled(busy);
         modelCheck.setVisibility(runtime&&present?android.view.View.VISIBLE:android.view.View.GONE);modelCheck.setEnabled(runtime&&present&&!busy);
         modelOptions.setVisibility(model.exists()?android.view.View.VISIBLE:android.view.View.GONE);
         modelMaintenance.setVisibility(model.exists()&&modelOptionsOpen?android.view.View.VISIBLE:android.view.View.GONE);
@@ -523,7 +523,7 @@ public final class DeepAnalystActivity extends Activity {
                 if(taskCancel.get())throw new IOException("Cancelled");
                 if(stopped.get())return;
                 if(context.sources.isEmpty())throw new IOException("No sources");
-                String prompt=dual==null?context.prompt(q):dual.prompt(q);
+                String prompt=AnalystModelCatalog.shortContext(selectedModel)?context.compactPrompt(q,dual!=null):dual==null?context.prompt(q):dual.prompt(q);
                 String response=(String)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
                     .getMethod("generate",String.class,String.class,AtomicBoolean.class).invoke(null,model.getAbsolutePath(),prompt,taskCancel);
                 if(taskCancel.get())throw new IOException("Cancelled");
