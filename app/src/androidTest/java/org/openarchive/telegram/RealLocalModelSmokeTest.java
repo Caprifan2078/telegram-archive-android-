@@ -37,6 +37,14 @@ public final class RealLocalModelSmokeTest {
             String requested=modelKey;
             AnalystModelCatalog.Model chosen=null;
             for(AnalystModelCatalog.Model item:AnalystModelCatalog.MODELS)if(item.key.equals(requested))chosen=item;
+            if("qwen25unc15".equals(requested)){
+                android.os.Bundle args=InstrumentationRegistry.getArguments();
+                String revision=args.getString("probeRevision",""),sha=args.getString("probeSha","");
+                assertTrue(revision.matches("[a-f0-9]{40}"));assertTrue(sha.matches("[a-f0-9]{64}"));
+                chosen=new AnalystModelCatalog.Model(requested,"Qwen2.5 1.5B modified","QA only",
+                    "https://huggingface.co/Shaurya2020/Qwen2.5-1.5B-Instruct-uncensored-litert/resolve/"+revision+"/Qwen2.5-1.5B-Instruct-uncensored_dynamic_wi8_afp32_ekv1280.litertlm",1802859440L,sha);
+                android.util.Log.i("ModelSmoke","Candidate revision="+revision+" sha256="+sha);
+            }
             assertNotNull("Unknown pinned model: "+requested,chosen);
             final AnalystModelCatalog.Model spec=chosen;
             android.util.Log.i("ModelSmoke","Model "+spec.key+" bytes="+spec.size);
