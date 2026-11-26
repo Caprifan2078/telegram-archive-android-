@@ -49,4 +49,45 @@ public final class RelationshipPaginationRegressionTest {
             context.deleteDatabase("telegram_"+key+".db");
         }
     }
+    @Test public void editAndUnlinkPreserveOriginalMessageAndOtherEvent()throws Exception{
+        android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key="qa_event_edit_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb db=new MessageDb(context,key);
+        try{
+            SQLiteDatabase sql=db.getWritableDatabase();db.clearStage(sql);
+            long anchor=db.stage(sql,"QA","2026-01-01 12:00:00","Original",null,"");
+            db.stageAttachment(sql,anchor,"photos/synthetic.jpg","image");db.publishStaged(sql);
+            long attachment=db.attachmentsForMessage(anchor).get(0).id;
+            long first=db.addRelationshipEvent("Old","Old note",anchor,0);
+            long second=db.addRelationshipEvent("Other","Other note",anchor,0);
+            db.linkRelationshipMedia(first,attachment);db.linkRelationshipMedia(second,attachment);
+            db.updateRelationshipEvent(first,"Edited","New note");
+            MessageDb.RelationshipEvent event=db.relationshipEvents().get(0);
+            assertEquals(first,event.id);assertEquals(anchor,event.anchorId);assertEquals("Edited",event.title);
+            assertEquals("New note",event.note);assertEquals(1,event.linkedCount);
+            db.unlinkRelationshipMedia(first,attachment);
+            assertTrue(db.relationshipMedia(first).isEmpty());assertEquals(1,db.relationshipMedia(second).size());
+            assertEquals(1,db.attachmentsForMessage(anchor).size());assertEquals(1,db.totalMessages());
+            db.removeRelationshipEvent(first);assertEquals(second,db.relationshipEvents().get(0).id);
+            assertEquals(1,db.attachmentsForMessage(anchor).size());
+        }finally{db.close();context.deleteDatabase("telegram_"+key+".db");}
+    }
+    @Test public void attachmentPagesExposeLinksBeyondOneHundredWithoutRemovingAny(){
+        android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key="qa_event_media_pages_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb db=new MessageDb(context,key);
+        try{
+            SQLiteDatabase sql=db.getWritableDatabase();db.clearStage(sql);
+            long anchor=db.stage(sql,"QA","2026-01-01","Synthetic",null,"");
+            for(int i=0;i<105;i++)db.stageAttachment(sql,anchor,"photos/qa_"+i+".jpg","image");
+            db.publishStaged(sql);
+            long event=db.addRelationshipEvent("Test","",anchor,0);
+            for(MessageDb.Attachment file:db.attachmentsForMessage(anchor))db.linkRelationshipMedia(event,file.id);
+            java.util.Set<Long> found=new java.util.HashSet<>();
+            for(int offset=0;offset<105;offset+=25)
+                for(MessageDb.Attachment file:db.relationshipMediaPage(event,offset,25))assertTrue(found.add(file.id));
+            assertEquals(105,found.size());assertEquals(105,db.relationshipEvents().get(0).linkedCount);
+            assertEquals(105,db.attachmentsForMessage(anchor).size());
+        }finally{db.close();context.deleteDatabase("telegram_"+key+".db");}
+    }
 }

@@ -4802,12 +4802,12 @@ public class MainActivity extends Activity {
         LinearLayout form=column();form.setPadding(px(16),px(4),px(16),px(8));
         EditText name=new EditText(this);name.setSingleLine(true);name.setHint("Например: Первая встреча");
         name.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(90)});
-        form.addView(name,p(-1,-2));
-        EditText description=new EditText(this);description.setHint("Что случилось и почему это важно? (необязательно)");
+        ViewerUi.styleInput(name,ViewerPalette.of(themeIndex));form.addView(name,p(-1,-2));
+        EditText description=new EditText(this);description.setHint("Описание (необязательно)");
         description.setMinLines(3);description.setMaxLines(6);
         description.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(2500)});
-        form.addView(description,p(-1,-2));
-        TextView explain=text("Событие привяжется к выбранному сообщению. Переписка не меняется. После сохранения можно прикрепить фото, видео, кружки, голосовые и файлы ИЗ ЭТОГО АРХИВА.",12,SUB);
+        ViewerUi.styleInput(description,ViewerPalette.of(themeIndex));LinearLayout.LayoutParams descriptionBounds=p(-1,-2);descriptionBounds.topMargin=px(10);form.addView(description,descriptionBounds);
+        TextView explain=text("Отметка привязана к сообщению. Медиа можно добавить после сохранения.",12,SUB);explain.setPadding(0,px(10),0,0);
         form.addView(explain);
         AlertDialog eventDialog=new FontDialog.Builder(this).setTitle("Новое событие")
             .setView(form).setNegativeButton("Отмена",null).setPositiveButton("Сохранить",null).create();
@@ -4832,6 +4832,42 @@ public class MainActivity extends Activity {
         }));eventDialog.show();
     }
 
+    private void editRelationshipEvent(MessageDb.RelationshipEvent event){
+        final MessageDb source=db;final String key=activeKey;final int token=loadToken;
+        if(source==null||home||!"relationships".equals(screen))return;
+        LinearLayout form=column();form.setPadding(px(20),px(12),px(20),px(12));
+        EditText name=new EditText(this);name.setSingleLine(true);name.setHint("Название");
+        name.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(90)});
+        name.setText(event.title);ViewerUi.styleInput(name,ViewerPalette.of(themeIndex));form.addView(name,p(-1,-2));
+        EditText note=new EditText(this);note.setHint("Описание");note.setMinLines(3);note.setMaxLines(6);
+        note.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(2500)});
+        note.setText(event.note);ViewerUi.styleInput(note,ViewerPalette.of(themeIndex));
+        LinearLayout.LayoutParams gap=p(-1,-2);gap.topMargin=px(10);form.addView(note,gap);
+        AlertDialog dialog=new FontDialog.Builder(this).setTitle("Изменить событие").setView(form)
+            .setNegativeButton("Отмена",null).setPositiveButton("Сохранить",null).create();
+        dialog.setOnShowListener(ignored->dialog.getButton(-1).setOnClickListener(v->{
+            String label=name.getText().toString().trim(),body=note.getText().toString().trim();
+            if(label.isEmpty()){name.setError("Введи название");return;}
+            if(!sameScreenRequest(source,key,token)){dialog.dismiss();return;}
+            Button save=dialog.getButton(-1);save.setEnabled(false);
+            worker.execute(()->{try{
+                source.updateRelationshipEvent(event.id,label,body);
+                runOnUiThread(()->{if(isFinishing()||isDestroyed())return;dialog.dismiss();
+                    if(sameScreenRequest(source,key,token)&&"relationships".equals(screen))renderRelationshipsPage();});
+            }catch(Exception error){runOnUiThread(()->{if(dialog.isShowing()){save.setEnabled(true);name.setError("Не удалось сохранить");}});}});
+        }));dialog.show();
+    }
+    private void unlinkEventAttachment(long eventId,MessageDb.Attachment attachment){
+        final MessageDb source=db;final String key=activeKey;final int token=loadToken;
+        new FontDialog.Builder(this).setTitle("Открепить вложение?")
+            .setMessage("Удалится только ссылка из события. Исходный файл останется.")
+            .setNegativeButton("Отмена",null).setPositiveButton("Открепить",(d,w)->{
+                if(!sameScreenRequest(source,key,token))return;
+                worker.execute(()->{try{source.unlinkRelationshipMedia(eventId,attachment.id);
+                    runOnUiThread(()->{if(sameScreenRequest(source,key,token)&&"relationships".equals(screen))renderRelationshipsPage();});
+                }catch(Exception error){runOnUiThread(()->{if(sameScreenRequest(source,key,token))toast("Не удалось открепить");});}});
+            }).show();
+    }
     private LinearLayout relationshipCard(LinearLayout parent,String title){
         LinearLayout card=column();card.setPadding(px(13),px(12),px(13),px(13));
         card.setBackground(ViewerUi.surface(this,PANEL,ViewerUi.CARD,themeIndex==2,false));
@@ -5028,28 +5064,7 @@ public class MainActivity extends Activity {
                                     if(event.note!=null&&event.note.length()>115)
                                         analyticsText(details,event.note,FG,13);
                                     if(event.linkedCount>0){
-                                        TextView loading=text("Загружаю вложения…",12,SUB);
-                                        details.addView(loading);
-                                        worker.execute(()->{
-                                            try{
-                                                List<MessageDb.Attachment> attachments=source.relationshipMedia(event.id);
-                                                runOnUiThread(()->{
-                                                    if(isFinishing()||token!=loadToken||!key.equals(activeKey)
-                                                            ||db!=source||!details.isAttachedToWindow())return;
-                                                    details.removeView(loading);
-                                                    for(MessageDb.Attachment attachment:attachments){
-                                                        Button open=btn("▣ "+mediaLabel(attachment.kind)+" · открыть");
-                                                        details.addView(open,p(-1,41));
-                                                        open.setOnClickListener(w->openMedia(attachment));
-                                                    }
-                                                    if(attachments.size()<event.linkedCount)
-                                                        analyticsText(details,"Некоторые вложения отсутствуют или не найдены. Исходные файлы не изменялись.",SUB,11);
-                                                });
-                                            }catch(Exception error){
-                                                runOnUiThread(()->{if(details.isAttachedToWindow())
-                                                    loading.setText("Не удалось загрузить вложения");});
-                                            }
-                                        });
+                                        loadEventAttachmentPage(details,event,source,key,token,0);
                                     }
                                 }
                                 details.setVisibility(opening?View.VISIBLE:View.GONE);
@@ -5057,18 +5072,22 @@ public class MainActivity extends Activity {
                             });
                         }
                         LinearLayout actions=row();card.addView(actions,p(-1,43));
-                        Button anchor=btn("Открыть");actions.addView(anchor,new LinearLayout.LayoutParams(0,-1,1f));
+                        Button anchor=btn("К сообщению");actions.addView(anchor,new LinearLayout.LayoutParams(0,-1,1f));
                         anchor.setOnClickListener(v->jump(event.anchorId,"relationships"));
-                        Button attach=btn("Медиа");actions.addView(attach,new LinearLayout.LayoutParams(0,-1,1f));
+                        Button attach=btn("+ Медиа");actions.addView(attach,new LinearLayout.LayoutParams(0,-1,1f));
                         attach.setOnClickListener(v->chooseRelationshipAttachment(event.id,0));
-                        Button remove=btn("⋮");remove.setContentDescription("Удалить личную отметку события");
+                        Button remove=btn("⋯");remove.setContentDescription("Управление событием "+event.title);
                         actions.addView(remove,p(43,43));
-                        remove.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Удалить событие?")
+                        remove.setOnClickListener(v->new FontDialog.Builder(this).setTitle(event.title)
+                            .setItems(new String[]{"Изменить название и описание","Удалить событие"},(menu,action)->{
+                            if(!sameScreenRequest(source,key,token))return;
+                            if(action==0){editRelationshipEvent(event);return;}
+                            new FontDialog.Builder(this).setTitle("Удалить событие?")
                             .setMessage("Удалится только описание и список ссылок. Все исходные файлы и сообщения останутся.")
                             .setNegativeButton("Отмена",null).setPositiveButton("Удалить",(d,which)->worker.execute(()->{
                                 source.removeRelationshipEvent(event.id);
                                 runOnUiThread(()->{if(key.equals(activeKey)&&screen.equals("relationships"))renderRelationshipsPage();});
-                            })).show());
+                            })).show();}).setNegativeButton("Закрыть",null).show());
                     }
                     if(totalEvents>20){
                         LinearLayout pager=row();pager.setGravity(Gravity.CENTER_VERTICAL);eventsHolder.addView(pager,p(-1,52));
@@ -5085,13 +5104,40 @@ public class MainActivity extends Activity {
             }catch(Exception e){runOnUiThread(()->{if(token==loadToken)status.setText("Ошибка событий: "+e.getMessage());});}
         });
     }
+    private void loadEventAttachmentPage(LinearLayout target,MessageDb.RelationshipEvent event,MessageDb source,String key,int token,int offset){
+        TextView loading=text("Загружаю вложения…",12,SUB);target.addView(loading);
+        worker.execute(()->{try{
+            List<MessageDb.Attachment> items=source.relationshipMediaPage(event.id,offset,26);
+            runOnUiThread(()->{
+                if(!sameScreenRequest(source,key,token)||!target.isAttachedToWindow())return;
+                target.removeView(loading);int shown=Math.min(25,items.size());
+                for(int i=0;i<shown;i++){
+                    MessageDb.Attachment attachment=items.get(i);
+                    LinearLayout fileRow=row();target.addView(fileRow,p(-1,48));
+                    Button open=btn(mediaLabel(attachment.kind)+" · открыть");fileRow.addView(open,new LinearLayout.LayoutParams(0,-1,1));
+                    open.setOnClickListener(v->openMedia(attachment));
+                    Button unlink=btn("✕");unlink.setContentDescription("Открепить "+mediaLabel(attachment.kind));
+                    fileRow.addView(unlink,p(44,44));unlink.setOnClickListener(v->unlinkEventAttachment(event.id,attachment));
+                }
+                if(items.size()>25){
+                    Button more=btn("Показать ещё вложения");target.addView(more,p(-1,48));
+                    more.setOnClickListener(v->{target.removeView(more);loadEventAttachmentPage(target,event,source,key,token,offset+shown);});
+                }else if(offset+shown<event.linkedCount)analyticsText(target,"Некоторые ссылки не соответствуют исходному вложению.",SUB,12);
+            });
+        }catch(Exception error){runOnUiThread(()->{
+            if(!sameScreenRequest(source,key,token)||!target.isAttachedToWindow())return;
+            target.removeView(loading);Button retry=btn("Повторить загрузку");target.addView(retry,p(-1,48));
+            retry.setOnClickListener(v->{target.removeView(retry);loadEventAttachmentPage(target,event,source,key,token,offset);});
+        });}});
+    }
     private void chooseRelationshipAttachment(long eventId,int offset){
-        final MessageDb source=db;final String key=activeKey;
+        final MessageDb source=db;final String key=activeKey;final int token=loadToken;
+        if(source==null||home)return;
         worker.execute(()->{
             try{
                 List<MessageDb.Attachment> files=source.mediaPage("all",offset,25);
                 runOnUiThread(()->{
-                    if(isFinishing()||!key.equals(activeKey)||db!=source)return;
+                    if(!sameScreenRequest(source,key,token))return;
                     String[] titles=new String[files.size()];
                     for(int i=0;i<files.size();i++){
                         MessageDb.Attachment a=files.get(i);
@@ -5101,17 +5147,18 @@ public class MainActivity extends Activity {
                     AlertDialog.Builder picker=new FontDialog.Builder(this)
                         .setTitle("Прикрепить ссылку из архива · "+(offset+1)+"–"+(offset+files.size()))
                         .setItems(titles,(dialog,index)->{
+                            if(!sameScreenRequest(source,key,token))return;
                             MessageDb.Attachment selected=files.get(index);
                             worker.execute(()->{
                                 try{source.linkRelationshipMedia(eventId,selected.id);
-                                    runOnUiThread(()->{if(!key.equals(activeKey))return;
+                                    runOnUiThread(()->{if(!sameScreenRequest(source,key,token))return;
                                         if(screen.equals("relationships"))renderRelationshipsPage();
                                         else if(screen.equals("chronology"))renderChronologyPage();});
                                 }catch(Exception e){runOnUiThread(()->toast("Не удалось прикрепить файл: "+e.getMessage()));}
                             });
                         }).setNegativeButton("Закрыть",null);
-                    if(files.size()==25)picker.setPositiveButton("Следующие 25 ›",(dialog,which)->chooseRelationshipAttachment(eventId,offset+25));
-                    if(offset>0)picker.setNeutralButton("‹ Назад",(dialog,which)->chooseRelationshipAttachment(eventId,Math.max(0,offset-25)));
+                    if(files.size()==25)picker.setPositiveButton("Следующие 25 ›",(dialog,which)->{if(sameScreenRequest(source,key,token))chooseRelationshipAttachment(eventId,offset+25);});
+                    if(offset>0)picker.setNeutralButton("‹ Назад",(dialog,which)->{if(sameScreenRequest(source,key,token))chooseRelationshipAttachment(eventId,Math.max(0,offset-25));});
                     picker.show();
                 });
             }catch(Exception e){runOnUiThread(()->toast("Ошибка медиатеки: "+e.getMessage()));}
