@@ -12,7 +12,18 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Opt-in local model build; LiteRT-LM 0.18.0. CPU-first, one engine at a time. */
 public final class LocalLlmRuntime {
+    // Native code aborts the process on missing getters. Fail in Java instead.
+    static void verifySamplerAbi(){
+        try{
+            java.lang.reflect.Method topK=SamplerConfig.class.getMethod("getTopK");
+            if(topK.getReturnType()!=int.class||java.lang.reflect.Modifier.isStatic(topK.getModifiers()))
+                throw new NoSuchMethodException("getTopK()I");
+        }catch(ReflectiveOperationException bad){
+            throw new IllegalStateException("LiteRT-LM JNI ABI mismatch: SamplerConfig.getTopK()I",bad);
+        }
+    }
     private static Engine open(String path){
+        verifySamplerAbi();
         Engine.Companion.setNativeMinLogSeverity(LogSeverity.ERROR);
         Engine engine=new Engine(new EngineConfig(path,new Backend.CPU(2,null),null,null,4096,null,":nocache",null));
         try{
