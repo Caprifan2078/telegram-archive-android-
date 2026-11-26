@@ -1274,7 +1274,7 @@ public class MainActivity extends Activity {
         savedComposer.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
         playerStrip.setVisibility(View.GONE);pinnedBar.removeAllViews();
         filterBar.removeAllViews();searchArea.removeAllViews();
-        status.setText("Справочник не изменяет твои данные");
+        status.setText("");status.setVisibility(View.GONE);
         TextView crumb=text(helpChapter!=-1?"ИНСТРУКЦИЯ":helpShelf!=-1?"ПОДРАЗДЕЛ":helpCategory!=-1?"РАЗДЕЛ":"СПРАВОЧНИК",11,ACCENT);
         crumb.setTypeface(null,Typeface.BOLD);crumb.setPadding(px(12),px(16),0,px(5));list.addView(crumb);
         if(helpCategory!=-1){
@@ -2543,6 +2543,16 @@ public class MainActivity extends Activity {
     }
     private void activateArchive(String key){activateArchive(key,-1);}
     /** Direct jump from grouped timeline avoids the old chat's saved-scroll restoration. */
+    /** Remove all old archive content before a potentially slow reading-anchor lookup. */
+    private void clearArchiveTransition(){
+        list.animate().cancel();list.setAlpha(1f);list.setTranslationY(0f);
+        list.removeAllViews();list.setTag(null);renderedMessageViews.clear();
+        list.setBackgroundColor(BG);scroll.scrollTo(0,0);
+        hideGalleryOverlay();scroll.setVisibility(View.VISIBLE);
+        pinnedBar.removeAllViews();filterBar.removeAllViews();searchArea.removeAllViews();
+        savedComposer.setVisibility(View.GONE);bottomPager.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
+        highlightId=-1;refreshTabs();status.setText("Открываю переписку…");status.setVisibility(View.VISIBLE);
+    }
     private void activateArchive(String key,long exactMessageId){
         saveReadingProgress();
         if(importing){toast("Импорт ещё идёт");return;}
@@ -2556,6 +2566,7 @@ public class MainActivity extends Activity {
         chatOffset=searchOffset=mediaOffset=favOffset=0;autoLoaded=PAGE;home=false;screen="chat";returnScreen="";searchReturnsToAnalytics=false;chatOffset=getPreferences(MODE_PRIVATE).getInt("read_offset_"+activeKey,0);
         pendingRestoreId=getPreferences(MODE_PRIVATE).getLong("read_id_"+activeKey,-1);
         pendingRestoreTop=getPreferences(MODE_PRIVATE).getInt("read_top_"+activeKey,0);
+        clearArchiveTransition();
         if(exactMessageId>0){
             pendingRestoreId=-1;
             jump(exactMessageId,"multi_timeline");
@@ -2564,7 +2575,7 @@ public class MainActivity extends Activity {
         if(pendingRestoreId>0){
             final String openedKey=activeKey;
             final MessageDb restoreDb=db;
-            final long messageId=pendingRestoreId;
+            final long messageId=pendingRestoreId;final int restoreToken=loadToken;
             worker.execute(()->{
                 if(!openedKey.equals(activeKey)||restoreDb!=db)return;
                 int restoredPos;
@@ -2574,14 +2585,14 @@ public class MainActivity extends Activity {
                 try{restoredPos=restoreDb.hasMessage(messageId)?restoreDb.positionFor(messageId):-1;}
                 catch(RuntimeException closedOrInvalid){
                     runOnUiThread(()->{
-                        if(isFinishing()||!openedKey.equals(activeKey)||restoreDb!=db)return;
+                        if(!sameScreenRequest(restoreDb,openedKey,restoreToken)||!"chat".equals(screen))return;
                         pendingRestoreId=-1;showPage();
                     });
                     return;
                 }
                 final int pos=restoredPos;
                 runOnUiThread(()->{
-                    if(isFinishing()||!openedKey.equals(activeKey)||restoreDb!=db)return;
+                    if(!sameScreenRequest(restoreDb,openedKey,restoreToken)||!"chat".equals(screen))return;
                     if(pos<0){pendingRestoreId=-1;showPage();return;}
                     chatOffset=Math.max(0,pos-3);showPage();
                 });
@@ -2615,9 +2626,14 @@ public class MainActivity extends Activity {
         });menu.show();
     }
     private void openChatMediaFromHeader(){
-        if(home||"saved".equals(screen)||"help".equals(screen)||importing)return;
+        if(home||!"chat".equals(screen)||importing)return;
         rememberChatPositionForReturn();
         screen="media";returnScreen="chat";searchReturnsToAnalytics=false;showPage();
+    }
+    private void openChatTool(String destination){
+        if(home||!"chat".equals(screen)||importing)return;
+        rememberChatPositionForReturn();
+        returnScreen="chat";searchReturnsToAnalytics=false;screen=destination;showPage();
     }
     private void showConversationInfo(){showChatActions(activeKey,activeName);}
     private void showConversationMenu(View anchor){
@@ -2629,10 +2645,10 @@ public class MainActivity extends Activity {
         String[] labels={"Найти сообщение","Перейти к дате","Анализ диалога","Хронология","Управление чатом","Все инструменты"};
         String[] descriptions={"Поиск по тексту, автору и вложениям","Открыть сообщения выбранного дня","Количество сообщений, активность и участники","События, этапы, воспоминания и сравнения","Название, аватар, закрепление и корзина","Общие настройки, поиск по всем чатам и резервные копии"};
         Runnable[] actions={
-            ()->{screen="search";showPage();},
+            ()->openChatTool("search"),
             this::chooseDate,
-            ()->{analyticsSection="overview";screen="analytics";showPage();},
-            ()->{screen="relationships";showPage();},
+            ()->{analyticsSection="overview";openChatTool("analytics");},
+            ()->openChatTool("relationships"),
             ()->showChatActions(activeKey,activeName),
             this::showSideMenu
         };
@@ -2927,6 +2943,9 @@ public class MainActivity extends Activity {
         title.setText("media".equals(screen)? "Медиа":activeName);
         subtitle.setText(screen.equals("chat")?"Медиа — по названию чата":screen.equals("media")?activeName:screen.equals("favorites")?"Твои сохранённые сообщения":screen.equals("analytics")?"Статистика · полностью офлайн":screen.equals("relationships")?"Личные события и этапы":screen.equals("echo")?"Повторяющиеся фразы":screen.equals("chronology")?"Периоды истории · вручную":screen.equals("cinema")?"Медиа по годам · офлайн":"Найди любое сообщение");
     }
+    private void returnToMediaFromFavorites(){
+        screen="media";returnScreen="chat";searchReturnsToAnalytics=false;showPage();
+    }
     private void configureBars(){
         filterBar.removeAllViews();searchArea.removeAllViews();
         if("favorites".equals(screen)){
@@ -2939,7 +2958,7 @@ public class MainActivity extends Activity {
             backToMedia.setBackground(new RippleDrawable(ColorStateList.valueOf(0x227ad2ff),
                 shape(Color.TRANSPARENT,11),null));
             filterBar.addView(backToMedia,p(-1,42));
-            backToMedia.setOnClickListener(v->{screen="media";mediaOffset=0;showPage();});
+            backToMedia.setOnClickListener(v->returnToMediaFromFavorites());
             LinearLayout favoriteTools=row();
             Button byYear=btn("За год");byYear.setContentDescription("Избранные сообщения за выбранный год");
             favoriteTools.addView(byYear,new LinearLayout.LayoutParams(0,px(48),1));
@@ -2957,6 +2976,7 @@ public class MainActivity extends Activity {
                 final String key=MEDIA_KEYS[i];TextView c=text(MEDIA_LABELS[i],12,FG);c.setGravity(Gravity.CENTER);
                 c.setPadding(px(8),px(8),px(8),px(8));c.setBackground(shape((key.equals(mediaKind)&&"media".equals(screen)||"favorite".equals(key)&&"favorites".equals(screen))?HIGHLIGHT:PANEL,14));
                 LinearLayout.LayoutParams cp=p(-2,37);cp.setMargins(px(2),px(2),px(4),px(2));chips.addView(c,cp);
+                c.setSelected(key.equals(mediaKind));c.setContentDescription(MEDIA_LABELS[i]);
                 c.setOnClickListener(v->{if("favorite".equals(key)){screen="favorites";favOffset=0;}else{screen="media";mediaKind=key;mediaOffset=0;}showPage();});
             }
             filterBar.addView(hsv,p(-1,44));
@@ -2964,7 +2984,7 @@ public class MainActivity extends Activity {
             LinearLayout mediaTools=row();mediaTools.setGravity(Gravity.CENTER_VERTICAL);
             Button layoutMode=btn(mediaGridEnabled()?"Список":"Сетка");
             // Grid slider, counter and overflow must all remain tappable on narrow phones.
-            mediaTools.addView(layoutMode,p(76,42));
+            if(MediaGalleryState.supportsGrid(mediaKind))mediaTools.addView(layoutMode,p(76,42));
             layoutMode.setContentDescription(mediaGridEnabled()?
                 "Перейти к списку медиа":"Перейти к масштабируемой галерее");
             layoutMode.setOnClickListener(v->toggleMediaLayout());
@@ -2991,7 +3011,7 @@ public class MainActivity extends Activity {
             }else{
                 TextView hint=text("Нажми на файл или удерживай для действий",11,SUB);
                 hint.setSingleLine(true);hint.setEllipsize(TextUtils.TruncateAt.END);
-                mediaTools.addView(hint,new LinearLayout.LayoutParams(0,42,1));
+                mediaTools.addView(hint,new LinearLayout.LayoutParams(0,px(42),1));
             }
             Button more=btn("⋯");more.setContentDescription("Инструменты медиатеки");
             mediaTools.addView(more,p(46,42));
@@ -3193,6 +3213,18 @@ public class MainActivity extends Activity {
         if("relationships".equals(screen)&&historyEventsExpanded){
             historyEventsExpanded=false;renderRelationshipsPage();return true;
         }
+        if("favorites".equals(screen)){
+            returnToMediaFromFavorites();return true;
+        }
+        if("echo".equals(screen)){
+            returnScreen="chat";screen="relationships";showPage();return true;
+        }
+        // A tool belongs to the current conversation even after restoring a
+        // nested result cleared the explicit return target.
+        if(returnScreen.isEmpty()&&("search".equals(screen)||"analytics".equals(screen)||
+                "relationships".equals(screen)||"media".equals(screen))){
+            screen="chat";searchReturnsToAnalytics=false;showPage();return true;
+        }
         return false;
     }
     @Override public void onBackPressed(){
@@ -3203,13 +3235,18 @@ public class MainActivity extends Activity {
         if(!returnScreen.isEmpty()){restoreReturn();return;}
         super.onBackPressed();
     }
+    private void showPdfStatus(String key,String message){
+        if(!home&&"chat".equals(screen)&&key.equals(activeKey)&&status!=null){
+            status.setText(message);status.setVisibility(View.VISIBLE);
+        }
+    }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
         if(request==SAVE_CONVERSATION_PDF_REQUEST){
             final String key=pendingPdfKey,name=pendingPdfName;pendingPdfKey=null;pendingPdfName=null;
             if(result==RESULT_OK&&data!=null&&data.getData()!=null&&key!=null){
                 final Uri destination=data.getData();
-                status.setText("Создаю PDF переписки…");
+                showPdfStatus(key,"Создаю PDF переписки…");
                 worker.execute(()->{
                     MessageDb source=new MessageDb(getApplicationContext(),key);
                     java.io.File temporary=null;
@@ -3226,10 +3263,10 @@ public class MainActivity extends Activity {
                             while((n=in.read(buffer))!=-1)out.write(buffer,0,n);
                             out.flush();
                         }
-                        runOnUiThread(()->{status.setText("PDF сохранён · страниц: "+pages);toast("PDF сохранён");});
+                        runOnUiThread(()->{if(!isDestroyed()&&!isFinishing()){showPdfStatus(key,"PDF сохранён · страниц: "+pages);toast("PDF сохранён");}});
                     }catch(Exception error){
                         // A document provider may return an existing document: never delete it on failure.
-                        runOnUiThread(()->{status.setText("Не удалось сохранить PDF; проверь выбранный файл");toast("Ошибка PDF: "+error.getMessage());});
+                        runOnUiThread(()->{if(!isDestroyed()&&!isFinishing()){showPdfStatus(key,"Не удалось сохранить PDF; проверь выбранный файл");toast("Ошибка PDF: "+error.getMessage());}});
                     }finally{source.close();if(temporary!=null)temporary.delete();}
                 });
             }
@@ -4581,7 +4618,7 @@ public class MainActivity extends Activity {
             final View restored=renderedMessageViews.get(pendingRestoreId);
             final int top=pendingRestoreTop;
             pendingRestoreId=-1;
-            if(restored!=null){scroll.post(()->scroll.scrollTo(0,Math.max(0,restored.getTop()-top)));return;}
+            if(restored!=null){final int restoreToken=loadToken;scroll.post(()->{if(restoreToken==loadToken&&"chat".equals(screen)&&!home&&restored.getParent()==list)scroll.scrollTo(0,Math.max(0,restored.getTop()-top));});return;}
         }
         final View target=focus;
         final View targetBubble=glowBubble;
@@ -5773,6 +5810,7 @@ public class MainActivity extends Activity {
         updateMediaLayout(true);
     }
     private void toggleMediaLayout(){
+        if(!MediaGalleryState.supportsGrid(mediaKind))return;
         boolean next=!mediaGridEnabled();
         getPreferences(MODE_PRIVATE).edit().putBoolean("gallery_grid_"+mediaKind,next).apply();
         mediaAdapter.regroup();
@@ -6028,11 +6066,14 @@ public class MainActivity extends Activity {
             h.tile.setContentDescription(mediaLabel(a.kind)+" · "+day(a.date)+
                 " · нажми для открытия, удерживай для действий");
             h.image.setImageDrawable(null);h.image.setTag(null);
-            h.image.setClipToOutline(false);
+            h.image.setClipToOutline(false);h.image.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
             h.image.setVisibility(View.GONE);
             h.symbol.setVisibility(View.GONE);
             h.detail.setTag(null);
             h.detail.setVisibility(View.VISIBLE);
+            h.detail.setTextColor(grid?Color.WHITE:FG);
+            h.detail.setBackgroundColor(grid?0xb600101a:Color.TRANSPARENT);
+            h.selected.setTextColor(Color.WHITE);
             h.selected.setVisibility(mediaSelection.containsKey(a.id)?View.VISIBLE:View.GONE);
             if(grid){
                 h.image.setLayoutParams(new FrameLayout.LayoutParams(-1,-1));
@@ -6084,30 +6125,21 @@ public class MainActivity extends Activity {
                 }else openMedia(a);
             });
             h.tile.setOnLongClickListener(v->{
-                if(multiSelectMedia)toggleMediaSelection(a);else mediaActions(a);
+                if(multiSelectMedia){toggleMediaSelection(a);h.selected.setVisibility(mediaSelection.containsKey(a.id)?View.VISIBLE:View.GONE);}else mediaActions(a);
                 return true;
             });
         }
     }
     private void renderEmptyMediaState(){
-        // A real empty state instead of a disabled pager and vague status message.
-        LinearLayout empty=column();empty.setGravity(Gravity.CENTER);
-        empty.setPadding(px(18),px(37),px(18),px(31));
-        TextView symbol=text("▧",34,ACCENT);symbol.setGravity(Gravity.CENTER);
-        empty.addView(symbol,p(-1,49));
-        TextView heading=text("Здесь пока нет медиа",19,FG);
-        heading.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
-        heading.setGravity(Gravity.CENTER);empty.addView(heading,p(-1,-2));
-        TextView details=text("Фото, видео, голосовые и файлы появятся после импорта полного экспорта Telegram.",13,SUB);
-        details.setGravity(Gravity.CENTER);details.setPadding(0,px(9),0,px(14));
-        empty.addView(details,p(-1,-2));
-        Button importAction=btn("Добавить медиа из экспорта");
-        empty.addView(importAction,p(-1,47));
-        importAction.setOnClickListener(v->chooseFolder());
-        LinearLayout.LayoutParams params=p(-1,-2);
-        params.setMargins(px(16),px(16),px(16),0);
-        empty.setBackground(glass(PANEL,18));
-        list.addView(empty,params);
+        boolean all="all".equals(mediaKind);
+        String detail=all?"В этой переписке нет зарегистрированных вложений. Импорт другого архива не добавит файлы в этот чат.":
+            "В выбранной категории нет вложений. Открой все файлы, чтобы проверить остальные типы.";
+        emptyWorkspace(list,all?"В переписке нет медиа":"Нет файлов этой категории",detail,"Медиа");
+        if(!all){
+            Button showAll=btn("Показать все файлы");LinearLayout.LayoutParams bounds=p(-1,48);
+            bounds.setMargins(px(3),px(2),px(3),px(8));list.addView(showAll,bounds);
+            showAll.setOnClickListener(v->{mediaKind="all";mediaOffset=0;showPage();});
+        }
     }
     private void renderMedia(List<MessageDb.Attachment> media){
         if("audio".equals(mediaKind)&&!media.isEmpty()){

@@ -61,6 +61,16 @@ public class Qa00NavigationCoreTest {
         v.click();
         device.waitForIdle();
     }
+    private void awaitScreen(MainActivity a,String expected)throws Exception{
+        long deadline=android.os.SystemClock.uptimeMillis()+5000;
+        java.util.concurrent.atomic.AtomicReference<String> actual=new java.util.concurrent.atomic.AtomicReference<>();
+        do{
+            inst.runOnMainSync(()->{try{actual.set((String)field(a,"screen"));}catch(Exception e){throw new AssertionError(e);}});
+            if(expected.equals(actual.get()))return;
+            Thread.sleep(50);
+        }while(android.os.SystemClock.uptimeMillis()<deadline);
+        assertEquals("Screen did not settle",expected,actual.get());
+    }
     private void shown(String label) {
         assertNotNull("Expected UI text missing: "+label,visible(label));
     }
@@ -87,7 +97,7 @@ public class Qa00NavigationCoreTest {
     }
 
     private void openHelpFromDrawer(){
-        shownAfterDrawerScroll("Помощь и инструкция");tap("Помощь и инструкция");
+        shownAfterDrawerScroll("Помощь и диагностика");tap("Помощь и диагностика");shownAfterDrawerScroll("Помощь и инструкция");tap("Помощь и инструкция");
         shown("Помощь · Telegram Archive");shown("СПРАВОЧНИК");
     }
     private void enterHelpChapterAndReturn(){
@@ -110,8 +120,8 @@ public class Qa00NavigationCoreTest {
                 set(a,"db",synthetic);set(a,"activeKey",key);set(a,"activeName","QA00 help chat");
                 set(a,"folder",null);set(a,"home",false);set(a,"screen","chat");call(a,"showPage");
             }catch(Exception e){throw new AssertionError(e);}});
-            shown("QA00 help chat");tap("≡");tap("Все инструменты");openHelpFromDrawer();enterHelpChapterAndReturn();
-            device.pressBack();device.waitForIdle();shown("QA00 help chat");shown("Переписка");
+            shown("QA00 help chat");tap("⋯");tap("Все инструменты");openHelpFromDrawer();enterHelpChapterAndReturn();
+            device.pressBack();device.waitForIdle();shown("QA00 help chat");shown("Медиа — по названию чата");
             assertEquals("chat",field(a,"screen"));assertEquals(false,field(a,"home"));
         }finally{
             CountDownLatch idle=new CountDownLatch(1);((ExecutorService)field(a,"worker")).execute(idle::countDown);
@@ -129,26 +139,25 @@ public class Qa00NavigationCoreTest {
         shown("Добавить переписку");
         try{
             tap("Добавить переписку");
-            assertNotEquals("One tap should leave the app for Android's document picker",
-                activity.getActivity().getPackageName(),device.getCurrentPackageName());
+            assertTrue("One tap must open Android document picker",device.wait(Until.hasObject(By.pkg(java.util.regex.Pattern.compile(".*documentsui.*"))),12000));
             assertNull("Unexpected two-choice import dialog",visible("Импорт переписки"));
         }finally{
             device.pressBack();device.waitForIdle();
         }
         shown("Мои переписки");
         tap("☰");
-        shown("TELEGRAM ARCHIVE");
+        shown("Telegram Archive");
         // 348dp drawer leaves a safe dimmed region on Pixel 2.
         int width=device.getDisplayWidth(),height=device.getDisplayHeight();
         device.click(width-5,height/2);
         device.waitForIdle();
-        assertNull("Touch on scrim must close side drawer",visible("TELEGRAM ARCHIVE"));
+        assertNull("Touch on scrim must close side drawer",visible("Telegram Archive"));
         shown("Мои переписки");
         tap("☰");
-        shown("TELEGRAM ARCHIVE");
+        shown("Telegram Archive");
         device.pressBack();
         device.waitForIdle();
-        assertNull("Android Back must close side drawer",visible("TELEGRAM ARCHIVE"));
+        assertNull("Android Back must close side drawer",visible("Telegram Archive"));
         shown("Мои переписки");
     }
 
@@ -180,7 +189,7 @@ public class Qa00NavigationCoreTest {
             shown("Медиа");
             tap("‹");
             assertEquals("chat",field(a,"screen"));
-            shown("Переписка");
+            shown("Медиа — по названию чата");
             // The help module should return to the originating chat, not home.
             inst.runOnMainSync(()->{
                 try{call(a,"showHelp");}catch(Exception e){throw new AssertionError(e);}
@@ -198,8 +207,9 @@ public class Qa00NavigationCoreTest {
             tap("‹");
             assertEquals("Toolbar Back lost the source screen","analytics",field(a,"screen"));
             assertEquals(false,field(a,"home"));
-            device.pressBack();
-            device.waitForIdle();
+            device.pressBack();device.waitForIdle();
+            assertEquals("chat",field(a,"screen"));
+            device.pressBack();device.waitForIdle();
             assertEquals(true,field(a,"home"));
             shown("Мои переписки");
         }finally{
@@ -244,8 +254,8 @@ public class Qa00NavigationCoreTest {
                 assertEquals("media",field(a,"screen"));
                 shown("Медиа");
                 tap("‹");
-                assertEquals("chat",field(a,"screen"));
-                shown("Переписка");
+                awaitScreen(a,"chat");
+                shown("Медиа — по названию чата");
             }
         }finally {
             CountDownLatch idle=new CountDownLatch(1);
@@ -283,9 +293,9 @@ public class Qa00NavigationCoreTest {
                 tap("‹");
             }
             assertEquals("Returning from media must preserve chat screen","chat",field(a,"screen"));
-            shown("Переписка");
+            shown("Медиа — по названию чата");
             tap("QA00 быстрые вкладки");shown("Медиа");
-            tap("‹");shown("Переписка");
+            tap("‹");shown("Медиа — по названию чата");
         } finally {
             CountDownLatch idle=new CountDownLatch(1);
             ((ExecutorService)field(a,"worker")).execute(idle::countDown);
@@ -343,7 +353,7 @@ public class Qa00NavigationCoreTest {
             String text=marker.getText();
             tap("QA00 scroll");shown("Медиа");
             assertNotNull("Media page did not finish loading",device.wait(
-                Until.findObject(By.textContains("Здесь пока нет медиа")),15000));
+                Until.findObject(By.textContains("Нет файлов этой категории")),15000));
             tap("‹");
             UiObject2 restored=device.wait(Until.findObject(By.text(text)),15000);
             assertNotNull("Scrolled message disappeared after media round trip: "+text,restored);
@@ -412,6 +422,7 @@ public class Qa00NavigationCoreTest {
             tap("Избранное");
             assertNotNull("Favorite messages did not load",device.wait(
                 Until.findObject(By.textContains("QA00_SCROLL_")),15000));
+            device.pressBack();device.waitForIdle();assertEquals("media",field(a,"screen"));
             tap("‹");
             UiObject2 restored=device.wait(Until.findObject(By.text(text)),15000);
             assertNotNull("Scrolled message disappeared after media round trip: "+text,restored);
@@ -458,7 +469,7 @@ public class Qa00NavigationCoreTest {
                     }catch(Exception e){throw new AssertionError(e);}
                 });
                 inst.waitForIdleSync();
-                tap("≡"); // compact themed chat actions, not the left drawer
+                tap("⋯"); // compact themed chat actions, not the left drawer
                 shown(destination[0]);
                 tap(destination[0]);
                 // UIAutomator click dispatch is asynchronous. Wait for the actual
@@ -479,14 +490,16 @@ public class Qa00NavigationCoreTest {
                 }catch(Exception e){throw new AssertionError(e);}
             });
             inst.waitForIdleSync();
-            tap("≡");
+            tap("⋯");
             shown("Все инструменты");
             tap("Все инструменты");
-            shown("TELEGRAM ARCHIVE");
-            tap("Инструменты переписки");
-            shownAfterDrawerScroll("В этот день");
-            shownAfterDrawerScroll("Навигатор пауз");
+            shown("Telegram Archive");
+            shownAfterDrawerScroll("Архивы и резервные копии");
+            shownAfterDrawerScroll("Помощь и диагностика");
             device.pressBack();device.waitForIdle();
+            tap("⋯");tap("Хронология");shown("В этот день");
+            shownAfterDrawerScroll("Другие инструменты истории");tap("Другие инструменты истории");
+            shownAfterDrawerScroll("Паузы между сообщениями");
         }finally{
             CountDownLatch idle=new CountDownLatch(1);
             ((ExecutorService)field(a,"worker")).execute(idle::countDown);
