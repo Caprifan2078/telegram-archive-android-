@@ -90,7 +90,9 @@ final class AnalystModelCatalog {
     }
     // Conservative start threshold, not a measurement or a guarantee against native OOM.
     static long requiredFreeBytes(long size,boolean legacy){
-        long reserve=(legacy?768L:1536L)*1024*1024;
+        // 5 GiB Android emulator killed both hybrid candidates and the larger legacy model.
+        // Conservative preflight estimate, not a measured memory requirement.
+        long reserve=(legacy?(size>=1500000000L?2048L:768L):3072L)*1024*1024;
         return size<0||size>Long.MAX_VALUE-reserve?Long.MAX_VALUE:size+reserve;
     }
     private AnalystModelCatalog(){}
