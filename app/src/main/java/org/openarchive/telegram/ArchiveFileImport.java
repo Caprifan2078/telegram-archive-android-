@@ -259,7 +259,9 @@ final class ArchiveFileImport {
                 if(!parent.isDirectory()&&!parent.mkdirs())throw new IOException("Не создана папка ZIP");
                 if(target.exists())throw new IOException("Повторное имя в ZIP");
                 long written=0;
-                try(InputStream in=entry.getInputStream();OutputStream out=new BufferedOutputStream(new FileOutputStream(target))){
+                // Iteration exposes metadata only; extract(name) assigns the configured password.
+                // Still stream into our own checked output path, never call extract(Path).
+                try(InputStream in=reader.extract(entry.getName()).getInputStream();OutputStream out=new BufferedOutputStream(new FileOutputStream(target))){
                     int n;while((n=in.read(buf))!=-1){written+=n;if(written>size)throw new IOException("Размер ZIP не совпадает");budget.add(n,written);out.write(buf,0,n);}
                 }
                 if(written!=size)throw new IOException("Файл ZIP распакован не полностью");
