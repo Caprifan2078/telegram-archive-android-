@@ -20,7 +20,12 @@ final class ArchiveFileImport {
         PasswordRequired(String message){super(message);}
         PasswordRequired(String message,Throwable cause){super(message,cause);}
     }
+    /** The decoder finished; only discovery of a Telegram export failed. */
+    static final class ExportNotFound extends IOException {
+        ExportNotFound(String message){super(message);}
+    }
     static boolean isPasswordFailure(Throwable error){
+        if(error instanceof ExportNotFound)return false;
         for(Throwable e=error;e!=null;e=e.getCause()){
             if(e instanceof PasswordRequired)return true;
             String type=e.getClass().getSimpleName().toLowerCase(Locale.ROOT);
@@ -108,8 +113,8 @@ final class ArchiveFileImport {
                 extractRar(ctx,uri,root,password,budget,progress);
             }
             else throw new IOException("Ожидался ZIP, 7z или RAR");
+            progress.update("Распаковка завершена. Ищу HTML переписки…");
             File selected=findChatRoot(root,0);
-            if(selected==null)throw new IOException("В архиве не обнаружены messages.html или messages2.html. Экспортируй чат Telegram в формате HTML");
             progress.update("Распаковано файлов: "+budget.count+"; найден экспорт Telegram");
             return selected;
         }catch(Exception fail){
@@ -501,27 +506,42 @@ final class ArchiveFileImport {
         }finally{compressed.delete();}
     }
     private static File findChatRoot(File folder,int depth)throws IOException{
-        ArrayList<File> roots=new ArrayList<>();
-        collectChatRoots(folder,depth,roots);
-        if(roots.size()>1)throw new IOException("В архиве найдено несколько переписок. Выбери архив одной переписки; данные не изменены.");
-        return roots.isEmpty()?null:roots.get(0);
-    }
-    private static void collectChatRoots(File folder,int depth,List<File> roots)throws IOException{
-        // Inspect every extracted directory; a depth cutoff can hide a second chat.
+        Set<File> canonical=new LinkedHashSet<>();
+        List<File> otherHtml=new ArrayList<>();
         ArrayDeque<File> pending=new ArrayDeque<>();
         pending.add(folder);
+        int files=0,html=0,nested=0;
         while(!pending.isEmpty()){
             File[] items=pending.removeLast().listFiles();
-            if(items==null)throw new IOException("Не удалось прочитать распакованный архив");
+            if(items==null)throw new ExportNotFound("Не удалось прочитать распакованную папку.");
             for(File f:items){
-                if(f.isFile()&&f.getName().matches("(?i)^messages\\d*\\.html$")){
-                    roots.add(f.getParentFile());
-                    break;
+                if(f.isDirectory()){pending.add(f);continue;}
+                if(!f.isFile())continue;
+                files++;
+                String n=f.getName().toLowerCase(Locale.ROOT);
+                if(n.endsWith(".zip")||n.endsWith(".7z")||n.endsWith(".rar"))nested++;
+                if(TelegramExportHtml.candidate(n)){
+                    html++;
+                    if(TelegramExportHtml.canonical(n))canonical.add(f.getParentFile());
+                    else if(otherHtml.size()<256)otherHtml.add(f);
                 }
             }
-            if(roots.size()>1)return;
-            for(File f:items)if(f.isDirectory())pending.add(f);
         }
+        if(canonical.size()>1)throw new ExportNotFound("В архиве найдено несколько переписок. Выбери архив одной переписки; данные не изменены.");
+        if(canonical.size()==1)return canonical.iterator().next();
+        if(otherHtml.size()<html)throw new ExportNotFound("Слишком много HTML без стандартных имён для безопасного автоматического выбора: "+html+". Выбери нужный HTML вручную.");
+        File selected=null;
+        for(File f:otherHtml){
+            try(InputStream in=new BufferedInputStream(new FileInputStream(f))){
+                if(!TelegramExportHtml.recognized(in))continue;
+            }
+            if(selected!=null)throw new ExportNotFound("Найдено несколько HTML переписок с нестандартными именами. Выбери нужный HTML вручную.");
+            selected=f;
+        }
+        if(selected!=null)return selected.getParentFile();
+        throw new ExportNotFound("Архив распакован, но HTML переписки не найден. Файлов: "+files+
+            "; HTML: "+html+"; вложенных ZIP/7z/RAR: "+nested+". "+
+            (nested>0?"Возможно, переписка находится во вложенном архиве. Выбери его отдельно.":"Проверь имя HTML, который открывается после ручной распаковки."));
     }
     static void deleteTree(File file){
         if(file==null)return;
