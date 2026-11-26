@@ -1,0 +1,66 @@
+name: Pinned reserve model speed and quality comparison
+on:
+  pull_request:
+    branches: [qa/analyst-light-models-20261127]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real_model:
+    if: github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || github.head_ref == 'qa/analyst-fast-reserve-20261127')
+    name: Native model / ${{ matrix.model }}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        model: [qwen06q4, qwen2515]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Run all local-model unit regressions (retry only Maven rate limits)
+        run: |
+          set -o pipefail
+          for attempt in 1 2 3; do
+            if gradle --no-daemon --max-workers=2 testProtectedArchiveQaUnitTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true 2>&1 | tee unit.log; then exit 0; fi
+            if ! grep -Eq '429|Too Many Requests' unit.log || [[ "$attempt" == 3 ]]; then exit 1; fi
+            sleep $((attempt * 30))
+          done
+      - name: Assemble exact inference test APK
+        run: gradle --no-daemon --max-workers=2 assembleProtectedArchiveQa assembleProtectedArchiveQaAndroidTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verified weights and Russian native inference on Android 15
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          ram-size: 5120M
+          disk-size: 8192M
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: bash .github/scripts/real-model-smoke.sh '${{ matrix.model }}'
+      - name: Preserve actual inference logs and test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-model-${{ matrix.model }}-report
+          retention-days: 14
+          path: |
+            app/build/outputs/androidTest-results/
+            app/build/reports/androidTests/
+            app/build/ui-audit/
