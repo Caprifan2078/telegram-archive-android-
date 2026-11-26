@@ -174,6 +174,7 @@ final class ArchiveFileImport {
             for(File f:children){
                 if(f.isDirectory())pending.add(f);
                 else if(f.isFile()){
+                    if(isWrapperMetadata(f))continue;
                     if(single!=null)return null;
                     single=f;
                 }
@@ -182,6 +183,14 @@ final class ArchiveFileImport {
         if(single==null)return null;
         try{detectFormat(ctx,Uri.fromFile(single),single.getName());return single;}
         catch(IOException unsupported){return null;}
+    }
+    // Ignore only well-known small OS metadata, never arbitrary user documents.
+    private static boolean isWrapperMetadata(File file){
+        if(file.length()>1024*1024)return false;
+        String name=file.getName().toLowerCase(Locale.ROOT);
+        return name.equals(".ds_store")||name.equals("thumbs.db")||name.equals("desktop.ini")||
+            (name.startsWith("._")&&file.getParentFile()!=null&&
+             file.getParentFile().getName().equals("__MACOSX"));
     }
     private static void decodeLayer(Context ctx,Uri uri,String suffix,File root,char[] password,
             Budget budget,Progress progress)throws Exception{
