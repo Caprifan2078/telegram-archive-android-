@@ -11,12 +11,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class BehaviorScan {
     static final String[] LABELS={"Прямые оскорбления","Давление и ультиматумы","Обобщения и обвинения","Извинения","Поддержка и благодарность","Уважение границ"};
     static final Pattern[] RULES={
-        Pattern.compile("(?<![\\p{L}])(?:идиот(?:ка|ом)?|дурак|дура|тупица|ничтожество|дебил(?:ка)?)(?![\\p{L}])",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE),
-        Pattern.compile("\\b(?:ты обязан[а]?|ты долж[е]?н[а]?|если не .* то|иначе я|или .* или я|я запрещаю|не смей)\\b",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE),
-        Pattern.compile("\\b(?:ты всегда|ты никогда|все из-за тебя|всё из-за тебя|ты во вс[её]м виноват[а]?)\\b",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE),
-        Pattern.compile("\\b(?:прости|простите|извини|извиняюсь|моя вина|я был[а]? неправ[а]?)\\b",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE),
-        Pattern.compile("\\b(?:спасибо|благодарю|я рядом|горжусь тобой|держись|я тебя поддерживаю)\\b",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE),
-        Pattern.compile("\\b(?:как тебе удобно|если хочешь|не буду давить|уважаю твой выбор|я понимаю твой отказ|можешь отказаться)\\b",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE)
+        Pattern.compile("(?<![\\p{L}\\p{N}_])(?:идиот(?:ка|ом)?|дурак|дура|тупица|ничтожество|дебил(?:ка)?)(?![\\p{L}\\p{N}_])",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE),
+        Pattern.compile("(?<![\\p{L}\\p{N}_])(?:ты обязан[а]?|ты долж[е]?н[а]?|если не .* то|иначе я|или .* или я|я запрещаю|не смей)(?![\\p{L}\\p{N}_])",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE),
+        Pattern.compile("(?<![\\p{L}\\p{N}_])(?:ты всегда|ты никогда|все из-за тебя|всё из-за тебя|ты во вс[её]м виноват[а]?)(?![\\p{L}\\p{N}_])",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE),
+        Pattern.compile("(?<![\\p{L}\\p{N}_])(?:прости|простите|извини|извиняюсь|моя вина|я был[а]? неправ[а]?)(?![\\p{L}\\p{N}_])",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE),
+        Pattern.compile("(?<![\\p{L}\\p{N}_])(?:спасибо|благодарю|я рядом|горжусь тобой|держись|я тебя поддерживаю)(?![\\p{L}\\p{N}_])",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE),
+        Pattern.compile("(?<![\\p{L}\\p{N}_])(?:как тебе удобно|если хочешь|не буду давить|уважаю твой выбор|я понимаю твой отказ|можешь отказаться)(?![\\p{L}\\p{N}_])",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE)
     };
     static final int MAX_AUTHORS=2000, MAX_EXAMPLES=24;
     static final class Example {
