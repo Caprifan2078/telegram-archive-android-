@@ -51,7 +51,7 @@ jobs:
           done
           exit 1
       - name: Lint
-        if: matrix.api == 30 && matrix.suite == 'analytics'
+        if: matrix.api == 30 && matrix.suite == 'final_password_ui'
         run: gradle --no-daemon --max-workers=2 lintProtectedArchiveQa -PqaLocalModel=true -PqaProtectedArchiveInstrumentation=true
       - name: Verify APK signature and explicit model-download permission
         run: |
@@ -78,6 +78,23 @@ jobs:
           script: ANALYST_QA_PACKAGE=org.openarchive.telegram.qa.analyst20261126 ORG_GRADLE_PROJECT_qaLocalModel=true bash .github/scripts/integrated-viewer-audit.sh ${{ matrix.suite }}
       - name: Verify exact APK after emulator tests
         run: sha256sum -c apk-before-test.sha256
+      - name: Stage exact APK from codec test
+        if: success() && matrix.api == 35 && matrix.suite == 'zip_codec_probe'
+        run: |
+          set -euo pipefail
+          mkdir -p verified-candidate
+          cp app/build/outputs/apk/protectedArchiveQa/app-protectedArchiveQa.apk verified-candidate/TelegramArchiveViewer-ExtendedZIP.apk
+          cd verified-candidate
+          sha256sum TelegramArchiveViewer-ExtendedZIP.apk > SHA256SUMS.txt
+          printf '%s\n' "$GITHUB_SHA" > COMMIT.txt
+      - name: Store candidate internally
+        if: success() && matrix.api == 35 && matrix.suite == 'zip_codec_probe'
+        uses: actions/upload-artifact@v4
+        with:
+          name: internal-extended-zip-apk
+          path: verified-candidate/
+          if-no-files-found: error
+          retention-days: 7
       - name: Preserve logs, test reports and synthetic screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -89,3 +106,26 @@ jobs:
             app/build/reports/androidTests/
             app/build/test-results/
             app/build/ui-audit/
+
+  verified_handoff:
+    name: Publish candidate only after all four Android groups succeed
+    needs: audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: internal-extended-zip-apk
+          path: verified-candidate
+      - name: Verify exact commit and checksum
+        run: |
+          set -euo pipefail
+          cd verified-candidate
+          test "$(cat COMMIT.txt)" = "$GITHUB_SHA"
+          sha256sum -c SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TelegramArchiveViewer-ExtendedZIP-Verified
+          path: verified-candidate/
+          if-no-files-found: error
+          retention-days: 14
