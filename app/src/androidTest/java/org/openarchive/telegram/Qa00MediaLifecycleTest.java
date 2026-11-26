@@ -27,9 +27,25 @@ import static org.junit.Assert.*;
 public class Qa00MediaLifecycleTest {
     private final UiDevice device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
     private interface ScenarioCheck { void run(ActivityScenario<MainActivity> scenario)throws Exception; }
+    private interface NodeAction<T>{T run(UiObject2 node);}
+    private <T> T fresh(androidx.test.uiautomator.BySelector selector,String label,NodeAction<T> action){
+        long end=SystemClock.uptimeMillis()+15000;
+        StaleObjectException last=null;
+        do{
+            try{
+                UiObject2 node=device.findObject(selector);
+                if(node!=null)return action.run(node);
+            }catch(StaleObjectException changed){last=changed;}
+            SystemClock.sleep(100);
+        }while(SystemClock.uptimeMillis()<end);
+        throw new AssertionError("Missing or unstable UI control: "+label,last);
+    }
     private void tap(String text){
-        UiObject2 v=device.wait(Until.findObject(By.text(text)),15000);
-        assertNotNull("Missing UI control: "+text,v);v.click();device.waitForIdle();
+        // Resolve the current bounds, then tap once. Never retry a dispatched action.
+        android.graphics.Rect bounds=fresh(By.text(text),text,UiObject2::getVisibleBounds);
+        assertFalse("Control outside viewport: "+text,bounds.isEmpty());
+        assertTrue("Tap failed: "+text,device.click(bounds.centerX(),bounds.centerY()));
+        device.waitForIdle();
     }
     private void openMediaFromChat(){
         // The user-requested single chat header replaces the removed bottom
@@ -90,8 +106,7 @@ public class Qa00MediaLifecycleTest {
         }
     }
     private String scrollToVisibleMarker(){
-        UiObject2 area=device.wait(Until.findObject(By.clazz("android.widget.ScrollView")),15000);
-        assertNotNull("Chat viewport missing",area);Rect b=area.getVisibleBounds();
+        Rect b=fresh(By.clazz("android.widget.ScrollView"),"chat viewport",UiObject2::getVisibleBounds);
         assertTrue("Chat viewport too small",b.height()>100);
         for(int i=0;i<4;i++){device.swipe(b.centerX(),b.top+b.height()*3/4,b.centerX(),b.top+b.height()/4,30);device.waitForIdle();}
         String marker=visibleMarker();
@@ -147,19 +162,49 @@ public class Qa00MediaLifecycleTest {
         assertNotNull("Gallery must expose source-message navigation",jump);
         jump.click();device.waitForIdle();
     }
+    private static Object field(MainActivity a,String name)throws ReflectiveOperationException{
+        java.lang.reflect.Field f=MainActivity.class.getDeclaredField(name);f.setAccessible(true);return f.get(a);
+    }
+    private static android.widget.TextView findExact(android.view.View root,String label){
+        if(root instanceof android.widget.TextView&&label.contentEquals(((android.widget.TextView)root).getText()))return (android.widget.TextView)root;
+        if(root instanceof android.view.ViewGroup){
+            android.view.ViewGroup group=(android.view.ViewGroup)root;
+            for(int i=0;i<group.getChildCount();i++){
+                android.widget.TextView found=findExact(group.getChildAt(i),label);if(found!=null)return found;
+            }
+        }
+        return null;
+    }
     @Test public void searchResultsPositionAndQuerySurviveHelpRoundTrip()throws Exception{
         fixture(scenario->{
             tap("⋯");tap("Найти сообщение");
-            UiObject2 input=device.wait(Until.findObject(By.desc("Поиск по сообщениям")),15000);
-            assertNotNull("Search input missing",input);input.setText("QA");tap("Найти");
+            fresh(By.desc("Поиск по сообщениям"),"Search input",node->{node.setText("QA");return true;});tap("Найти");
             assertNotNull("Synthetic results missing",device.wait(Until.findObject(By.textContains("QA_LIFE_")),15000));
             String marker=scrollToVisibleMarker();
             openHelpFromCurrentScreen(scenario);
             assertNotNull("Help did not open",device.wait(Until.findObject(By.text("СПРАВОЧНИК")),15000));
             device.pressBack();device.waitForIdle();
             requireRestoredMarker(marker);
-            UiObject2 restoredInput=device.wait(Until.findObject(By.desc("Поиск по сообщениям")),15000);
-            assertNotNull(restoredInput);assertEquals("Search query changed","QA",restoredInput.getText());
+            assertEquals("Search query changed","QA",fresh(By.desc("Поиск по сообщениям"),"restored search input",UiObject2::getText));
+            // Independently inspect actual Views on the UI thread, not accessibility cache.
+            // Verify the applied database query, input text AND exact visible source row.
+            scenario.onActivity(a->{
+                try{
+                    assertEquals("search",field(a,"screen"));
+                    assertEquals("QA",field(a,"q"));
+                    android.widget.EditText input=(android.widget.EditText)field(a,"searchInput");
+                    assertNotNull(input);assertTrue(input.isShown());assertEquals("QA",input.getText().toString());
+                    android.widget.ScrollView scroll=(android.widget.ScrollView)field(a,"scroll");
+                    assertNotNull(scroll);assertTrue(scroll.isShown());
+                    android.widget.TextView row=findExact(scroll,marker);
+                    assertNotNull("Same message must remain loaded",row);
+                    Rect viewport=new Rect(),visible=new Rect();
+                    assertTrue("Viewport must be visible",scroll.getGlobalVisibleRect(viewport));
+                    assertTrue("Restored message must be visible",row.getGlobalVisibleRect(visible));
+                    assertEquals("Restored message must not be clipped vertically",row.getHeight(),visible.height());
+                    assertTrue("Restored message outside viewport",visible.top>=viewport.top&&visible.bottom<=viewport.bottom);
+                }catch(ReflectiveOperationException e){throw new AssertionError(e);}
+            });
         });
     }
     @Test public void helpRoundTripPreservesScrolledChatPosition()throws Exception{
