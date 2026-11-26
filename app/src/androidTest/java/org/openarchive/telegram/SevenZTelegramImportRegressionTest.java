@@ -125,4 +125,23 @@ public class SevenZTelegramImportRegressionTest {
             catch(Exception expected){assertFalse(directory(next).exists());}
         }finally{archive.delete();ArchiveFileImport.deleteTree(directory(next));}
     }
+
+    @Test public void encryptedSevenZInsideZipWithMetadata()throws Exception{
+        String key=key();char[] password="synthetic-nested".toCharArray();
+        File inner=fixture("Export/messages.html",password);
+        File outer=File.createTempFile("7z-in-zip-", ".zip",ctx.getCacheDir());
+        try{
+            try(java.util.zip.ZipOutputStream zip=new java.util.zip.ZipOutputStream(new FileOutputStream(outer))){
+                zip.putNextEntry(new java.util.zip.ZipEntry("inner.7z"));
+                try(InputStream in=new FileInputStream(inner)){byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))!=-1)zip.write(buffer,0,n);}
+                zip.closeEntry();
+                zip.putNextEntry(new java.util.zip.ZipEntry("desktop.ini"));zip.write(new byte[]{1});zip.closeEntry();
+            }
+            byte[] before=java.nio.file.Files.readAllBytes(outer.toPath());
+            File chat=ArchiveFileImport.extract(ctx,Uri.fromFile(outer),"zip",key,password,ignored->{});
+            assertTrue(new File(chat,"messages.html").isFile());
+            assertTrue(new File(chat,"photos/example.txt").isFile());
+            assertArrayEquals(before,java.nio.file.Files.readAllBytes(outer.toPath()));
+        }finally{java.util.Arrays.fill(password,'\0');inner.delete();outer.delete();ArchiveFileImport.deleteTree(directory(key));}
+    }
 }
