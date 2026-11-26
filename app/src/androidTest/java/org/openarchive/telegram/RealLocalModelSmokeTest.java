@@ -118,6 +118,14 @@ public final class RealLocalModelSmokeTest {
             if(!dual.citesBoth(comparison,comparisonPrompt))defects.add("comparison: missing evidence from either side");
             if(!DeepChatContext.unknownCitations(comparison,comparisonPrompt).isEmpty())defects.add("comparison: invented source");
             if("true".equals(InstrumentationRegistry.getArguments().getString("extendedQuality","false"))){
+                // A valid pair of IDs and times alone does not prove correct assignment.
+                boolean first=false,second=false;
+                for(String line:comparison.split("\\r?\\n")){
+                    java.util.Set<Long> refs=FullChatModelScan.ids(line);
+                    first|=refs.contains(1L)&&!refs.contains(2L)&&line.contains("17:45")&&!line.contains("09:30");
+                    second|=refs.contains(2L)&&!refs.contains(1L)&&line.contains("09:30")&&!line.contains("17:45");
+                }
+                if(!first||!second)defects.add("comparison: archive/time association not demonstrated");
                 android.util.Log.i("ModelSmoke","Stage: third native generation, synthetic conflict and injected instruction");
                 logMemory(context,"before-conflict");
                 long thirdStart=android.os.SystemClock.elapsedRealtime();
