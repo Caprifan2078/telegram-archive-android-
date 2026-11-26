@@ -3884,6 +3884,53 @@ public class MainActivity extends Activity {
         subtitle.setPadding(px(11),0,px(11),px(8));
         list.addView(subtitle,p(-1,-2));
     }
+    private void showChatAnalyst(){
+        if(home||!"analytics".equals(screen)||db==null||importing)return;
+        final MessageDb source=db;final String archive=activeKey;final int token=loadToken;
+        final java.util.concurrent.atomic.AtomicBoolean cancelled=new java.util.concurrent.atomic.AtomicBoolean(false);
+        LinearLayout panel=column();panel.setPadding(px(16),px(8),px(16),px(12));
+        analyticsText(panel,"Локальные ответы по фактам · без нейросети и интернета",SUB,12);
+        EditText question=new EditText(this);ViewerUi.styleInput(question,ViewerPalette.of(themeIndex));
+        question.setHint("Кто первый написал?");question.setContentDescription("Вопрос о переписке");
+        question.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(240)});
+        question.setMaxLines(3);panel.addView(question,p(-1,-2));
+        Button ask=btn("Спросить");panel.addView(ask,p(-1,48));
+        LinearLayout result=column();panel.addView(result,p(-1,-2));
+        analyticsText(result,ChatQuestionAnalyst.HELP,SUB,13);
+        ScrollView viewport=new ScrollView(this);viewport.addView(panel);
+        AlertDialog dialog=new FontDialog.Builder(this).setTitle("Аналитик переписки")
+            .setView(viewport).setNegativeButton("Закрыть",null).create();
+        dialog.setOnDismissListener(d->cancelled.set(true));
+        ask.setOnClickListener(v->{
+            if(!dialog.isShowing()||!sameScreenRequest(source,archive,token))return;
+            ChatQuestionAnalyst.Query query=ChatQuestionAnalyst.parse(question.getText().toString());
+            ask.setEnabled(false);result.removeAllViews();analyticsText(result,"Читаю локальную переписку…",SUB,13);
+            worker.execute(()->{
+                try{
+                    ChatQuestionAnalyst.Answer answer=source.askChat(query,cancelled);
+                    runOnUiThread(()->{
+                        if(answer==null||cancelled.get()||!dialog.isShowing()||!sameScreenRequest(source,archive,token))return;
+                        ask.setEnabled(true);result.removeAllViews();analyticsText(result,answer.text,FG,15);
+                        for(ChatQuestionAnalyst.Evidence evidence:answer.sources){
+                            TextView link=text(evidence.author+" · "+evidence.date+"\n"+evidence.excerpt+"\nОткрыть сообщение ›",13,FG);
+                            link.setPadding(px(10),px(8),px(10),px(8));
+                            link.setBackground(ViewerUi.control(this,PANEL,ViewerUi.CONTROL,themeIndex==2));
+                            LinearLayout.LayoutParams lp=p(-1,-2);lp.topMargin=px(6);result.addView(link,lp);
+                            link.setFocusable(true);link.setOnClickListener(t->{
+                                if(!sameScreenRequest(source,archive,token))return;
+                                dialog.dismiss();jump(evidence.id,"analytics");
+                            });
+                        }
+                    });
+                }catch(Exception error){
+                    runOnUiThread(()->{if(cancelled.get()||!dialog.isShowing()||!sameScreenRequest(source,archive,token))return;
+                        ask.setEnabled(true);result.removeAllViews();analyticsText(result,"Не удалось прочитать переписку. Попробуй ещё раз.",SUB,13);});
+                }
+            });
+        });
+        dialog.show();
+    }
+
     private void renderAnalytics(ChatAnalytics.Snapshot r){
         // The app bar already identifies the chat and says the analysis is offline.
         // No second hero/title: one concise, always-visible tab row, then content.
@@ -4012,6 +4059,8 @@ public class MainActivity extends Activity {
         }
             return;
         }
+        Button ask=btn("Задать вопрос о переписке");
+        list.addView(ask,p(-1,48));ask.setOnClickListener(v->showChatAnalyst());
         analyticsSectionHeading("Главное о переписке","Короткая сводка без длинных таблиц и графиков.");
         LinearLayout glance=row();glance.setGravity(Gravity.TOP);
         glance.setPadding(px(5),0,px(5),px(6));list.addView(glance,p(-1,-2));
