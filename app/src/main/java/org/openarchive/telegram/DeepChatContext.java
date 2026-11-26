@@ -23,16 +23,27 @@ final class DeepChatContext {
     }
     static DeepChatContext read(File file,String question,AtomicBoolean cancelled){
         try(SQLiteDatabase db=SQLiteDatabase.openDatabase(file.getAbsolutePath(),null,SQLiteDatabase.OPEN_READONLY)){
-            long total=0;try(Cursor c=db.rawQuery("SELECT COUNT(*) FROM messages",null)){if(c.moveToFirst())total=c.getLong(0);}
-            StringBuilder facts=new StringBuilder("Всего сообщений: "+total+". Имена отправителей и количество: ");
-            try(Cursor c=db.rawQuery("SELECT author,COUNT(*) FROM messages GROUP BY author ORDER BY COUNT(*) DESC,author LIMIT 8",null)){
-                while(!cancelled.get()&&c.moveToNext())facts.append(clip(c.getString(0),70)).append(" = ").append(c.getLong(1)).append("; ");
-            }
-            LinkedHashMap<Long,Source> picked=new LinkedHashMap<>();
             String lower=question.toLowerCase(Locale.ROOT);
             boolean behavior=lower.matches("(?s).*(конфликт|ссор|обид|манипул|токсич|поведен|неправ|виноват|паттерн|отношени|оскорб|давлен|границ|кто прав|кто плох|кто хорош).*");
-            if(behavior&&!cancelled.get()){
-                BehaviorScan.Report report=BehaviorScan.read(file,cancelled,n->{});
+            BehaviorScan.Report report=behavior&&!cancelled.get()?BehaviorScan.read(db,cancelled,n->{}):null;
+            long total=0;
+            if(report!=null&&report.complete)total=report.scanned;
+            else if(!cancelled.get())try(Cursor c=db.rawQuery("SELECT COUNT(*) FROM messages",null)){if(c.moveToFirst())total=c.getLong(0);}
+            StringBuilder facts=new StringBuilder("Всего сообщений: "+total+". Имена отправителей и количество: ");
+            if(report!=null&&report.complete&&!report.limited){
+                List<Map.Entry<String,BehaviorScan.Person>> top=new ArrayList<>(report.people.entrySet());
+                top.sort(Comparator.<Map.Entry<String,BehaviorScan.Person>>comparingLong(x->x.getValue().messages).reversed().thenComparing(Map.Entry::getKey));
+                for(int i=0;i<Math.min(8,top.size());i++){
+                    Map.Entry<String,BehaviorScan.Person> person=top.get(i);
+                    facts.append(clip(person.getKey(),70)).append(" = ").append(person.getValue().messages).append("; ");
+                }
+            }else if(!cancelled.get()){
+                try(Cursor c=db.rawQuery("SELECT author,COUNT(*) FROM messages GROUP BY author ORDER BY COUNT(*) DESC,author LIMIT 8",null)){
+                    while(!cancelled.get()&&c.moveToNext())facts.append(clip(c.getString(0),70)).append(" = ").append(c.getLong(1)).append("; ");
+                }
+            }
+            LinkedHashMap<Long,Source> picked=new LinkedHashMap<>();
+            if(report!=null&&!cancelled.get()){
                 facts.append("\n").append(report.summary());
                 // Two examples per category first; avoid letting one category dominate context.
                 int[] used=new int[BehaviorScan.LABELS.length];
