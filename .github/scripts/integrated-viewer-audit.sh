@@ -43,7 +43,7 @@ mkdir -p app/build/ui-audit
 adb logcat -d -t 5000 > app/build/ui-audit/logcat.txt || true
 adb shell dumpsys window windows > app/build/ui-audit/windows.txt || true
 adb shell dumpsys activity activities > app/build/ui-audit/activities.txt || true
-if [[ "${1:-}" == navigation || "${1:-}" == premium_ui ]]; then
+if [[ "${1:-}" == navigation || "${1:-}" == premium_ui || "${1:-}" == chat_polish || "${1:-}" == section_clarity ]]; then
   adb pull /sdcard/Download/ app/build/ui-audit/ || true
   adb pull /sdcard/Pictures/TelegramViewerVisualAudit/ app/build/ui-audit/ || true
   if ! find app/build/ui-audit -name "05-chat*.png" -print -quit | grep -q .; then

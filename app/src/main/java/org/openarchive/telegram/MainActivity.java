@@ -2193,9 +2193,9 @@ public class MainActivity extends Activity {
             toast("Исходный чат не зарегистрирован. Цитата сохранена.");return;
         }
         if(importing){toast("Дождись окончания импорта");return;}
-        if(!archiveKey.equals(activeKey))activateArchive(archiveKey);
-        if(archiveKey.equals(activeKey))jump(messageId,"");
-        else toast("Не удалось открыть исходный чат");
+        String destination="saved".equals(screen)?"saved":"";
+        if(!archiveKey.equals(activeKey))activateArchive(archiveKey,messageId,destination);
+        else jump(messageId,destination);
     }
     /** User-triggered, read-only context lookup. Missing anchors are displayed, not guessed. */
     private void showQuoteSourceMap(String archiveKey,long sourceId){
@@ -2356,7 +2356,7 @@ public class MainActivity extends Activity {
                         TextView t=text("★ "+label+" · "+day(m.date)+"\n"+clip(m.body,180),14,FG);
                         t.setPadding(px(12),px(12),px(12),px(12));t.setBackground(shape(CHIP,12));
                         LinearLayout.LayoutParams pad=p(-1,-2);pad.topMargin=px(5);list.addView(t,pad);
-                        t.setOnClickListener(v->{if(importing)return;activateArchive(key,m.id);});
+                        t.setOnClickListener(v->{if(importing)return;activateArchive(key,m.id,"saved");});
                     }
                 });
             });
@@ -2578,7 +2578,8 @@ public class MainActivity extends Activity {
         savedComposer.setVisibility(View.GONE);bottomPager.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
         highlightId=-1;refreshTabs();status.setText("Открываю переписку…");status.setVisibility(View.VISIBLE);
     }
-    private void activateArchive(String key,long exactMessageId){
+    private void activateArchive(String key,long exactMessageId){activateArchive(key,exactMessageId,"multi_timeline");}
+    private void activateArchive(String key,long exactMessageId,String returnDestination){
         saveReadingProgress();
         if(importing){toast("Импорт ещё идёт");return;}
         JSONObject choice=null;for(int i=0;i<archives.length();i++){JSONObject o=archives.optJSONObject(i);if(o!=null&&key.equals(o.optString("key")))choice=o;}
@@ -2594,7 +2595,7 @@ public class MainActivity extends Activity {
         clearArchiveTransition();
         if(exactMessageId>0){
             pendingRestoreId=-1;
-            jump(exactMessageId,"multi_timeline");
+            jump(exactMessageId,returnDestination);
             return;
         }
         if(pendingRestoreId>0){
