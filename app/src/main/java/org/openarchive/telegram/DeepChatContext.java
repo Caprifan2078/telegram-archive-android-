@@ -15,8 +15,9 @@ final class DeepChatContext {
     }
     final List<Source> sources;final long total;final String facts,method;
     final List<Long> priority;
-    DeepChatContext(List<Source> s,long n,String f,String m){this(s,n,f,m,Collections.emptyList());}
-    DeepChatContext(List<Source> s,long n,String f,String m,List<Long> p){sources=Collections.unmodifiableList(new ArrayList<>(s));total=n;facts=f;method=m;priority=Collections.unmodifiableList(new ArrayList<>(p));}
+    final boolean hasTopicEvidence;
+    DeepChatContext(List<Source> s,long n,String f,String m){this(s,n,f,m,Collections.emptyList(),!s.isEmpty());}
+    DeepChatContext(List<Source> s,long n,String f,String m,List<Long> p,boolean topic){hasTopicEvidence=topic;sources=Collections.unmodifiableList(new ArrayList<>(s));total=n;facts=f;method=m;priority=Collections.unmodifiableList(new ArrayList<>(p));}
     static String clip(String value,int max){if(value==null)return "";if(value.length()<=max)return value;
         if(max<=0)return "";int end=max;if(Character.isHighSurrogate(value.charAt(end-1)))end--;return value.substring(0,end)+"…";}
     static String dbName(String key){
@@ -170,7 +171,7 @@ final class DeepChatContext {
             if(!linked.isEmpty())priority.add(linked.get(0));
             for(long id:direct)if(!priority.contains(id))priority.add(id);
             for(long id:linked)if(!priority.contains(id))priority.add(id);
-            return new DeepChatContext(sources,total,facts.toString(),method,priority);
+            return new DeepChatContext(sources,total,facts.toString(),method,priority,!direct.isEmpty()||temporal&&!sources.isEmpty());
         }
     }
     // One scan for several rare cues, then indexed primary-key lookups.

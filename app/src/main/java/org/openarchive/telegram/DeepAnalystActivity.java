@@ -511,19 +511,29 @@ public final class DeepAnalystActivity extends Activity {
         busy("Подбираю сообщения, затем запускаю модель…");results.removeAllViews();
         worker.execute(()->{
             try{
-                verifyModelForRun();
                 DeepChatContext first=DeepChatContext.read(getDatabasePath(DeepChatContext.dbName(archive)),q,taskCancel);
                 final DualAnalystContext dual;
                 if(compareArchive!=null){
                     if(taskCancel.get()||stopped.get())throw new IOException("Cancelled");
                     DeepChatContext second=DeepChatContext.read(getDatabasePath(DeepChatContext.dbName(compareArchive)),q,taskCancel);
-                    if(first.sources.isEmpty()||second.sources.isEmpty())throw new IOException("Missing comparison evidence");
                     dual=DualAnalystContext.combine(archive,first,compareArchive,second);
                 }else dual=null;
                 DeepChatContext context=dual==null?first:dual.context;
                 if(taskCancel.get())throw new IOException("Cancelled");
                 if(stopped.get())return;
-                if(context.sources.isEmpty())throw new IOException("No sources");
+                if(!context.hasTopicEvidence||context.sources.isEmpty()){
+                    runOnUiThread(()->{
+                        if(stopped.get())return;
+                        busy=false;refresh();
+                        if(taskCancel.get()){status.setText("Операция отменена.");return;}
+                        results.removeAllViews();
+                        results.addView(text("Недостаточно тематических источников",18));revealResults();
+                        results.addView(text("ИИ не запускался: поиск не нашёл достаточных совпадений"+(dual!=null?" в обеих переписках":"")+". Измените вопрос или откройте ограниченную выборку без ИИ.",14));
+                        Button evidence=button("Посмотреть выборку без ИИ");results.addView(evidence);
+                        evidence.setOnClickListener(v->{if(!busy)findEvidence(q);});
+                    });return;
+                }
+                verifyModelForRun();
                 String prompt=AnalystModelCatalog.shortContext(selectedModel)?context.compactPrompt(q,dual!=null):dual==null?context.prompt(q):dual.prompt(q);
                 String response=(String)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
                     .getMethod("generate",String.class,String.class,AtomicBoolean.class).invoke(null,model.getAbsolutePath(),prompt,taskCancel);
@@ -541,6 +551,7 @@ public final class DeepAnalystActivity extends Activity {
                     if(unknown)results.addView(text("Ответ содержит неизвестные номера источников.",14));
                     if(!answer.isEmpty()&&cited.isEmpty())results.addView(text("Ответ не ссылается на конкретные сообщения.",14));
                     if(!unsupported)results.addView(text("Номера существуют в выборке; это не проверка смысла или истинности вывода.",13));
+                    if(AnalystModelCatalog.shortContext(selectedModel))results.addView(text("Быстрый режим: до 4 цитат; для подробного анализа выберите обычную Qwen.",13));
                     if(!answer.isEmpty())results.addView(text(DeepChatContext.clip(answer,16000),15));
                     long sent=context.sources.stream().filter(src->DeepChatContext.sentSource(prompt,src.id)).count();
                     results.addView(text(context.method+" · "+sent+" выдержек из "+context.total+" сообщений",13));
@@ -558,6 +569,10 @@ public final class DeepAnalystActivity extends Activity {
                             setResult(RESULT_OK,new Intent().putExtra("archive",link==null?archive:link.archive)
                                 .putExtra("message",link==null?src.id:link.messageId));finish();
                         });
+                    }
+                    if(unsupported){
+                        Button retry=button("Все найденные источники без ИИ");results.addView(retry);
+                        retry.setOnClickListener(v->{if(!busy)findEvidence(q);});
                     }
                 });
             }catch(Exception|LinkageError error){runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();status.setText(modelFailure(error,"Не удалось выполнить анализ: проверь совместимость модели и доступную память."));

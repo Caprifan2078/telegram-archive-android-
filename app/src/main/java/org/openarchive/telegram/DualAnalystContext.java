@@ -23,7 +23,7 @@ final class DualAnalystContext {
         }
         String facts="Переписка А: "+DeepChatContext.clip(a.facts,380)+"; Переписка Б: "+DeepChatContext.clip(b.facts,380);
         return new DualAnalystContext(new DeepChatContext(rows,a.total+b.total,facts,
-            "Отдельные выборки А и Б; максимум восемь цитат из каждой, не полный проход"),links);
+            "Отдельные выборки А и Б; максимум восемь цитат из каждой, не полный проход",Collections.emptyList(),a.hasTopicEvidence&&b.hasTopicEvidence),links);
     }
     private static void append(List<DeepChatContext.Source> rows,Map<Long,Link> links,String key,String side,DeepChatContext c,int i){
         int size=c.sources.size(), count=Math.min(size,8);

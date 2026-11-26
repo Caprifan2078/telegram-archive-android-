@@ -117,4 +117,22 @@ public class DeepChatContextIntegrationTest {
             assertEquals(1,db.totalMessages());
         }finally{db.close();c.deleteDatabase(DeepChatContext.dbName(key));}
     }
+    @Test public void noTopicHitsAreNotTreatedAsEvidence(){
+        Context c=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key="deep_none_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb db=new MessageDb(c,key);
+        try{
+            SQLiteDatabase sql=db.getWritableDatabase();
+            db.stage(sql,"А","2026-02-01","Мы купили яблоки",null,"");
+            db.stage(sql,"Б","2026-02-02","Спасибо",null,"");
+            db.publishStaged(sql);
+            DeepChatContext none=DeepChatContext.read(c.getDatabasePath(DeepChatContext.dbName(key)),"космодром",new AtomicBoolean());
+            assertFalse(none.hasTopicEvidence);
+            assertFalse(none.sources.isEmpty());
+            DeepChatContext match=DeepChatContext.read(c.getDatabasePath(DeepChatContext.dbName(key)),"яблоки",new AtomicBoolean());
+            assertTrue(match.hasTopicEvidence);
+            assertFalse(DualAnalystContext.combine("a",match,"b",none).context.hasTopicEvidence);
+            assertEquals(2,db.totalMessages());
+        }finally{db.close();c.deleteDatabase(DeepChatContext.dbName(key));}
+    }
 }
