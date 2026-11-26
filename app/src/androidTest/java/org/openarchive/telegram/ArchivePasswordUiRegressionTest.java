@@ -77,6 +77,48 @@ public final class ArchivePasswordUiRegressionTest {
             assertEquals("Password request must not leave half-extracted chat folders",before,after);
         }finally{html.delete();encrypted.delete();}
     }
+    @Test public void realExternalAesZipCanOpenViaPasswordDialog() throws Exception {
+        MainActivity activity=rule.getActivity();
+        Instrumentation inst=InstrumentationRegistry.getInstrumentation();
+        File zip=File.createTempFile("external-ui-", ".zip",activity.getCacheDir());
+        try{
+            try(java.io.InputStream in=inst.getContext().getAssets().open("external7zip/aes256.zip");FileOutputStream out=new FileOutputStream(zip)){
+                byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))!=-1)out.write(buffer,0,n);
+            }
+            byte[] original=java.nio.file.Files.readAllBytes(zip.toPath());
+            java.lang.reflect.Field dialogField=MainActivity.class.getDeclaredField("archivePasswordDialog");dialogField.setAccessible(true);
+            java.lang.reflect.Field keyField=MainActivity.class.getDeclaredField("activeKey");keyField.setAccessible(true);
+            java.lang.reflect.Field dbField=MainActivity.class.getDeclaredField("db");dbField.setAccessible(true);
+            final String oldKey=(String)keyField.get(activity);
+            Intent intent=new Intent().setData(Uri.fromFile(zip));
+            inst.runOnMainSync(()->activity.onActivityResult(57,Activity.RESULT_OK,intent));
+            java.util.concurrent.atomic.AtomicReference<android.app.AlertDialog> live=new java.util.concurrent.atomic.AtomicReference<>();
+            long deadline=android.os.SystemClock.uptimeMillis()+20000;
+            while(live.get()==null&&android.os.SystemClock.uptimeMillis()<deadline){
+                inst.runOnMainSync(()->{try{android.app.AlertDialog d=(android.app.AlertDialog)dialogField.get(activity);if(d!=null&&d.isShowing())live.set(d);}catch(Exception ex){throw new AssertionError(ex);}});
+                if(live.get()==null)android.os.SystemClock.sleep(100);
+            }
+            assertNotNull("Real AES ZIP did not request password",live.get());
+            inst.runOnMainSync(()->{
+                android.app.AlertDialog dialog=live.get();
+                android.widget.EditText input=findPassword(dialog.getWindow().getDecorView());
+                assertNotNull(input);input.setText("qa-7zip-password");
+                assertTrue(dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick());
+            });
+            java.util.concurrent.atomic.AtomicReference<String> imported=new java.util.concurrent.atomic.AtomicReference<>();
+            deadline=android.os.SystemClock.uptimeMillis()+30000;
+            while(imported.get()==null&&android.os.SystemClock.uptimeMillis()<deadline){
+                inst.runOnMainSync(()->{try{
+                    String key=(String)keyField.get(activity);
+                    MessageDb db=(MessageDb)dbField.get(activity);
+                    if(!oldKey.equals(key)&&db!=null&&db.totalMessages()>0)imported.set(key);
+                }catch(Exception ex){throw new AssertionError(ex);}});
+                if(imported.get()==null)android.os.SystemClock.sleep(100);
+            }
+            assertNotNull("Correct password did not import real AES ZIP",imported.get());
+            assertArrayEquals("Source file changed",original,java.nio.file.Files.readAllBytes(zip.toPath()));
+        }finally{zip.delete();}
+    }
     private static android.widget.EditText findPassword(android.view.View view){
         if(view instanceof android.widget.EditText)return (android.widget.EditText)view;
         if(view instanceof android.view.ViewGroup){

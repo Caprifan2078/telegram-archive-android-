@@ -3517,18 +3517,25 @@ public class MainActivity extends Activity {
         ViewerUi.styleInput(archivePassword,ViewerPalette.of(themeIndex));
         LinearLayout passwordForm=column();passwordForm.setPadding(px(20),px(10),px(20),px(6));
         passwordForm.addView(archivePassword,p(-1,-2));
+        android.widget.CheckBox reveal=new android.widget.CheckBox(this);reveal.setText("Показать пароль");reveal.setTextColor(FG);
+        reveal.setButtonTintList(android.content.res.ColorStateList.valueOf(ACCENT));passwordForm.addView(reveal,p(-1,-2));
+        reveal.setOnCheckedChangeListener((box,checked)->{
+            int cursor=archivePassword.getSelectionEnd();
+            archivePassword.setTransformationMethod(checked?android.text.method.HideReturnsTransformationMethod.getInstance():android.text.method.PasswordTransformationMethod.getInstance());
+            if(cursor>=0)archivePassword.setSelection(Math.min(cursor,archivePassword.length()));
+        });
         android.app.AlertDialog passwordDialog=new FontDialog.Builder(this).setTitle("Этот архив защищён паролем")
             .setMessage("Введи пароль для открытия "+displayName+". Пароль не сохраняется.")
             .setView(passwordForm).setNegativeButton("Отмена",null)
             .setPositiveButton("Открыть",null).create();
-        passwordDialog.setOnShowListener(ignored->passwordDialog.getButton(-1).setOnClickListener(v->{
+        passwordDialog.setOnShowListener(ignored->{FontDialog.decorate(passwordDialog);passwordDialog.getButton(-1).setOnClickListener(v->{
                 if(archivePassword.length()==0){archivePassword.setError("Введи пароль");return;}
                 char[] password=new char[archivePassword.length()];
                 archivePassword.getText().getChars(0,archivePassword.length(),password,0);
                 archivePassword.getText().clear();
                 passwordDialog.dismiss();
                 importCompressed(source,ext,displayName,password);
-            }));
+            });});
         archivePasswordDialog=passwordDialog;
         passwordDialog.setOnDismissListener(d->{archivePassword.getText().clear();if(archivePasswordDialog==passwordDialog)archivePasswordDialog=null;});
         if(passwordDialog.getWindow()!=null)
