@@ -44,6 +44,8 @@ final class HistoryEventSearch {
                 if((title!=null&&title.toLowerCase(Locale.ROOT).contains(needle))||
                    (note!=null&&note.toLowerCase(Locale.ROOT).contains(needle))||
                    (date!=null&&date.toLowerCase(Locale.ROOT).contains(needle))){
+                    // Only a further matching row proves that some results are hidden.
+                    if(matches.size()==MAX_RESULTS){incomplete=true;break;}
                     MessageDb.RelationshipEvent event=new MessageDb.RelationshipEvent();
                     event.id=rows.getLong(0);
                     event.title=title;event.note=note;
@@ -51,11 +53,6 @@ final class HistoryEventSearch {
                     event.anchorOffset=rows.getInt(4);
                     event.linkedCount=rows.getInt(5);
                     matches.add(event);
-                    if(matches.size()==MAX_RESULTS){
-                        // A truncated result must be labelled as such in the UI.
-                        incomplete=rows.moveToNext();
-                        break;
-                    }
                 }
             }
         }
