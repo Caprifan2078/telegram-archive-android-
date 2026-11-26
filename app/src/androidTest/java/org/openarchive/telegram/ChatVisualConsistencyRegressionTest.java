@@ -155,4 +155,51 @@ public final class ChatVisualConsistencyRegressionTest {
             synthetic.close();activity.deleteDatabase("telegram_"+key+".db");
         }
     }
+
+    @Test public void lightThemeUsesReadableChatBubbles()throws Exception{
+        MainActivity a=rule.getActivity();
+        String key="light_chat_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb synthetic=new MessageDb(a,key);
+        SQLiteDatabase sql=synthetic.getWritableDatabase();
+        synthetic.stage(sql,"Синтетический автор","2026-11-01 10:05:00","Проверка светлой темы",null,"");
+        synthetic.publishStaged(sql);
+        android.content.SharedPreferences prefs=a.getPreferences(android.content.Context.MODE_PRIVATE);
+        boolean had=prefs.contains("appearance_theme");int old=prefs.getInt("appearance_theme",0);
+        String[] fields={"db","activeKey","activeName","home","screen","chatOffset","autoLoaded","pendingRestoreId"};
+        Object[] saved=new Object[fields.length];for(int i=0;i<fields.length;i++)saved[i]=get(a,fields[i]);
+        try{
+            assertTrue(prefs.edit().putInt("appearance_theme",2).commit());
+            inst.runOnMainSync(()->{try{
+                call(a,"loadAppearance");put(a,"db",synthetic);put(a,"activeKey",key);put(a,"activeName","QA light chat");
+                put(a,"home",false);put(a,"screen","chat");put(a,"chatOffset",0);put(a,"autoLoaded",30);put(a,"pendingRestoreId",-1L);
+                call(a,"showPage");
+            }catch(Exception e){throw new AssertionError(e);}});
+            idle(a);
+            inst.runOnMainSync(()->{
+                TextView body=find(a.getWindow().getDecorView(),"Проверка светлой темы");
+                assertNotNull(body);
+                View bubble=(View)body.getParent();
+                assertTrue(bubble.getBackground() instanceof android.graphics.drawable.GradientDrawable);
+                int[] colors=((android.graphics.drawable.GradientDrawable)bubble.getBackground()).getColors();
+                assertNotNull(colors);
+                for(int color:colors)assertTrue("Message text must have 4.5:1 contrast",
+                    AnalyticsContrastPolicy.contrast(color,body.getCurrentTextColor())>=4.5);
+                assertEquals(ViewerPalette.of(2).text,body.getCurrentTextColor());
+            });
+            try(java.io.InputStream in=new android.os.ParcelFileDescriptor.AutoCloseInputStream(
+                inst.getUiAutomation().executeShellCommand("screencap -p /sdcard/Download/premium-light-chat.png"))){
+                byte[] bytes=new byte[1024];while(in.read(bytes)!=-1){}
+            }
+        }finally{
+            idle(a);
+            android.content.SharedPreferences.Editor restore=prefs.edit();
+            if(had)restore.putInt("appearance_theme",old);else restore.remove("appearance_theme");
+            assertTrue(restore.commit());
+            inst.runOnMainSync(()->{try{
+                for(int i=0;i<fields.length;i++)put(a,fields[i],saved[i]);
+                call(a,"loadAppearance");call(a,"showPage");
+            }catch(Exception e){throw new AssertionError(e);}});
+            synthetic.close();a.deleteDatabase("telegram_"+key+".db");
+        }
+    }
 }
