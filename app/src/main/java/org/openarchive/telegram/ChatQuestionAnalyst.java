@@ -41,8 +41,8 @@ final class ChatQuestionAnalyst {
             this.date=date==null?"":date;day=t==null?null:t.day;time=t==null?null:t.clock;
             String s=body==null?"":body;
             int at=phrase.isEmpty()?-1:s.toLowerCase(Locale.ROOT).replace('ё','е').indexOf(phrase);
-            int start=at<0?0:Math.max(0,at-80),end=Math.min(s.length(),start+280);
-            if(start>0&&Character.isLowSurrogate(s.charAt(start)))start--;
+            int start=at<0?0:Math.min(s.length(),Math.max(0,at-80)),end=Math.min(s.length(),start+280);
+            if(start>0&&start<s.length()&&Character.isLowSurrogate(s.charAt(start)))start--;
             if(end<s.length()&&end>0&&Character.isHighSurrogate(s.charAt(end-1)))end++;
             excerpt=s.isEmpty()?"[Нет текста; возможно вложение]":(start>0?"…":"")+s.substring(start,end)+(end<s.length()?"…":"");
         }
@@ -55,7 +55,7 @@ final class ChatQuestionAnalyst {
         final Query query;long total,matched,unknownDate,unknownTime;
         final Map<String,Long> authors=new HashMap<>();
         final List<Evidence> examples=new ArrayList<>();
-        boolean capped,firstTie,lastTie;
+        boolean capped,firstTie,lastTie,firstIncomplete,lastIncomplete;
         Evidence first,last;
         Accumulator(Query q){query=q;}
         private static int compare(Evidence a,Evidence b){
@@ -74,7 +74,7 @@ final class ChatQuestionAnalyst {
                 return;
             }
             ChatTrends.Moment stamp=ChatTrends.parse(date);
-            if(query.kind==Kind.DAY){if(stamp==null||!query.day.equals(stamp.day))return;}
+            if(query.kind==Kind.DAY){if(stamp==null){unknownDate++;return;}if(!query.day.equals(stamp.day))return;}
             if(query.kind==Kind.TOPIC||query.kind==Kind.FIRST_TOPIC||query.kind==Kind.LAST_TOPIC)
                 if(!fold(body).contains(query.phrase))return;
             matched++;
@@ -84,14 +84,28 @@ final class ChatQuestionAnalyst {
             if(examples.size()<8&&(query.kind==Kind.DAY||query.kind==Kind.TOPIC)){
                 row=new Evidence(id,author,date,body,stamp,query.phrase);examples.add(row);
             }
-            if(stamp==null)return;
-            if(row==null)row=new Evidence(id,author,date,body,stamp,query.phrase);
-            int f=first==null?-1:compare(row,first);
-            if(f<0){first=row;firstTie=false;}
-            else if(f==0&&row.id!=first.id)firstTie=true;
-            int l=last==null?1:compare(row,last);
-            if(l>0){last=row;lastTie=false;}
-            else if(l==0&&row.id!=last.id)lastTie=true;
+            if(stamp==null||query.kind==Kind.DAY||query.kind==Kind.TOPIC)return;
+            boolean earliest=query.kind==Kind.FIRST||query.kind==Kind.FIRST_TOPIC;
+            Evidence current=earliest?first:last;
+            int dayOrder=current==null?0:stamp.day.compareTo(current.day);
+            boolean newDay=current==null||(earliest?dayOrder<0:dayOrder>0);
+            boolean sameDay=current!=null&&dayOrder==0;
+            if(newDay){
+                Evidence next=new Evidence(id,author,date,body,stamp,query.phrase);
+                if(earliest){first=next;firstTie=false;firstIncomplete=stamp.clock==null;}
+                else{last=next;lastTie=false;lastIncomplete=stamp.clock==null;}
+            }else if(sameDay){
+                boolean incomplete=stamp.clock==null||current.time==null;
+                if(earliest)firstIncomplete|=incomplete;else lastIncomplete|=incomplete;
+                int order=incomplete?0:stamp.clock.compareTo(current.time);
+                if((earliest?order<0:order>0)||(current.time==null&&stamp.clock!=null)){
+                    Evidence next=new Evidence(id,author,date,body,stamp,query.phrase);
+                    if(earliest){first=next;firstTie=false;}
+                    else{last=next;lastTie=false;}
+                }else if(order==0&&id!=current.id){
+                    if(earliest)firstTie=true;else lastTie=true;
+                }
+            }
         }
         Answer finish(){
             String scope="\nТолько импортированная переписка; отсутствующие или удалённые сообщения не учитываются.";
@@ -106,15 +120,15 @@ final class ChatQuestionAnalyst {
                 String names=String.join(", ",leaders.subList(0,Math.min(8,n)));
                 return new Answer((n>1?"Одинаковый максимум: ":"Больше всего сообщений: ")+names+" — по "+max+" из "+total+(n>8?" (всего лидеров: "+n+")":"")+". Учитываются имена из экспорта, не идентификаторы людей."+scope,Collections.emptyList());
             }
-            if(matched==0)return new Answer("Подходящих сообщений не найдено. Проверено: "+total+"."+scope,Collections.emptyList());
+            if(matched==0)return new Answer("Подходящих сообщений не найдено. Проверено: "+total+"."+(query.kind==Kind.DAY&&unknownDate>0?" Сообщений с неизвестной датой: "+unknownDate+".":"")+scope,Collections.emptyList());
             if(query.kind==Kind.DAY||query.kind==Kind.TOPIC){
                 String what=query.kind==Kind.DAY?"Сообщений за "+query.day:"Сообщений с буквальным упоминанием «"+query.phrase+"»";
-                return new Answer(what+": "+matched+". Показано до 8 примеров в порядке импорта; это не смысловой пересказ."+scope,examples);
+                return new Answer(what+": "+matched+". Показано до 8 примеров в порядке импорта; это не смысловой пересказ."+(query.kind==Kind.DAY&&unknownDate>0?" Сообщений с неизвестной датой: "+unknownDate+".":"")+scope,examples);
             }
             boolean earliest=query.kind==Kind.FIRST||query.kind==Kind.FIRST_TOPIC;
-            Evidence e=earliest?first:last;boolean tie=earliest?firstTie:lastTie;
+            Evidence e=earliest?first:last;boolean tie=earliest?(firstTie||firstIncomplete):(lastTie||lastIncomplete);
             if(e==null)return new Answer("Найдено сообщений: "+matched+", но ни у одного нет распознанной даты. Порядок неизвестен."+scope,Collections.emptyList());
-            String prefix=earliest?"Самое раннее":"Самое позднее";
+            String prefix=tie?"Возможное "+(earliest?"самое раннее":"самое позднее"):(earliest?"Самое раннее":"Самое позднее");
             String caveat=(tie?" Есть сообщения с одинаковой или неполной отметкой времени; однозначный порядок не установлен.":"")+
                 (unknownDate>0?" Без распознанной даты: "+unknownDate+"; абсолютный порядок не гарантирован.":"")+
                 (unknownTime>0?" Без точного времени: "+unknownTime+".":"");
