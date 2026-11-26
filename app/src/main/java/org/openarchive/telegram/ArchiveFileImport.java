@@ -154,28 +154,29 @@ final class ArchiveFileImport {
     }
     private static void extractZipWithPassword(Context ctx,Uri uri,File root,char[] password,
             Budget budget,Progress progress)throws Exception{
+        // Each reader gets its own password copy; no retry depends on a reader's internal buffer.
+        char[] attempt=password==null?null:password.clone();
         try{
-            extractZipStreaming(ctx,uri,root,password,budget,progress);
-        }catch(net.lingala.zip4j.exception.ZipException streamFailure){
-            if(password==null||password.length==0)throw streamFailure;
-            // A definite authentication failure is not a broken ZIP header:
-            // retrying the entire (possibly multi-gigabyte) file just wastes space.
-            if(streamFailure.getType()==net.lingala.zip4j.exception.ZipException.Type.WRONG_PASSWORD)
+            extractZipStreaming(ctx,uri,root,attempt,budget,progress);
+        }catch(net.lingala.zip4j.exception.ZipException|java.util.zip.ZipException streamFailure){
+            if((password==null||password.length==0)&&isPasswordFailure(streamFailure))
                 throw streamFailure;
-            // Some AES ZIPs written by 7-Zip rely on central-directory metadata
-            // or data descriptors that a sequential ZIP reader cannot recover.
-            // Retry with Zip4j's random-access reader; do not weaken path or size checks.
-            progress.update("Пробую альтернативное открытие ZIP с паролем…");
+            // A streaming decoder may misread a local header or data descriptor.
+            // Even WRONG_PASSWORD can be an incorrect result for unusual ZIP headers.
+            // Confirm via the central directory once, including when no password was
+            // supplied and the local header could not be parsed.
+            progress.update("Проверяю ZIP по центральному каталогу…");
             deleteTree(root);
             if(!root.mkdirs())throw new IOException("Не удалось очистить временную папку ZIP",streamFailure);
             budget.count=0;budget.total=0;
+            char[] retry=password==null?null:password.clone();
             try{
-                extractZipFromCentralDirectory(ctx,uri,root,password,budget,progress);
+                extractZipFromCentralDirectory(ctx,uri,root,retry,budget,progress);
             }catch(Exception recoveryFailure){
                 recoveryFailure.addSuppressed(streamFailure);
                 throw recoveryFailure;
-            }
-        }
+            }finally{if(retry!=null)Arrays.fill(retry,'\0');}
+        }finally{if(attempt!=null)Arrays.fill(attempt,'\0');}
     }
     private static void extractZipStreaming(Context ctx,Uri uri,File root,char[] password,
             Budget budget,Progress progress)throws Exception{
