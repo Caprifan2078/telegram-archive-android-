@@ -54,4 +54,46 @@ public class ArchiveEndToEndRegressionTest {
             ArchiveFileImport.deleteTree(root);zipFile.delete();
         }
     }
+
+    @Test public void nestedZipWithMetadataOpensAndPreservesOriginal()throws Exception{
+        Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key=UUID.randomUUID().toString().replace("-","");
+        File file=new File(ctx.getCacheDir(),"nested-"+key+".zip");
+        File root=new File(new File(ctx.getFilesDir(),"telegram_imports"),key);
+        MessageDb db=new MessageDb(ctx,"nested_"+key);
+        try{
+            java.io.ByteArrayOutputStream inner=new java.io.ByteArrayOutputStream();
+            try(ZipOutputStream zip=new ZipOutputStream(inner)){
+                entry(zip,"chat/messages.html",html("1","nested synthetic",""));
+            }
+            try(ZipOutputStream zip=new ZipOutputStream(new FileOutputStream(file))){
+                entry(zip,"folder/inner.zip",inner.toByteArray());
+                entry(zip,"folder/.DS_Store",new byte[]{1,2,3});
+                entry(zip,"__MACOSX/._inner.zip",new byte[]{4,5});
+            }
+            byte[] original=java.nio.file.Files.readAllBytes(file.toPath());
+            File chat=ArchiveFileImport.extract(ctx,Uri.fromFile(file),"zip",key,ignored->{});
+            assertEquals(1,TelegramImporter.importFiles(ctx.getContentResolver(),
+                new DocumentFolder(ctx.getContentResolver(),chat),db,ignored->{}));
+            assertEquals(1,db.totalMessages());
+            assertArrayEquals(original,java.nio.file.Files.readAllBytes(file.toPath()));
+        }finally{db.close();ctx.deleteDatabase("telegram_nested_"+key+".db");ArchiveFileImport.deleteTree(root);file.delete();}
+    }
+    @Test public void nestedWrapperWithTwoArchivesIsNotSilentlySelected()throws Exception{
+        Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key=UUID.randomUUID().toString().replace("-","");
+        File file=new File(ctx.getCacheDir(),"ambiguous-"+key+".zip");
+        File root=new File(new File(ctx.getFilesDir(),"telegram_imports"),key);
+        try{
+            java.io.ByteArrayOutputStream inner=new java.io.ByteArrayOutputStream();
+            try(ZipOutputStream zip=new ZipOutputStream(inner)){entry(zip,"messages.html",html("1","test",""));}
+            try(ZipOutputStream zip=new ZipOutputStream(new FileOutputStream(file))){
+                entry(zip,"first.zip",inner.toByteArray());entry(zip,"second.zip",inner.toByteArray());
+            }
+            try{ArchiveFileImport.extract(ctx,Uri.fromFile(file),"zip",key,ignored->{});fail("Ambiguous archive must be rejected");}
+            catch(java.io.IOException expected){}
+            assertFalse("Failed extraction must clean staging",root.exists());
+            assertTrue(file.isFile());
+        }finally{ArchiveFileImport.deleteTree(root);file.delete();}
+    }
 }
