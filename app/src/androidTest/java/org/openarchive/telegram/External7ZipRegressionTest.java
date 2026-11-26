@@ -11,6 +11,44 @@ import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 @RunWith(AndroidJUnit4.class)
 public class External7ZipRegressionTest {
+    @Test public void realSevenZipTelegramLayoutWithTwentyPagesAnd834MediaEntries()throws Exception{
+        Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context test=InstrumentationRegistry.getInstrumentation().getContext();
+        for(String mode:new String[]{"solid-header","solid-data","nonsolid-header"}){
+            File archive=File.createTempFile("telegram-layout-", ".7z",ctx.getCacheDir());
+            String key=UUID.randomUUID().toString().replace("-","");
+            File staging=new File(new File(ctx.getFilesDir(),"telegram_imports"),key);
+            char[] password="qa-layout-secret".toCharArray();
+            try{
+                try(InputStream in=test.getAssets().open("external7zip/layout-"+mode+".7z");
+                    OutputStream out=new FileOutputStream(archive)){
+                    byte[] buf=new byte[8192];int n;while((n=in.read(buf))!=-1)out.write(buf,0,n);
+                }
+                byte[] before=java.nio.file.Files.readAllBytes(archive.toPath());
+                Uri uri=Uri.fromFile(archive);
+                try{ArchiveFileImport.extract(ctx,uri,"7z",key,null,p->{});fail("Missing password: "+mode);}
+                catch(ArchiveFileImport.PasswordRequired expected){}
+                assertFalse(staging.exists());
+                File root=ArchiveFileImport.extract(ctx,uri,"7z",key,password,p->{});
+                for(int i=1;i<=20;i++){
+                    File page=new File(root,i==1?"messages.html":"messages"+i+".html");
+                    assertTrue(mode+" missing "+page.getName(),page.isFile());
+                    assertTrue(new String(java.nio.file.Files.readAllBytes(page.toPath()),StandardCharsets.UTF_8).contains("Synthetic page "+i));
+                }
+                File media=new File(root,"round_video_messages");
+                assertNotNull(media.list());assertEquals(834,media.list().length);
+                MessageDb db=new MessageDb(ctx,key);
+                try{
+                    assertEquals(20,TelegramImporter.importFiles(ctx.getContentResolver(),new DocumentFolder(ctx.getContentResolver(),root),db,p->{}));
+                    assertEquals(20,db.totalMessages());
+                }finally{db.close();}
+                assertArrayEquals(before,java.nio.file.Files.readAllBytes(archive.toPath()));
+            }finally{
+                java.util.Arrays.fill(password,'\0');ArchiveFileImport.deleteTree(staging);
+                ctx.deleteDatabase("telegram_"+key+".db");archive.delete();
+            }
+        }
+    }
     @Test public void realSevenZipArchivesPromptRejectAndOpen()throws Exception{
         Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
         Context test=InstrumentationRegistry.getInstrumentation().getContext();
