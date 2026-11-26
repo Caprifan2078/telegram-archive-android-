@@ -64,6 +64,8 @@ public class DeepChatContextIntegrationTest {
             for(int i:new int[]{0,25,50,75,100})assertTrue("Timeline sample missing "+i,context.sources.stream().anyMatch(x->x.id==ids[i]));
             assertTrue(context.sources.size()<=DeepChatContext.MAX_SOURCES);
             assertTrue(context.method.contains("порядку импорта"));
+            String compact=context.compactPrompt("Как менялось общение со временем?",false);
+            for(int i:new int[]{0,50,100})assertTrue("Compact timeline sample missing "+i,DeepChatContext.sentSource(compact,ids[i]));
             assertEquals(101,db.totalMessages());
         }finally{db.close();c.deleteDatabase(DeepChatContext.dbName(key));}
     }
