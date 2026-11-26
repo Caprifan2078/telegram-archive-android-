@@ -1382,9 +1382,18 @@ public class MainActivity extends Activity {
         if(headerActions!=null)headerActions.setVisibility(View.GONE);
         if(pdfButton!=null)pdfButton.setVisibility(View.GONE);
         if(headerLogo!=null)headerLogo.setVisibility(View.VISIBLE);
-        if(folderButton!=null)folderButton.setVisibility(View.GONE); // Only the large bottom Add Chat button.
+        if(folderButton!=null)folderButton.setVisibility(View.GONE); // One primary import action above chat list.
         title.setText("Мои переписки");subtitle.setText("Твои сообщения · в одном месте");
         status.setText("");status.setVisibility(View.GONE);
+        // Keep the single primary import action above even a very long archive list.
+        TextView add=text("＋   Добавить переписку",15,themeIndex==2?0xffffffff:BG);
+        add.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));add.setGravity(Gravity.CENTER);
+        add.setPadding(px(12),px(12),px(12),px(12));
+        add.setBackground(new RippleDrawable(ColorStateList.valueOf(themeIndex==2?0x33ffffff:0x22000000),
+            shape(ACCENT,ViewerUi.CARD),shape(0xffffffff,ViewerUi.CARD)));
+        add.setContentDescription("Добавить переписку из экспорта Telegram");
+        LinearLayout.LayoutParams ap=p(-1,52);ap.setMargins(px(2),px(2),px(2),px(10));list.addView(add,ap);
+        add.setOnClickListener(v->chooseFolder());
         // Flat, compact list heading: the app bar already says "Мои переписки".
         LinearLayout homeHeading=row();homeHeading.setPadding(px(10),px(9),px(10),px(7));
         list.addView(homeHeading,p(-1,-2));
@@ -1397,7 +1406,7 @@ public class MainActivity extends Activity {
         heading.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
         homeHeading.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
         TextView countLabel=text(String.valueOf(archives.length())+(hiddenChats>0?" · скрыто "+hiddenChats:""),12,SUB);
-        homeHeading.addView(countLabel);
+        countLabel.setContentDescription("Всего чатов: "+archives.length());homeHeading.addView(countLabel);
         // One primary import action stays on the home screen. The protected
         // library is a navigation destination, not a second import button.
         int protectedCount=0;
@@ -1559,15 +1568,9 @@ public class MainActivity extends Activity {
             item.setOnClickListener(v->{item.animate().cancel();item.setAlpha(1f);activateArchive(key);});
             item.setOnLongClickListener(v->{showChatActions(key,name);return true;});
         }
-        TextView add=text("＋   Добавить переписку",15,ACCENT);add.setTypeface(null,Typeface.BOLD);
-        add.setGravity(Gravity.CENTER);add.setPadding(px(12),px(17),px(12),px(17));
-        add.setTextColor(themeIndex==2?0xff193852:0xffe7f8ff);
-        add.setBackground(new RippleDrawable(ColorStateList.valueOf(0x66ffffff),
-            shape(themeIndex==2?0xffb9e1f7:0xff19547b,ViewerUi.CARD),
-            shape(0xffffffff,20)));
-        add.setContentDescription("Добавить переписку из экспорта Telegram");
-        LinearLayout.LayoutParams ap=p(-1,60);ap.setMargins(px(2),px(9),px(2),px(8));list.addView(add,ap);
-        add.setOnClickListener(v->chooseFolder());
+        if(archives.length()==0){
+            emptyWorkspace(list,"Переписок пока нет","Добавь экспорт Telegram, чтобы читать сообщения и медиа без интернета.","Переписки");
+        }
         if(archives.length()>=2&&multiGroups.length()==0){
             Button compare=btn("Сравнить две переписки");
             compare.setContentDescription("Сравнить статистику и общую историю двух переписок");
@@ -3723,10 +3726,13 @@ public class MainActivity extends Activity {
                         status.setText("");status.setVisibility(View.GONE);
                     }else status.setVisibility(View.VISIBLE);
                     if(count==0){
+                        if("favorites".equals(tab)){
+                            emptyWorkspace(list,"Нет избранных сообщений","Удерживай сообщение в переписке и добавь его в избранное.","Заметки");
+                        }
                         status.setText(gallery?"": "chat".equals(tab)?
                             "В этой переписке пока нет сообщений.":
                             "favorites".equals(tab)?
-                            "Пока нет избранных сообщений. Удерживай сообщение в чате, чтобы добавить его.":
+                            "":
                             "Ничего не найдено — попробуй изменить запрос или фильтры.");
                     }
                     else if(!"chat".equals(tab))status.setText("media".equals(tab)?
@@ -4430,6 +4436,16 @@ public class MainActivity extends Activity {
         TextView key=text(name,12,SUB);key.setPadding(0,px(3),0,px(3));line.addView(key,new LinearLayout.LayoutParams(0,-2,1));
         TextView number=text(String.format(Locale.ROOT,"%,d",value).replace(',', ' '),13,FG);
         number.setTypeface(null,Typeface.BOLD);line.addView(number);
+    }
+    private void emptyWorkspace(LinearLayout parent,String heading,String detail,String iconLabel){
+        LinearLayout card=column();card.setGravity(Gravity.CENTER);card.setPadding(px(20),px(20),px(20),px(20));
+        card.setBackground(ViewerUi.surface(this,PANEL,ViewerUi.CARD,themeIndex==2,false));
+        LinearLayout.LayoutParams lp=p(-1,-2);lp.setMargins(px(3),px(8),px(3),px(8));parent.addView(card,lp);
+        ImageView icon=new ImageView(this);icon.setImageDrawable(new MenuOutlineIcon(iconLabel,ACCENT));
+        icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);card.addView(icon,p(34,34));
+        TextView title=text(heading,16,FG);title.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));title.setGravity(Gravity.CENTER);
+        title.setPadding(0,px(10),0,px(5));card.addView(title,p(-1,-2));
+        TextView description=text(detail,13,SUB);description.setGravity(Gravity.CENTER);description.setLineSpacing(px(2),1f);card.addView(description,p(-1,-2));
     }
     private void analyticsText(LinearLayout parent,String value,int color,int size){
         TextView t=text(value,size,color);t.setPadding(px(4),px(4),px(4),px(4));parent.addView(t);
@@ -5319,7 +5335,7 @@ public class MainActivity extends Activity {
     private void renderCalendarPeriods(LinearLayout container,MessageDb source,String key,int token){
         worker.execute(()->{try{List<CalendarPeriod> periods=source.calendarPeriods();runOnUiThread(()->{
             if(token!=loadToken||!key.equals(activeKey)||isFinishing())return;
-            if(periods.isEmpty())analyticsText(container,"Календарных периодов нет. Можно добавить даты вне переписки.",SUB,13);
+            if(periods.isEmpty())emptyWorkspace(container,"Календарных периодов нет","Отметь важные даты, даже если они находятся за пределами переписки.","Календарь");
             for(CalendarPeriod period:periods){
                 LinearLayout card=column();card.setPadding(px(12),px(12),px(12),px(12));
                 card.setBackground(shape(PANEL,16));

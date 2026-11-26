@@ -81,20 +81,18 @@ public class Qa01TwoChatsTest {
             assertTrue(prefs.edit().putString("archive_registry",chats.toString())
                 .putString("active_archive",keyA).commit());
             try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)) {
-                assertNotNull(locate("Всего чатов: 2"));
+                assertNotNull(device.wait(Until.findObject(By.desc("Всего чатов: 2")),8000));
                 tap("QA01 Альфа");
                 requireMessage("QA01_ONLY_ALPHA");
                 assertNull("Wrong chat message visible",device.findObject(By.textContains("QA01_ONLY_BETA")));
-                UiObject2 menu=device.wait(Until.findObject(By.desc("Меню переписки")),5000);
-                assertNotNull("Conversation menu missing",menu);menu.click();device.waitForIdle();
-                tap("Сохранить переписку в PDF");
+                UiObject2 pdf=device.wait(Until.findObject(By.desc("Сохранить переписку в PDF")),5000);
+                assertNotNull("Dedicated PDF action missing",pdf);pdf.click();device.waitForIdle();
                 assertNotNull("PDF explanation missing",device.wait(Until.findObject(By.textContains("Вложения будут обозначены")),5000));
                 UiObject2 cancel=device.wait(Until.findObject(By.res("android:id/button2")),5000);
                 assertNotNull("PDF cancel button missing",cancel);cancel.click();device.waitForIdle();
                 requireMessage("QA01_ONLY_ALPHA");
-                menu=device.wait(Until.findObject(By.desc("Меню переписки")),5000);
-                assertNotNull(menu);menu.click();device.waitForIdle();
-                tap("Сохранить переписку в PDF");
+                pdf=device.wait(Until.findObject(By.desc("Сохранить переписку в PDF")),5000);
+                assertNotNull(pdf);pdf.click();device.waitForIdle();
                 UiObject2 choose=device.wait(Until.findObject(By.res("android:id/button1")),5000);
                 assertNotNull("PDF choose button missing",choose);choose.click();device.waitForIdle();
                 assertTrue("System document picker was not opened",device.wait(Until.hasObject(By.pkg(java.util.regex.Pattern.compile(".*documentsui"))),10000));
@@ -117,7 +115,7 @@ public class Qa01TwoChatsTest {
                 UiObject2 beta=locate("QA01 Бета");
                 assertNotNull("Second chat card missing",beta);
                 beta.longClick();device.waitForIdle();
-                tap("Закрепить чат");
+                tap("Закрепить");
                 assertTrue("Pin preference was not saved",prefs.getBoolean("pinned_chat_"+keyB,false));
                 UiObject2 betaPinned=locate("QA01 Бета"), alphaUnpinned=locate("QA01 Альфа");
                 assertNotNull(betaPinned);assertNotNull(alphaUnpinned);
@@ -126,9 +124,9 @@ public class Qa01TwoChatsTest {
                 scenario.recreate();device.waitForIdle();
                 UiObject2 pinned=locate("QA01 Бета");
                 assertNotNull("Pinned chat card missing after recreation",pinned);
-                assertTrue("Pin indicator lost after recreation",pinned.getText().contains("📌"));
+                assertTrue("Pin indicator lost after recreation",pinned.getText().contains("★"));
                 pinned.longClick();device.waitForIdle();
-                tap("Открепить чат");
+                tap("Открепить");
                 assertFalse("Unpin preference was not saved",prefs.getBoolean("pinned_chat_"+keyB,true));
             }
         } finally {
