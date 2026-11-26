@@ -24,7 +24,9 @@ public class AnalystModelCatalogTest {
             assertTrue(AnalystModelDownload.allowed(URI.create(model.url)));
             assertEquals("analyst-"+model.key+".litertlm",model.file(new File("models")).getName());
         }
-        assertEquals(10,keys.size());
+        assertEquals(11,keys.size());
+        assertEquals(10,AnalystModelCatalog.initialSelection("gemmae2baltprobe",3,false));
+        assertTrue(AnalystModelCatalog.MODELS[10].modified());
         assertEquals(8,AnalystModelCatalog.initialSelection("qwen06q4",3,false));
         assertEquals(9,AnalystModelCatalog.initialSelection("qwen2515",3,false));
     }
