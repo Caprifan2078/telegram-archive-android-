@@ -41,6 +41,12 @@ public final class EncryptedZipCodecProbeTest {
             java.util.Arrays.fill(password,'\0');ArchiveFileImport.deleteTree(root);file.delete();
         }
     }
+    private static int readU16(RandomAccessFile f)throws IOException{
+        return f.readUnsignedByte()|(f.readUnsignedByte()<<8);
+    }
+    private static long readU32(RandomAccessFile f)throws IOException{
+        return (long)readU16(f)|((long)readU16(f)<<16);
+    }
     private void verifyTamperedAuthenticationCode(String codec)throws Exception{
         Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
         File file=File.createTempFile("zip-mac-probe-",".zip",ctx.getCacheDir());
@@ -52,17 +58,36 @@ public final class EncryptedZipCodecProbeTest {
                 OutputStream out=new FileOutputStream(file)){
                 byte[] buf=new byte[8192];int n;while((n=in.read(buf))!=-1)out.write(buf,0,n);
             }
+            // These independently generated fixtures contain one small file,
+            // no ZIP64 and no archive comment. Parse the ZIP headers directly
+            // to avoid relying on the minified target APK's metadata API.
             long macOffset;
-            try(org.apache.commons.compress.archivers.zip.ZipFile metadata=
-                org.apache.commons.compress.archivers.zip.ZipFile.builder().setFile(file).get()){
-                org.apache.commons.compress.archivers.zip.ZipArchiveEntry entry=metadata.getEntry("messages.html");
-                assertNotNull(entry);
-                assertTrue("Fixture must be encrypted",entry.getGeneralPurposeBit().usesEncryption());
-                assertTrue("AES header and MAC must exist",entry.getCompressedSize()>28);
-                // The WinZip AES authentication tag occupies the last 10 bytes
-                // of the compressed/encrypted entry; do not change payload or password.
-                macOffset=entry.getDataOffset()+entry.getCompressedSize()-1;
-                assertTrue(macOffset>=0&&macOffset<file.length());
+            try(RandomAccessFile raf=new RandomAccessFile(file,"r")){
+                raf.seek(raf.length()-22);
+                assertEquals(0x06054b50L,readU32(raf));
+                assertEquals(0,readU16(raf));assertEquals(0,readU16(raf));
+                assertEquals(1,readU16(raf));assertEquals(1,readU16(raf));
+                long centralSize=readU32(raf),centralOffset=readU32(raf);
+                assertEquals(0,readU16(raf));
+                assertEquals(raf.length()-22,centralOffset+centralSize);
+                raf.seek(centralOffset);
+                assertEquals(0x02014b50L,readU32(raf));
+                raf.seek(centralOffset+8);
+                assertTrue((readU16(raf)&1)!=0);
+                assertEquals(99,readU16(raf)); // WinZip AES
+                raf.seek(centralOffset+20);
+                long compressedSize=readU32(raf);
+                assertTrue(compressedSize>28);
+                raf.seek(centralOffset+42);
+                long localOffset=readU32(raf);
+                raf.seek(localOffset);
+                assertEquals(0x04034b50L,readU32(raf));
+                raf.seek(localOffset+26);
+                int nameLen=readU16(raf),extraLen=readU16(raf);
+                byte[] name=new byte[nameLen];raf.readFully(name);
+                assertEquals("messages.html",new String(name,StandardCharsets.UTF_8));
+                macOffset=localOffset+30+nameLen+extraLen+compressedSize-1;
+                assertTrue(macOffset>=0&&macOffset<centralOffset);
             }
             try(RandomAccessFile raf=new RandomAccessFile(file,"rw")){
                 raf.seek(macOffset);int old=raf.readUnsignedByte();
