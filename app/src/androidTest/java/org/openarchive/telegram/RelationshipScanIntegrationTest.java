@@ -25,6 +25,14 @@ public class RelationshipScanIntegrationTest {
             assertTrue(report.complete);assertEquals(4,report.total);assertEquals(2,report.sessions);
             assertEquals(1,report.people.get("Аня").starts);assertEquals(1,report.people.get("Борис").starts);
             assertEquals(1,report.people.get("Аня").questions);
+            assertEquals(1,report.people.get("Аня").answeredStarts);
+            assertEquals(1,report.people.get("Борис").answeredStarts);
+            assertEquals(1,report.people.get("Аня").receivedReplies);
+            assertEquals(1,report.people.get("Борис").receivedReplies);
+            assertEquals(60,report.people.get("Борис").replySeconds);
+            assertEquals(120,report.people.get("Аня").replySeconds);
+            assertEquals(1,report.people.get("Борис").replyBuckets[0]);
+            assertEquals(1,report.people.get("Аня").replyBuckets[1]);
             assertEquals(1,report.replies.get(java.util.Arrays.asList("Борис","Аня")).count);
             assertEquals(1,report.replies.get(java.util.Arrays.asList("Аня","Борис")).count);
             assertEquals(1,report.behavior.totals[3]);assertEquals(1,report.behavior.totals[4]);
@@ -39,5 +47,17 @@ public class RelationshipScanIntegrationTest {
         r.add(3,"Б","bad","",false,null);
         r.add(4,"А","2026-02-03 09:00","",false,null);
         assertEquals(1,r.sessions);assertEquals(1,r.unorderedTime);assertEquals(1,r.missingTime);assertEquals(1,r.unresolvedReplies);
+    }
+    @Test public void directedReplyTimingIgnoresSelfAndNegativeIntervals(){
+        RelationshipScan.Report r=new RelationshipScan.Report();
+        r.add(1,"А","2026-02-01 09:00","",true,"А","2026-02-01 08:00");
+        r.add(2,"Б","2026-02-01 09:01","",true,"А","2026-02-01 10:00");
+        r.add(3,"Б","2026-02-01 09:02","",true,"В","2026-02-01 09:01");
+        assertEquals(1,r.selfReplies);assertEquals(1,r.invalidReplyTimes);
+        assertEquals(1,r.people.get("В").receivedReplies);
+        assertEquals(2,r.people.get("Б").explicitReplies);
+        assertEquals(1,r.people.get("Б").timedReplies);
+        assertEquals(60,r.people.get("Б").replySeconds);
+        assertEquals(0,r.people.get("А").explicitReplies);
     }
 }

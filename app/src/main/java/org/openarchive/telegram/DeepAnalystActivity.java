@@ -370,6 +370,18 @@ public final class DeepAnalystActivity extends Activity {
         });
     }
     /** Useful evidence retrieval even on lightweight builds or phones without downloaded weights. */
+    private String replyTiming(long count,long seconds,long[] buckets){
+        if(count==0)return "Нет явных ответов с двумя известными отметками времени.";
+        return String.format(java.util.Locale.ROOT,"Средний интервал: %.1f мин · пар: %d\nДо 1 мин: %d · до 5 мин: %d · до часа: %d · до суток: %d · дольше: %d",
+            (double)seconds/count/60,count,buckets[0],buckets[1],buckets[2],buckets[3],buckets[4]);
+    }
+    private LinearLayout reportSection(String label){
+        Button toggle=button(label+"  ▸");toggle.setAllCaps(false);results.addView(toggle);
+        LinearLayout body=new LinearLayout(this);body.setOrientation(LinearLayout.VERTICAL);
+        body.setVisibility(android.view.View.GONE);results.addView(body);
+        toggle.setOnClickListener(v->{boolean open=body.getVisibility()!=android.view.View.VISIBLE;body.setVisibility(open?android.view.View.VISIBLE:android.view.View.GONE);toggle.setText(label+(open?"  ▾":"  ▸"));});
+        return body;
+    }
     private void scanRelationships(){
         busy("Сканирую весь архив…");results.removeAllViews();
         worker.execute(()->{
@@ -384,25 +396,32 @@ public final class DeepAnalystActivity extends Activity {
                     results.addView(text("Начал разговоров: "+report.sessions+" · без времени: "+report.missingTime+" · обратный порядок: "+report.unorderedTime,13));
                     java.util.List<java.util.Map.Entry<String,RelationshipScan.Person>> people=new java.util.ArrayList<>(report.people.entrySet());
                     people.sort((a,b)->Long.compare(b.getValue().messages,a.getValue().messages));
+                    LinearLayout peopleSection=reportSection("Участники · "+people.size());
                     for(int i=0;i<Math.min(20,people.size());i++){
                         java.util.Map.Entry<String,RelationshipScan.Person> item=people.get(i);RelationshipScan.Person p=item.getValue();
-                        results.addView(text(item.getKey()+" · "+p.messages+" сообщений\nНачал разговор: "+p.starts+" · со знаком вопроса: "+p.questions+" · явных ответов: "+p.explicitReplies,15));
+                        peopleSection.addView(text(item.getKey()+" · "+p.messages+" сообщений",17));
+                        peopleSection.addView(text("Начал разговор: "+p.starts+" · продолжены другим отправителем: "+p.answeredStarts+
+                            "\nСо знаком вопроса: "+p.questions+" · отправлено явных ответов: "+p.explicitReplies+" · получено: "+p.receivedReplies,14));
+                        peopleSection.addView(text(replyTiming(p.timedReplies,p.replySeconds,p.replyBuckets),13));
                     }
                     if(people.size()>20||report.capped)results.addView(text("Разбивка по участникам ограничена.",13));
-                    results.addView(text("Кто кому отвечал",18));
+                    LinearLayout replySection=reportSection("Кто кому отвечал · "+report.replies.size());
+                    replySection.addView(text("Интервал между сообщением и явным ответом Telegram, а не время прочтения. Сессии — приблизительные; в группе продолжение может относиться к другому человеку.",13));
                     java.util.List<RelationshipScan.Pair> pairs=new java.util.ArrayList<>(report.replies.values());
                     pairs.sort((a,b)->Long.compare(b.count,a.count));
                     for(int i=0;i<Math.min(20,pairs.size());i++){
-                        RelationshipScan.Pair p=pairs.get(i);results.addView(text(p.from+" → "+p.to+": "+p.count,14));
+                        RelationshipScan.Pair p=pairs.get(i);replySection.addView(text(p.from+" → "+p.to+": "+p.count,15));
+                        replySection.addView(text(replyTiming(p.timed,p.seconds,p.buckets),13));
                     }
                     if(pairs.isEmpty())results.addView(text("Нет разрешённых связей явных ответов.",13));
-                    results.addView(text("Неразрешённых ответов: "+report.unresolvedReplies,13));
-                    results.addView(text("Формулировки поведения · не оценка человека",18));
-                    results.addView(text(report.behavior.summary(),14));
+                    replySection.addView(text("Неразрешённых ответов: "+report.unresolvedReplies+" · без корректного интервала: "+report.invalidReplyTimes+" · ответы себе: "+report.selfReplies,13));
+                    if(pairs.size()>20)replySection.addView(text("Показаны 20 самых частых направлений.",13));
+                    LinearLayout conduct=reportSection("Поступки и формулировки");
+                    conduct.addView(text(report.behavior.summary(),14));
                     for(BehaviorScan.Example example:report.behavior.evidence){
                         DeepChatContext.Source src=example.source;
                         Button link=button(BehaviorScan.LABELS[example.category]+" · "+src.author+"\n"+src.body);
-                        link.setAllCaps(false);results.addView(link);
+                        link.setAllCaps(false);conduct.addView(link);
                         link.setOnClickListener(v->{setResult(RESULT_OK,new Intent().putExtra("archive",archive).putExtra("message",src.id));finish();});
                     }
                 });

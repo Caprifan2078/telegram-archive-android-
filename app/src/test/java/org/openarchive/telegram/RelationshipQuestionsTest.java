@@ -11,4 +11,12 @@ public class RelationshipQuestionsTest {
         }
         assertEquals(80,seen.size());
     }
+    @Test public void abstractRelationshipQuestionsHaveRelevantLexicalCues(){
+        assertTrue(RelationshipEvidence.cues("Какие признания в любви встречались?").contains("люблю"));
+        assertTrue(RelationshipEvidence.cues("Как участники поддерживали друг друга?").contains("держись"));
+        assertTrue(RelationshipEvidence.cues("Как проходило примирение после ссоры?").contains("прости"));
+        assertTrue(RelationshipEvidence.cues("Какие обещания получили подтверждение?").contains("обещаю"));
+        assertTrue(RelationshipEvidence.cues("Найди ноутбук").isEmpty());
+        assertTrue(RelationshipEvidence.cues("любовь дружба помощь конфликт границы").size()<=8);
+    }
 }
