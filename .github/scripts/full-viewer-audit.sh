@@ -3,7 +3,7 @@ set -uo pipefail
 case "${1:-}" in
   import) classes=(DrawerAesZipRegressionTest IndependentAesZipRegressionTest EncryptedTelegramImportRegressionTest ArchivePasswordOnDemandRegressionTest ArchivePasswordUiRegressionTest ArchiveReadOnlySafPipeRegressionTest SevenZTelegramImportRegressionTest RarCompatibilityRegressionTest ArchiveEndToEndRegressionTest) ;;
   navigation) classes=(UiMenuTourRegressionTest UiChromeOverlapRegressionTest ChronologyHubRegressionTest ChatVisualConsistencyRegressionTest MultiConversationHomeRegressionTest HistoryEventSearchRegressionTest QaVisualAuditScreenshotsTest) ;;
-  media) classes=(MediaFastScrollRegressionTest MediaInfiniteGalleryRegressionTest FloatingRoundReattachRegressionTest FloatingRoundLifecycleRegressionTest RoundPlayerActivityTest MediaPlaybackTest MediaUpgradeRegressionTest Qa00MediaLifecycleTest VoiceSeekUiRegressionTest) ;;
+  media) classes=(MediaFastScrollRegressionTest MediaInfiniteGalleryRegressionTest FloatingRoundReattachRegressionTest FloatingRoundLifecycleRegressionTest RoundPlayerActivityTest MediaPlaybackTest MediaUpgradeRegressionTest Qa00MediaLifecycleTest VoiceSeekUiRegressionTest MusicRecoveryRegressionTest PlaybackLifecycleTest) ;;
   protected) classes=(ProtectedArchiveSessionTest) ;;
   *) echo "Unknown audit suite" >&2; exit 2 ;;
 esac

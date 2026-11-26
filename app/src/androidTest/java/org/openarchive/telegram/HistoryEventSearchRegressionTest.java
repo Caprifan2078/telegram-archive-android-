@@ -122,4 +122,38 @@ public final class HistoryEventSearchRegressionTest {
         }
     }
 
+
+    @Test public void exactlySixtyMatchesAreCompleteUntilAnAdditionalMatchExists()throws Exception{
+        MainActivity a=rule.getActivity();
+        String key="historycap"+UUID.randomUUID().toString().replace("-","");
+        MessageDb source=new MessageDb(a,key);
+        try{
+            SQLiteDatabase sql=source.getWritableDatabase();
+            long anchor=source.stage(sql,"QA","2026-11-10 10:00:00","Original",null,"");
+            source.publishStaged(sql);
+            sql.beginTransaction();
+            try{
+                for(int i=0;i<100;i++){
+                    ContentValues row=new ContentValues();
+                    row.put("title",i<60?"Встреча "+i:"Другой эпизод "+i);
+                    row.put("note","");row.put("anchor_id",anchor);
+                    row.put("anchor_offset",0);row.put("created_at",i);
+                    sql.insertOrThrow("relationship_events",null,row);
+                }
+                sql.setTransactionSuccessful();
+            }finally{sql.endTransaction();}
+            HistoryEventSearch.Result exact=HistoryEventSearch.find(source,"ВСТРЕЧА");
+            assertEquals(60,exact.matches.size());
+            assertFalse("Unrelated events must not imply hidden matches",exact.incomplete);
+            assertEquals(100,exact.scanned);
+            source.addRelationshipEvent("Встреча дополнительная","",anchor,0);
+            HistoryEventSearch.Result truncated=HistoryEventSearch.find(source,"встреча");
+            assertEquals(60,truncated.matches.size());
+            assertTrue("A real 61st hit must indicate truncation",truncated.incomplete);
+            assertEquals(101,truncated.scanned);
+            assertEquals(101,source.relationshipEventCount());
+        }finally{
+            source.close();a.deleteDatabase("telegram_"+key+".db");
+        }
+    }
 }

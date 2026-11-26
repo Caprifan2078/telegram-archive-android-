@@ -170,4 +170,58 @@ public final class MediaFastScrollRegressionTest {
             synthetic.close();a.deleteDatabase("telegram_"+key+".db");
         }
     }
+
+    @Test public void cancelRestoresVisibleOffsetAndClearsDragWithoutSeeking(){
+        inst.runOnMainSync(()->{
+            MainActivity a=rule.getActivity();
+            android.widget.FrameLayout parent=new android.widget.FrameLayout(a);
+            MediaFastScroller slider=new MediaFastScroller(a);
+            parent.addView(slider,new android.widget.FrameLayout.LayoutParams(100,800));
+            slider.layout(0,0,100,800);
+            java.util.concurrent.atomic.AtomicInteger seeks=new java.util.concurrent.atomic.AtomicInteger();
+            java.util.concurrent.atomic.AtomicBoolean dragging=new java.util.concurrent.atomic.AtomicBoolean();
+            slider.setOnSeek(f->seeks.incrementAndGet());
+            slider.setOnDrag((index,active)->dragging.set(active));
+            slider.setProgress(20,100);
+            long now=android.os.SystemClock.uptimeMillis();
+            MotionEvent down=MotionEvent.obtain(now,now,MotionEvent.ACTION_DOWN,50,700,0);
+            MotionEvent cancel=MotionEvent.obtain(now,now+1,MotionEvent.ACTION_CANCEL,50,700,0);
+            try{
+                assertTrue(slider.onTouchEvent(down));
+                assertTrue(dragging.get());
+                assertTrue(slider.onTouchEvent(cancel));
+                assertFalse(dragging.get());
+                assertEquals(0,seeks.get());
+                assertTrue(slider.getContentDescription().toString().contains("21 из 100"));
+                android.view.accessibility.AccessibilityNodeInfo info=android.view.accessibility.AccessibilityNodeInfo.obtain();
+                try{
+                    slider.onInitializeAccessibilityNodeInfo(info);
+                    assertNotNull(info.getRangeInfo());
+                    assertEquals(21f,info.getRangeInfo().getCurrent(),.001f);
+                }finally{info.recycle();}
+            }finally{down.recycle();cancel.recycle();}
+        });
+    }
+
+    @Test public void accessibilityCanSeekAbsoluteFileAndMoveByPage(){
+        inst.runOnMainSync(()->{
+            MediaFastScroller slider=new MediaFastScroller(rule.getActivity());
+            java.util.concurrent.atomic.AtomicReference<Float> seek=new java.util.concurrent.atomic.AtomicReference<>();
+            slider.setOnSeek(seek::set);
+            slider.setProgress(10,100);
+            android.os.Bundle args=new android.os.Bundle();
+            args.putFloat(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE,76f);
+            assertTrue(slider.performAccessibilityAction(
+                android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.getId(),args));
+            assertEquals(75f/99f,seek.get(),.0001f);
+            slider.setProgress(75,100);
+            assertTrue(slider.performAccessibilityAction(
+                android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD,null));
+            assertEquals(45f/99f,seek.get(),.0001f);
+            slider.setProgress(0,1);seek.set(null);
+            assertFalse(slider.performAccessibilityAction(
+                android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_FORWARD,null));
+            assertNull(seek.get());
+        });
+    }
 }

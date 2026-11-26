@@ -38,6 +38,7 @@ public final class AttachmentPreviewActivity extends Activity {
     private char[] password;
     private int page=0,requestId,indexScrollY;
     private boolean nestedOpen;
+    private android.window.OnBackInvokedCallback systemBackCallback;
     private static final int PAGE_SIZE=100;
     private static final int BACKGROUND=0xff101827,FG=0xffeef2f7,SUB=0xffa7b7cc,ACCENT=0xff6ddbc9;
     @Override public void onCreate(Bundle saved){
@@ -49,6 +50,11 @@ public final class AttachmentPreviewActivity extends Activity {
         panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(15),dp(20),dp(15),dp(20));panel.setBackgroundColor(BACKGROUND);
         scroll.addView(panel);setContentView(scroll);
+        if(android.os.Build.VERSION.SDK_INT>=33){
+            systemBackCallback=()->{if(nestedOpen)renderIndex();else finish();};
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,systemBackCallback);
+        }
         showHeader();
         if(ArchiveReadOnly.isArchive(fileName))loadIndex();
         else previewDocument(null);
@@ -213,6 +219,10 @@ public final class AttachmentPreviewActivity extends Activity {
         super.onBackPressed();
     }
     @Override protected void onDestroy(){
+        if(android.os.Build.VERSION.SDK_INT>=33&&systemBackCallback!=null){
+            getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(systemBackCallback);
+            systemBackCallback=null;
+        }
         requestId++;background.shutdownNow();
         if(password!=null)Arrays.fill(password,'\0');
         password=null;super.onDestroy();

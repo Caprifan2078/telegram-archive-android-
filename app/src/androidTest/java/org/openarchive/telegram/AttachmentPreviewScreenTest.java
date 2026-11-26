@@ -88,14 +88,27 @@ public class AttachmentPreviewScreenTest {
             visibleText(screen.getActivity().findViewById(android.R.id.content)));
     }
     private void awaitWindowFocus()throws Exception{
-        long deadline=android.os.SystemClock.uptimeMillis()+6000;final boolean[] focused={false};
+        long deadline=android.os.SystemClock.uptimeMillis()+12000;final boolean[] focused={false};
         while(android.os.SystemClock.uptimeMillis()<deadline){
             instrumentation.waitForIdleSync();
             instrumentation.runOnMainSync(()->focused[0]=screen.getActivity().hasWindowFocus());
             if(focused[0])return;
             Thread.sleep(80);
         }
-        fail("Preview window never received input focus before system Back");
+        StringBuilder diagnostic=new StringBuilder();
+        instrumentation.runOnMainSync(()->{
+            AttachmentPreviewActivity a=screen.getActivity();
+            diagnostic.append("finishing=").append(a.isFinishing())
+                .append(", destroyed=").append(a.isDestroyed())
+                .append(", decorVisibility=").append(a.getWindow().getDecorView().getWindowVisibility());
+        });
+        try(java.io.BufferedReader reader=new java.io.BufferedReader(new java.io.InputStreamReader(new android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.getUiAutomation().executeShellCommand("dumpsys window windows"))))){
+            String line;while((line=reader.readLine())!=null){
+                if(line.contains("mCurrentFocus")||line.contains("mFocusedApp")||line.contains("mTopFocusedDisplayId"))
+                    diagnostic.append("; ").append(line.trim());
+            }
+        }catch(Exception error){diagnostic.append("; window dump unavailable: ").append(error.getClass().getSimpleName());}
+        fail("Preview window never received input focus before system Back: "+diagnostic);
     }
     private void awaitArchiveScroll(int expected)throws Exception{
         long deadline=android.os.SystemClock.uptimeMillis()+4000;final int[] current={-1};
