@@ -23,14 +23,15 @@ final class DualAnalystContext {
         }
         String facts="Переписка А: "+DeepChatContext.clip(a.facts,380)+"; Переписка Б: "+DeepChatContext.clip(b.facts,380);
         return new DualAnalystContext(new DeepChatContext(rows,a.total+b.total,facts,
-            "Отдельные выборки А и Б; максимум восемь цитат из каждой, не полный проход"),links);
+            "Отдельные выборки А и Б; максимум восемь цитат из каждой, не полный проход",Collections.emptyList(),a.hasTopicEvidence&&b.hasTopicEvidence),links);
     }
     private static void append(List<DeepChatContext.Source> rows,Map<Long,Link> links,String key,String side,DeepChatContext c,int i){
         int size=c.sources.size(), count=Math.min(size,8);
         if(i>=count)return;
         // Sample across the chronological evidence list, not only its earliest rows.
         int at=count<=1?0:i*(size-1)/(count-1);
-        DeepChatContext.Source src=c.sources.get(at);
+        // When retrieval has actual relevance priorities, preserve them before sampling filler.
+        DeepChatContext.Source src=c.priority.isEmpty()?c.sources.get(at):c.compactSources().get(i);
         long id=rows.size()+1;
         rows.add(new DeepChatContext.Source(id,side+": "+src.author,src.date,src.body));
         links.put(id,new Link(id,src.id,key,side));

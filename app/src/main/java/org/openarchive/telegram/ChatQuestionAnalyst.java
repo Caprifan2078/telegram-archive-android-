@@ -8,7 +8,7 @@ import java.text.Normalizer;
 
 /** Deterministic question answering over a single imported chat. No network or model. */
 final class ChatQuestionAnalyst {
-    enum Kind { FIRST, LAST, TOTAL, MOST, TOPIC, FIRST_TOPIC, LAST_TOPIC, DAY, ACTIVE_DAYS, BUSIEST_DAY, LONGEST_GAP, QUESTIONS, AUTHOR_COUNT, PARTICIPANTS, LEAST, TEXT_COUNT, LONGEST_TEXT, AVG_LENGTH, AVG_DAY, PEAK_HOUR, WEEKEND, UNKNOWN }
+    enum Kind { FIRST, LAST, TOTAL, MOST, TOPIC, FIRST_TOPIC, LAST_TOPIC, DAY, ACTIVE_DAYS, BUSIEST_DAY, LONGEST_GAP, QUESTIONS, AUTHOR_COUNT, PARTICIPANTS, LEAST, TEXT_COUNT, LONGEST_TEXT, AVG_LENGTH, AVG_DAY, PEAK_HOUR, WEEKEND, INSULT_PHRASES, APOLOGY_PHRASES, UNKNOWN }
     static final String HELP="Примеры: Кто первый написал? · Кто написал последним? · Сколько сообщений? · Кто больше всего писал? · Найди «встреча» · Когда впервые упоминали «встреча»? · Что писали 01.02.2026?";
     static final class Query {
         final Kind kind; final String phrase; final LocalDate day;
@@ -27,6 +27,8 @@ final class ChatQuestionAnalyst {
     }
     static Query parse(String raw){
         String q=fold(raw).trim().replaceAll("[?!.]+$","").replaceAll("\\s+"," ");
+        if(q.matches("кто (извинялся|извинился|извинилась|просил прощения|просила прощения)|кто писал извинения"))return new Query(Kind.APOLOGY_PHRASES,"",null);
+        if(q.matches("кто (оскорблял|оскорбляла|оскорбил|оскорбила)( собеседника)?|кто писал оскорбления"))return new Query(Kind.INSULT_PHRASES,"",null);
         if(q.matches("кто (первым|первый) написал( сообщение| в чате| в переписке| кому)?|кто кому первый написал|кто начал переписку|первое сообщение|когда началась переписка"))return new Query(Kind.FIRST,"",null);
         if(q.matches("кто (написал последним|последним написал)|последнее сообщение|когда закончилось общение"))return new Query(Kind.LAST,"",null);
         if(q.matches("сколько (всего )?сообщений( в чате| в переписке)?|количество сообщений"))return new Query(Kind.TOTAL,"",null);
@@ -60,11 +62,46 @@ final class ChatQuestionAnalyst {
         Accumulator result=new Accumulator(query);
         if(cancelled.get())return null;
         if(query.kind==Kind.UNKNOWN)return result.finish();
-        try(android.database.sqlite.SQLiteDatabase database=android.database.sqlite.SQLiteDatabase.openDatabase(file.getAbsolutePath(),null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY);
-            android.database.Cursor rows=database.rawQuery("SELECT id,author,date_text,body FROM messages ORDER BY id",null)){
-            while(!cancelled.get()&&rows.moveToNext())result.add(rows.getLong(0),rows.getString(1),rows.getString(2),rows.getString(3));
+        try(android.database.sqlite.SQLiteDatabase database=android.database.sqlite.SQLiteDatabase.openDatabase(file.getAbsolutePath(),null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY)){
+            // COUNT(*) avoids transporting every message body to Java.
+            if(query.kind==Kind.TOTAL){
+                try(android.database.Cursor count=database.rawQuery("SELECT COUNT(*) FROM messages",null)){
+                    if(count.moveToFirst())result.total=count.getLong(0);
+                }
+            }else if(query.kind==Kind.MOST||query.kind==Kind.LEAST||query.kind==Kind.PARTICIPANTS){
+                // Group raw names in SQLite, then normalize exactly as the row scanner does.
+                // If the raw-name cap is exceeded, fall back to the original bounded scanner.
+                int groups=0;
+                try(android.database.Cursor rows=database.rawQuery("SELECT author,COUNT(*) FROM messages GROUP BY author LIMIT 10001",null)){
+                    while(!cancelled.get()&&rows.moveToNext()){
+                        if(++groups>10000)break;
+                        String name=normalizedAuthor(rows.getString(0));
+                        long n=rows.getLong(1);
+                        result.total+=n;
+                        result.authors.put(name,result.authors.getOrDefault(name,0L)+n);
+                    }
+                }
+                if(groups>10000&&!cancelled.get()){
+                    result=new Accumulator(query);
+                    scan(database,result,cancelled,"SELECT id,author,NULL,NULL FROM messages ORDER BY id");
+                }
+            }else{
+                // Calendar-only queries never need the potentially large message body.
+                boolean calendar=query.kind==Kind.ACTIVE_DAYS||query.kind==Kind.BUSIEST_DAY||query.kind==Kind.LONGEST_GAP||
+                    query.kind==Kind.AVG_DAY||query.kind==Kind.PEAK_HOUR||query.kind==Kind.WEEKEND;
+                scan(database,result,cancelled,calendar?"SELECT id,NULL,date_text,NULL FROM messages ORDER BY id":
+                    "SELECT id,author,date_text,body FROM messages ORDER BY id");
+            }
         }
         return cancelled.get()?null:result.finish();
+    }
+    private static void scan(android.database.sqlite.SQLiteDatabase db,Accumulator result,java.util.concurrent.atomic.AtomicBoolean cancelled,String sql){
+        try(android.database.Cursor rows=db.rawQuery(sql,null)){
+            while(!cancelled.get()&&rows.moveToNext())result.add(rows.getLong(0),rows.getString(1),rows.getString(2),rows.getString(3));
+        }
+    }
+    private static String normalizedAuthor(String author){
+        return author==null||author.trim().isEmpty()?"Неизвестный отправитель":author.trim();
     }
     static final class Evidence {
         final long id;final String author,date,excerpt;
@@ -90,10 +127,12 @@ final class ChatQuestionAnalyst {
         final TreeMap<LocalDate,Long> days=new TreeMap<>();
         final List<Evidence> examples=new ArrayList<>();
         final long[] hours=new long[24];
+        final Map<String,Evidence> authorExamples=new LinkedHashMap<>();
+        final Matcher phraseMatcher;
         long textChars,longestChars;Evidence longest;
         boolean capped,firstTie,lastTie,firstIncomplete,lastIncomplete;
         Evidence first,last;
-        Accumulator(Query q){query=q;}
+        Accumulator(Query q){query=q;phraseMatcher=q.kind==Kind.APOLOGY_PHRASES?BehaviorScan.RULES[3].matcher(""):q.kind==Kind.INSULT_PHRASES?BehaviorScan.RULES[0].matcher(""):null;}
         private static int compare(Evidence a,Evidence b){
             int d=a.day.compareTo(b.day);
             if(d!=0)return d;
@@ -103,6 +142,21 @@ final class ChatQuestionAnalyst {
         void add(long id,String author,String date,String body){
             total++;
             if(query.kind==Kind.TOTAL||query.kind==Kind.UNKNOWN)return;
+            if(phraseMatcher!=null){
+                if(body==null||body.isEmpty())return;
+                phraseMatcher.reset(body);
+                if(phraseMatcher.find()){
+                    matched++;
+                    String name=author==null||author.trim().isEmpty()?"Неизвестный отправитель":author.trim();
+                    if(authors.containsKey(name)||authors.size()<10000){
+                        authors.put(name,authors.getOrDefault(name,0L)+1);
+                        if(!authorExamples.containsKey(name)&&authorExamples.size()<8)
+                            authorExamples.put(name,new Evidence(id,name,date,body,ChatTrends.parse(date),fold(phraseMatcher.group())));
+                    }else capped=true;
+                    if(examples.size()<8)examples.add(new Evidence(id,name,date,body,ChatTrends.parse(date),fold(phraseMatcher.group())));
+                }
+                phraseMatcher.reset("");return;
+            }
             if(query.kind==Kind.TEXT_COUNT||query.kind==Kind.LONGEST_TEXT||query.kind==Kind.AVG_LENGTH){
                 if(body!=null&&!body.trim().isEmpty()){
                     matched++;int chars=body.codePointCount(0,body.length());textChars+=chars;
@@ -183,6 +237,18 @@ final class ChatQuestionAnalyst {
         }
         Answer finish(){
             String scope="\nТолько импортированная переписка; отсутствующие или удалённые сообщения не учитываются.";
+            if(phraseMatcher!=null){
+                String label=query.kind==Kind.APOLOGY_PHRASES?"Формулировки извинений":"Формулировки возможных оскорблений";
+                StringBuilder out=new StringBuilder(label+": "+matched+" сообщений из "+total+".");
+                List<Map.Entry<String,Long>> ranked=new ArrayList<>(authors.entrySet());
+                ranked.sort(Comparator.<Map.Entry<String,Long>>comparingLong(Map.Entry::getValue).reversed().thenComparing(Map.Entry::getKey));
+                for(int i=0;i<Math.min(8,ranked.size());i++)out.append("\n").append(ranked.get(i).getKey()).append(": ").append(ranked.get(i).getValue());
+                if(ranked.size()>8||capped)out.append("\nПоказана ограниченная разбивка по отправителям.");
+                out.append("\nЭто буквальные признаки в сообщениях, а не оценка намерений: возможны цитаты, шутки, отрицания и совпадающие имена. Отсутствие совпадений не доказывает отсутствие поступка.");
+                List<Evidence> sources=new ArrayList<>(authorExamples.values());
+                for(Evidence e:examples)if(sources.size()<8&&sources.stream().noneMatch(x->x.id==e.id))sources.add(e);
+                return new Answer(out.toString()+scope,sources);
+            }
             if(query.kind==Kind.UNKNOWN)return new Answer("Этот вопрос пока не поддерживается. "+HELP,Collections.emptyList());
             if(query.kind==Kind.TOTAL)return new Answer("Всего сообщений: "+total+"."+scope,Collections.emptyList());
             if(query.kind==Kind.TEXT_COUNT)return new Answer("Сообщений с непустым текстом: "+matched+" из "+total+"."+scope,Collections.emptyList());

@@ -24,7 +24,9 @@ public class AnalystModelCatalogTest {
             assertTrue(AnalystModelDownload.allowed(URI.create(model.url)));
             assertEquals("analyst-"+model.key+".litertlm",model.file(new File("models")).getName());
         }
-        assertEquals(10,keys.size());
+        assertEquals(11,keys.size());
+        assertEquals(10,AnalystModelCatalog.initialSelection("gemmae2baltprobe",3,false));
+        assertTrue(AnalystModelCatalog.MODELS[10].modified());
         assertEquals(8,AnalystModelCatalog.initialSelection("qwen06q4",3,false));
         assertEquals(9,AnalystModelCatalog.initialSelection("qwen2515",3,false));
     }
@@ -55,11 +57,11 @@ public class AnalystModelCatalogTest {
         File dir=java.nio.file.Files.createTempDirectory("focused-catalog").toFile();
         File old=AnalystModelCatalog.file(dir,4);
         try{
-            assertArrayEquals(new int[]{0,6,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,0));
+            assertArrayEquals(new int[]{8,0,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,0));
             assertTrue(old.createNewFile());
-            assertArrayEquals(new int[]{0,6,4,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,0));
-            assertArrayEquals(new int[]{0,6,4,7,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,7));
-            assertArrayEquals(new int[]{0,6,1,4,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,1));
+            assertArrayEquals(new int[]{8,0,4,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,0));
+            assertArrayEquals(new int[]{8,0,4,7,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,7));
+            assertArrayEquals(new int[]{8,0,1,4,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,1));
             assertEquals(4,AnalystModelCatalog.initialSelection("qwen352",3,false));
         }finally{old.delete();dir.delete();}
     }
