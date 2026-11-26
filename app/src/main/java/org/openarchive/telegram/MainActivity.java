@@ -2278,7 +2278,7 @@ public class MainActivity extends Activity {
         Button send=btn("➤");send.setContentDescription("Сохранить заметку");
         LinearLayout.LayoutParams sendSize=p(46,50);sendSize.leftMargin=px(4);
         compose.addView(send,sendSize);
-        send.setOnClickListener(v->{String value=input.getText().toString().trim();if(value.isEmpty())return;worker.execute(()->{savedStore.add(value,null,null,null);runOnUiThread(this::renderSaved);});});
+        send.setOnClickListener(v->{String value=input.getText().toString().trim();if(value.isEmpty())return;worker.execute(()->{savedStore.add(value,null,null,null);runOnUiThread(()->{if("saved".equals(screen)&&!isFinishing())renderSaved();});});});
         scroll.post(()->{if("saved".equals(screen))scroll.scrollTo(0,0);});
         // An empty list should explain the next action, not leave a blank canvas.
         final LinearLayout emptyState=column();
@@ -2307,7 +2307,7 @@ public class MainActivity extends Activity {
                     context.setPadding(px(15),px(5),px(12),px(12));list.addView(context);
                     context.setOnClickListener(v->showQuoteSourceMap(n.originArchive,n.originMessageId));
                 }
-                text.setOnLongClickListener(v->{new FontDialog.Builder(this).setTitle("Заметка").setItems(new String[]{"Удалить заметку"},(d,w)->worker.execute(()->{savedStore.delete(n.id);runOnUiThread(this::renderSaved);})).show();return true;});
+                text.setOnLongClickListener(v->{new FontDialog.Builder(this).setTitle("Заметка").setItems(new String[]{"Удалить заметку"},(d,w)->worker.execute(()->{savedStore.delete(n.id);runOnUiThread(()->{if("saved".equals(screen)&&!isFinishing())renderSaved();});})).show();return true;});
                 if(n.fileId!=null)text.setOnClickListener(v->{try{
                     Uri file=n.fileId.startsWith(PortableNoteFiles.PREFIX)
                         ?PortableNoteFiles.openUri(this,n.fileId):Uri.parse(n.fileId);
@@ -3354,7 +3354,7 @@ public class MainActivity extends Activity {
             Uri uri=data.getData();
             try{getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}
             String label=uri.getLastPathSegment();String mime=getContentResolver().getType(uri);
-            worker.execute(()->{savedStore.add("",label,uri.toString(),mime);runOnUiThread(this::renderSaved);});return;
+            worker.execute(()->{savedStore.add("",label,uri.toString(),mime);runOnUiThread(()->{if("saved".equals(screen)&&!isFinishing())renderSaved();});});return;
         }
         if(request==64&&result==RESULT_OK&&data!=null&&data.getData()!=null){
             Uri selected=data.getData();
@@ -4098,7 +4098,8 @@ public class MainActivity extends Activity {
     private void renderTimeAnalytics(ChatAnalytics.Snapshot report){
         boolean graphs="trends".equals(analyticsSection);
         LinearLayout controls=analyticsCard(graphs?"Графики активности":"Настройки времени");
-        analyticsText(controls,"Считаются по времени из экспорта Telegram. Часовой пояс берётся из исходного экспорта без пересчёта.",SUB,11);
+        TextView info=secondaryDisclosure("Как учитывается время  ›");controls.addView(info,p(-1,44));
+        info.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Время сообщений").setMessage("Время берётся из экспорта Telegram без пересчёта часового пояса.").setPositiveButton("Понятно",null).show());
         if(graphs){
         HorizontalScrollView switchScroll=new HorizontalScrollView(this);switchScroll.setHorizontalScrollBarEnabled(false);
         LinearLayout switches=row();
@@ -4140,7 +4141,7 @@ public class MainActivity extends Activity {
         }
         if(!"year".equals(analyticsUnit)){
         LinearLayout entire=analyticsCard("Вся история переписки · по годам");
-        analyticsText(entire,"От самого первого до последнего года экспорта. Это все годы, а не только последние 30. Точное количество указано рядом с каждым годом.",SUB,12);
+        
         ChatTrends.Series fullHistory=ChatTrends.allTimeYears(activity);
         if(fullHistory.values.length>0){
             analyticsBarChart(entire,fullHistory.labels,fullHistory.details,fullHistory.values,38,120);
@@ -4159,7 +4160,7 @@ public class MainActivity extends Activity {
                     analyticsCalendarYear=latestYear-pos;refreshAnalyticsView();}).show();});
             ChatTrends.Series yearMonths=ChatTrends.twelveMonths(activity,year);
             analyticsBarChart(singleYear,yearMonths.labels,yearMonths.details,yearMonths.values,29,114);
-            analyticsText(singleYear,"Перечислены все месяцы с января по декабрь; длина полосы показывает количество сообщений.",SUB,11);
+            
         }
             return;
         }
@@ -4174,12 +4175,12 @@ public class MainActivity extends Activity {
             }
         }
         LinearLayout hours=analyticsCard("Когда пишут · 00:00–24:00");
-        analyticsText(hours,"Час отправки сообщения по исходной отметке времени, 00:00–23:59.",SUB,11);
+        
         ArrayList<String> hLabels=new ArrayList<>(),hFull=new ArrayList<>();
         for(int i=0;i<24;i++){hLabels.add(i%3==0?String.format(Locale.ROOT,"%02d",i):"·");
             hFull.add(String.format(Locale.ROOT,"%02d:00–%02d:59",i,i));}
         analyticsBarChart(hours,hLabels,hFull,activity.hours,21,110);
-        analyticsText(hours,"00 — начало суток; 24:00 — граница следующих суток, не отдельный 25-й час. Показываются интервалы от 00:00 до 23:59.",SUB,11);
+        
         int busiest=activity.busiestHour();
         if(busiest>=0)analyticsText(hours,"Пик: "+String.format(Locale.ROOT,"%02d:00–%02d:59",busiest,busiest)+
             " · "+activity.hours[busiest]+" сообщений",ACCENT,13);
@@ -4217,11 +4218,11 @@ public class MainActivity extends Activity {
     private void analyticsBarChart(LinearLayout parent,List<String> labels,List<String> details,long[] values,int widthDp,int heightDp){
         if(values.length==0){analyticsText(parent,"Нет данных за этот период",SUB,14);return;}
         long max=0;for(long value:values)max=Math.max(max,value);
-        analyticsText(parent,"Количество сообщений · общая шкала 0–"+max+". Значения указаны точно, без округления.",SUB,12);
+        analyticsText(parent,"Сообщения · шкала 0–"+max,SUB,12);
         for(int i=0;i<values.length;i++){
             final long count=values[i];final String detail=details.get(i);
-            LinearLayout block=column();block.setPadding(px(4),px(8),px(4),px(8));parent.addView(block,p(-1,-2));
-            TextView label=text(detail+"  ·  "+count,14,FG);label.setTextIsSelectable(true);
+            LinearLayout block=column();block.setPadding(px(4),px(5),px(4),px(5));parent.addView(block,p(-1,-2));
+            TextView label=text(detail+"  ·  "+count,13,FG);label.setTextIsSelectable(true);
             label.setContentDescription(detail+": "+count+" сообщений");block.addView(label,p(-1,-2));
             FrameLayout track=new FrameLayout(this);track.setBackground(shape(CHIP,4));
             block.addView(track,p(-1,8));
@@ -4761,7 +4762,7 @@ public class MainActivity extends Activity {
         savedComposer.setVisibility(View.GONE);list.removeAllViews();list.setBackgroundColor(BG);
         // Do not repeat "Хронология" under the already-labelled app bar.
         if("relationships".equals(screen)){
-            TextView compactHeading=text("Разделы истории",16,FG);
+            TextView compactHeading=text(historyEventsExpanded?"Личные события":"История переписки",18,FG);
             compactHeading.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
             compactHeading.setPadding(px(12),px(12),px(12),px(5));list.addView(compactHeading);
             return;
@@ -4858,14 +4859,14 @@ public class MainActivity extends Activity {
     }
     /** One descriptive destination per chronology feature, not a stack of identical buttons. */
     private LinearLayout historyDestination(LinearLayout parent,String label,String detail,Runnable open){
-        LinearLayout item=row();item.setPadding(px(12),px(11),px(12),px(11));item.setMinimumHeight(px(66));
+        LinearLayout item=row();item.setPadding(px(14),px(13),px(14),px(13));item.setMinimumHeight(px(72));
         item.setBackground(ViewerUi.control(this,PANEL,ViewerUi.CARD,themeIndex==2));
-        LinearLayout.LayoutParams outer=p(-1,-2);outer.setMargins(px(2),px(3),px(2),px(4));parent.addView(item,outer);
+        LinearLayout.LayoutParams outer=p(-1,-2);outer.setMargins(px(5),px(4),px(5),px(5));parent.addView(item,outer);
         ImageView icon=new ImageView(this);icon.setImageDrawable(new MenuOutlineIcon(label,ACCENT));
         icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         LinearLayout.LayoutParams iconLp=p(24,24);iconLp.rightMargin=px(12);item.addView(icon,iconLp);
         LinearLayout details=column();item.addView(details,new LinearLayout.LayoutParams(0,-2,1));
-        TextView heading=text(label,15,FG);heading.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));details.addView(heading);
+        TextView heading=text(label,16,FG);heading.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));details.addView(heading);
         TextView description=text(detail,12,SUB);description.setPadding(0,px(4),0,0);description.setLineSpacing(px(2),1f);details.addView(description);
         TextView arrow=text("›",22,ACCENT);arrow.setPadding(px(10),0,0,0);item.addView(arrow);
         item.setContentDescription(label+". "+detail);item.setFocusable(true);item.setOnClickListener(v->open.run());
@@ -4898,28 +4899,33 @@ public class MainActivity extends Activity {
         });
         historyDestination(list,historyEventsExpanded?"События переписки ▴":"События переписки ▾",
             "Личные отметки, привязанные к отдельным сообщениям.",()->{historyEventsExpanded=!historyEventsExpanded;renderRelationshipsPage();});
-        historyDestination(list,"Этапы переписки","От одного сообщения до другого. "+RelationshipFeatureGuide.STAGES,
+        if(!historyEventsExpanded){
+        historyDestination(list,"Этапы переписки","Промежуток между двумя сообщениями.",
             ()->{historyEventsExpanded=false;chronologySection="stages";screen="chronology";showPage();});
-        historyDestination(list,"Периоды по датам","Выбери любые даты, даже за пределами переписки.",
+        historyDestination(list,"Периоды по датам","Отметки с произвольными датами.",
             ()->{historyEventsExpanded=false;chronologySection="calendar";screen="chronology";showPage();});
-        historyDestination(list,"Сравнение этапов","Сопоставь количество сообщений и вложений в отмеченных этапах.",
+        historyDestination(list,"Сравнение этапов","Активность в отмеченных этапах.",
             ()->{historyEventsExpanded=false;chronologySection="chart";screen="chronology";showPage();});
         historyDestination(list,"В этот день","Сообщения за одну и ту же дату в разные годы.",
             ()->{LocalDate today=LocalDate.now();showOnThisDay(today.getMonthValue(),today.getDayOfMonth());});
+        }
         Button backToChat=btn("+ Отметить событие в переписке");LinearLayout.LayoutParams add=p(-1,48);
         add.setMargins(px(2),px(7),px(2),px(8));list.addView(backToChat,add);
         backToChat.setOnClickListener(v->{screen="chat";showPage();toast("Удерживай важное сообщение и выбери «Добавить событие истории»");});
-        analyticsText(list,"Событие — одно сообщение. Этап — между двумя сообщениями. Период — любые даты.",SUB,12);
-        analyticsText(list,"Личные отметки не меняют оригиналы.",SUB,12);
+        if(!historyEventsExpanded){
         TextView more=secondaryDisclosure("Другие инструменты истории  ▾");list.addView(more,p(-1,48));
         LinearLayout advanced=column();advanced.setVisibility(View.GONE);list.addView(advanced,p(-1,-2));
         more.setOnClickListener(v->{boolean expand=advanced.getVisibility()!=View.VISIBLE;advanced.setVisibility(expand?View.VISIBLE:View.GONE);
             more.setText(expand?"Скрыть дополнительные инструменты  ▴":"Другие инструменты истории  ▾");});
-        historyDestination(advanced,"Повторяющиеся фразы",RelationshipFeatureGuide.ECHO,()->{screen="echo";showPage();});
-        historyDestination(advanced,"Сравнить две переписки",RelationshipFeatureGuide.COMPARE+" "+RelationshipFeatureGuide.MEMORIES+" "+RelationshipFeatureGuide.CALENDARS,
+        historyDestination(advanced,"Повторяющиеся фразы","Найти одинаковые выражения в чате.",()->{screen="echo";showPage();});
+        historyDestination(advanced,"Сравнить две переписки","Статистика и общая временная шкала.",
             ()->{comparisonFromHome=false;chooseDualChat("dual_compare");});
-        historyDestination(advanced,"Паузы между сообщениями","Найди длительные промежутки между сообщениями. Это не доказывает пропуск данных.",this::showConversationPauses);
-        analyticsText(advanced,RelationshipFeatureGuide.INTRO,SUB,12);
+        historyDestination(advanced,"Паузы между сообщениями","Длительные промежутки без сообщений.",this::showConversationPauses);
+        TextView explain=secondaryDisclosure("Как работают инструменты  ›");advanced.addView(explain,p(-1,48));
+        explain.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Инструменты истории")
+            .setMessage("Событие — отметка на одном сообщении. Этап — между двумя сообщениями. Период — любые даты.\n\n"+RelationshipFeatureGuide.STAGES+"\n\n"+RelationshipFeatureGuide.ECHO+"\n\n"+RelationshipFeatureGuide.COMPARE+"\n\n"+RelationshipFeatureGuide.MEMORIES+"\n\n"+RelationshipFeatureGuide.CALENDARS+"\n\nПаузы не доказывают потерю сообщений.\n\n"+RelationshipFeatureGuide.INTRO)
+            .setPositiveButton("Понятно",null).show());
+        }
         LinearLayout eventsHolder=column();list.addView(eventsHolder,p(-1,-2));
         if(!historyEventsExpanded){
             status.setText("");status.setVisibility(View.GONE);
@@ -5217,7 +5223,7 @@ public class MainActivity extends Activity {
             runOnUiThread(()->{
                 if(isFinishing()||token!=loadToken||!first.equals(activeKey)||!mode.equals(screen))return;
                 if(error!=null){progress.setText("Не получилось прочитать базы: "+error);status.setText("Ошибка сравнения");return;}
-                progress.setText(firstName+"   /   "+secondName+" · "+year);
+                progress.setVisibility(View.GONE);
                 if(isTimeline){
                     List<SharedMemories.Entry> rows=SharedMemories.mergeBalanced(listA,listB,30);
                     renderDualMemoriesRows(rows,rA,rB,firstName,secondName);
@@ -5228,15 +5234,16 @@ public class MainActivity extends Activity {
     private void renderDualComparison(DualChatRepository.Snapshot a,DualChatRepository.Snapshot b,
                                       String firstName,String secondName){
         LinearLayout summary=relationshipCard(list,"За всё время");
-        analyticsText(summary,"Первый чат / второй чат",SUB,12);
-        analyticsText(summary,"Сообщения: "+a.messages+" / "+b.messages,FG,14);
-        analyticsText(summary,"С текстом: "+a.withText+" / "+b.withText,FG,13);
-        analyticsText(summary,"Участники (в каждом чате отдельно): "+a.participants+" / "+b.participants,FG,13);
-        analyticsText(summary,"Вложения: "+a.attachments+" / "+b.attachments,FG,13);
-        analyticsText(summary,"Избранное: "+a.favorites+" / "+b.favorites,FG,13);
+        compareHeader(summary,firstName,secondName);
+        compareMetric(summary,"Сообщения",a.messages,b.messages);
+        compareMetric(summary,"С текстом",a.withText,b.withText);
+        compareMetric(summary,"Участники",a.participants,b.participants);
+        compareMetric(summary,"Вложения",a.attachments,b.attachments);
+        compareMetric(summary,"Избранное",a.favorites,b.favorites);
         LinearLayout yearCard=relationshipCard(list,"Активность за "+dualYear);
-        analyticsText(yearCard,"Сообщений за год: "+a.calendar.total()+" / "+b.calendar.total(),FG,13);
-        analyticsText(yearCard,"Дней с сообщениями: "+a.calendar.activeDays()+" / "+b.calendar.activeDays(),FG,13);
+        compareHeader(yearCard,firstName,secondName);
+        compareMetric(yearCard,"Сообщения",a.calendar.total(),b.calendar.total());
+        compareMetric(yearCard,"Активные дни",a.calendar.activeDays(),b.calendar.activeDays());
         analyticsText(yearCard,"Дней, когда были активны оба чата: "+
             new ParallelCalendars.Comparison(a.calendar,b.calendar).sharedActiveDays(),FG,13);
         if(a.calendar.partial||b.calendar.partial)
@@ -5248,9 +5255,26 @@ public class MainActivity extends Activity {
         java.util.TreeSet<String> kinds=new java.util.TreeSet<>();
         kinds.addAll(a.mediaTypes.keySet());kinds.addAll(b.mediaTypes.keySet());
         if(kinds.isEmpty())analyticsText(media,"В этих чатах вложения пока не индексированы.",SUB,12);
-        for(String kind:kinds)analyticsText(media,mediaLabel(kind)+": "+a.mediaTypes.getOrDefault(kind,0L)+
-            " / "+b.mediaTypes.getOrDefault(kind,0L),FG,12);
-        status.setText("Сравнение двух диалогов · без изменения данных");
+        if(!kinds.isEmpty())compareHeader(media,firstName,secondName);
+        for(String kind:kinds)compareMetric(media,mediaLabel(kind),a.mediaTypes.getOrDefault(kind,0L),b.mediaTypes.getOrDefault(kind,0L));
+        status.setText("");status.setVisibility(View.GONE);
+    }
+    private void compareHeader(LinearLayout parent,String a,String b){
+        LinearLayout line=row();line.setPadding(0,px(5),0,px(7));parent.addView(line,p(-1,-2));
+        line.addView(new View(this),new LinearLayout.LayoutParams(0,1,1.15f));
+        for(String name:new String[]{a,b}){
+            TextView label=text(name,12,ACCENT);label.setGravity(Gravity.CENTER);label.setMaxLines(2);
+            label.setEllipsize(TextUtils.TruncateAt.END);line.addView(label,new LinearLayout.LayoutParams(0,-2,1));
+        }
+    }
+    private void compareMetric(LinearLayout parent,String label,long first,long second){
+        LinearLayout line=row();line.setPadding(0,px(9),0,px(9));parent.addView(line,p(-1,-2));
+        TextView title=text(label,13,SUB);line.addView(title,new LinearLayout.LayoutParams(0,-2,1.15f));
+        for(long count:new long[]{first,second}){
+            TextView value=text(String.format(Locale.ROOT,"%,d",count).replace(',',' '),16,FG);
+            value.setGravity(Gravity.CENTER);value.setTypeface(null,Typeface.BOLD);value.setTextIsSelectable(true);
+            line.addView(value,new LinearLayout.LayoutParams(0,-2,1));
+        }
     }
     private void drawDualMonthlyBars(LinearLayout target,long[] a,long[] b){
         long top=1;for(int i=0;i<12;i++)top=Math.max(top,Math.max(a[i],b[i]));
@@ -5276,8 +5300,10 @@ public class MainActivity extends Activity {
         };
         chart.setContentDescription("Сравнение сообщений за 12 месяцев: первая и вторая переписка");
         target.addView(chart,p(-1,12*27));
-        for(int i=0;i<12;i++)analyticsText(target,String.format(Locale.ROOT,"%02d",i+1)+
-            " · "+a[i]+" / "+b[i],SUB,11);
+        TextView exact=secondaryDisclosure("Точные значения по месяцам  ▾");target.addView(exact,p(-1,44));
+        LinearLayout numbers=column();numbers.setVisibility(View.GONE);target.addView(numbers,p(-1,-2));
+        for(int i=0;i<12;i++)compareMetric(numbers,String.format(Locale.ROOT,"%02d",i+1),a[i],b[i]);
+        exact.setOnClickListener(v->{boolean open=numbers.getVisibility()!=View.VISIBLE;numbers.setVisibility(open?View.VISIBLE:View.GONE);exact.setText(open?"Скрыть значения  ▴":"Точные значения по месяцам  ▾");});
     }
     private void renderDualMemoriesRows(List<SharedMemories.Entry> rows,
                  DualChatRepository.Snapshot a,DualChatRepository.Snapshot b,String firstName,String secondName){
@@ -5541,12 +5567,12 @@ public class MainActivity extends Activity {
         int token=++loadToken;
         if(home){screen="chat";showPage();return;}
         refreshTabs();
-        title.setText("Кинолента");subtitle.setText("Медиа по годам · офлайн");
+        title.setText("Медиа по датам");subtitle.setText("Годы и месяцы");
         filterBar.removeAllViews();searchArea.removeAllViews();
         bottomPager.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
         list.removeAllViews();list.setBackgroundColor(BG);
         // The header already says "Кинолента". Keep one clear page title.
-        analyticsText(list,"Выбери год и месяц. Медиа открываются локально; загружается не более 18 миниатюр за один раз. Это не автоматическая презентация личных сообщений.",SUB,12);
+        analyticsText(list,"Выбери месяц, чтобы открыть вложения.",SUB,13);
         String returnLabel="relationships".equals(cinemaReturnScreen)?"К хронологии":
             "media".equals(cinemaReturnScreen)?"К медиатеке":
             "analytics".equals(cinemaReturnScreen)?"К анализу":
@@ -5572,28 +5598,32 @@ public class MainActivity extends Activity {
                     }
                     LinearLayout block=column();block.setBackground(glass(PANEL,12));
                     LinearLayout.LayoutParams lp=p(-1,-2);lp.setMargins(px(3),px(5),px(3),px(4));list.addView(block,lp);
-                    TextView title=text(month.month+"  ·  "+month.count+" медиа  ▾",15,FG);
+                    String monthName=month.month;try{monthName=java.time.YearMonth.parse(month.month).format(java.time.format.DateTimeFormatter.ofPattern("LLLL",Locale.forLanguageTag("ru-RU")));}catch(Exception ignored){}
+                    final String monthLabel=monthName.substring(0,1).toUpperCase(Locale.ROOT)+monthName.substring(1)+"  ·  "+month.count+" файлов";
+                    TextView title=text(monthLabel+"  ▾",15,FG);
                     title.setPadding(px(13),px(12),px(8),px(12));block.addView(title,p(-1,-2));
                     LinearLayout previews=column();block.addView(previews,p(-1,-2));
                     title.setOnClickListener(v->{
-                        if(previews.getChildCount()>0){previews.removeAllViews();return;}
-                        title.setText(month.month+"  ·  Загружаю…");
+                        if(previews.getVisibility()==View.VISIBLE&&previews.getChildCount()>0){previews.setVisibility(View.GONE);title.setText(monthLabel+"  ▾");return;}
+                        if(previews.getChildCount()>0){previews.setVisibility(View.VISIBLE);title.setText(monthLabel+"  ▴");return;}
+                        if(!title.isEnabled())return;
+                        title.setEnabled(false);title.setText(monthLabel+"  ·  Загружаю…");
                         worker.execute(()->{try{List<MessageDb.Attachment> attachments=source.mediaForMonth(month.month,18);
                             runOnUiThread(()->{
                                 if(token!=loadToken||!archive.equals(activeKey))return;
-                                title.setText(month.month+"  ·  "+month.count+" медиа  ▴");
+                                title.setEnabled(true);title.setText(monthLabel+"  ▴");
                                 for(MessageDb.Attachment item:attachments){
                                     LinearLayout line=row();line.setGravity(Gravity.CENTER_VERTICAL);
                                     line.setPadding(px(10),px(5),px(10),px(5));previews.addView(line,p(-1,94));
                                     View tile=mediaTile(item,true);line.addView(tile,p(93,90));
-                                    TextView detail=text(mediaLabel(item.kind)+" · "+day(item.date)+"\nНажми — открыть · удерживай — действия",13,FG);
+                                    TextView detail=text(mediaLabel(item.kind)+" · "+day(item.date),13,FG);
                                     detail.setPadding(px(10),0,0,0);line.addView(detail,new LinearLayout.LayoutParams(0,-2,1));
                                     line.setOnClickListener(vv->openMedia(item));
                                     line.setOnLongClickListener(vv->{mediaActions(item);return true;});
                                 }
                                 if(month.count>18)analyticsText(previews,"Показаны первые 18 вложений. Для остальных используй «Медиа».",SUB,12);
                             });
-                        }catch(Exception error){runOnUiThread(()->toast("Не удалось открыть месяц"));}});
+                        }catch(Exception error){runOnUiThread(()->{if(token==loadToken){title.setEnabled(true);title.setText(monthLabel+"  ▾");toast("Не удалось открыть месяц");}});}});
                     });
                 }
                 status.setText("Месяцев: "+months.size()+" · медиа не копируются");

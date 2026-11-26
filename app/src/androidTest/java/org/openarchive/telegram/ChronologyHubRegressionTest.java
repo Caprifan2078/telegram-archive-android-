@@ -85,6 +85,8 @@ public final class ChronologyHubRegressionTest {
             inst.runOnMainSync(()->{
                 assertNotNull(find(activity.getWindow().getDecorView(),"События переписки ▴"));
                 assertNotNull("Events appear only on request",find(activity.getWindow().getDecorView(),"Лента событий  ·  0"));
+                assertNull("The event feed must not repeat other chronology sections",find(activity.getWindow().getDecorView(),"Периоды по датам"));
+                find(activity.getWindow().getDecorView(),"События переписки ▴").performClick();
                 find(activity.getWindow().getDecorView(),"Периоды по датам").performClick();
                 assertNull("Direct access must skip the redundant periods hub",
                     find(activity.getWindow().getDecorView(),"01 · Этапы переписки  ›"));

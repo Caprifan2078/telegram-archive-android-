@@ -77,13 +77,14 @@ public class RelationshipAnalyticsExplanationUiTest {
                 View expand=findText(list,"Другие инструменты истории");
                 assertNotNull("Additional tools disclosure missing",expand);assertTrue(expand.performClick());
             });
-            for(String description:new String[]{
-                RelationshipFeatureGuide.STAGES,RelationshipFeatureGuide.ECHO,
-                RelationshipFeatureGuide.COMPARE,RelationshipFeatureGuide.MEMORIES,
-                RelationshipFeatureGuide.CALENDARS})
-                assertTrue("Missing visible feature explanation: "+description,
-                    contains(list,description));
-            assertTrue(contains(list,RelationshipFeatureGuide.INTRO));
+            for(String description:new String[]{"Промежуток между двумя сообщениями.","Найти одинаковые выражения в чате.","Статистика и общая временная шкала."})
+                assertTrue("Missing concise explanation: "+description,contains(list,description));
+            assertFalse("Long disclaimer must not fill the work surface",contains(list,RelationshipFeatureGuide.INTRO));
+            inst.runOnMainSync(()->{View guide=findText(list,"Как работают инструменты");assertNotNull(guide);assertTrue(guide.performClick());});
+            inst.waitForIdleSync();
+            androidx.test.uiautomator.UiDevice device=androidx.test.uiautomator.UiDevice.getInstance(inst);
+            assertNotNull("Detailed explanation must remain accessible",device.wait(androidx.test.uiautomator.Until.findObject(androidx.test.uiautomator.By.textContains(RelationshipFeatureGuide.INTRO)),8000));
+            device.pressBack();inst.waitForIdleSync();
             TextView header=(TextView)get(a,"title");
             TextView subheader=(TextView)get(a,"subtitle");
             assertEquals("The special screen must not retain the home title",
