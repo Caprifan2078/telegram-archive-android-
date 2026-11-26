@@ -69,4 +69,40 @@ public class ConversationPdfExporterTest {
             assertTrue(output.size()>100);
         }finally{db.close();context.deleteDatabase("telegram_"+key+".db");}
     }
+
+    @Test public void exportsOverOneThousandPagesAndReopens() throws Exception {
+        Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key="pdf_stress_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb db=new MessageDb(context,key);
+        File file=File.createTempFile("synthetic-large-",".pdf",context.getCacheDir());
+        try {
+            SQLiteDatabase sql=db.getWritableDatabase();
+            StringBuilder body=new StringBuilder();
+            for(int line=0;line<100;line++)body.append("Строка ").append(line).append(" — QA PDF.\n");
+            sql.beginTransaction();
+            try{
+                for(int i=0;i<650;i++)db.stage(sql,"QA","2026-01-01","MESSAGE_"+i+"\n"+body,null,"");
+                sql.setTransactionSuccessful();
+            }finally{sql.endTransaction();}
+            db.publishStaged(sql);
+            int pages;
+            try(FileOutputStream out=new FileOutputStream(file)){pages=ConversationPdfExporter.write(db,"Стресс-тест",out);}
+            assertTrue("Expected over 1000 pages, actual "+pages,pages>1000);
+            assertTrue(pages<=ConversationPdfExporter.MAX_PAGES);
+            try(ParcelFileDescriptor fd=ParcelFileDescriptor.open(file,ParcelFileDescriptor.MODE_READ_ONLY);
+                PdfRenderer renderer=new PdfRenderer(fd)){
+                assertEquals(pages,renderer.getPageCount());
+                for(int i:new int[]{0,pages/2,pages-1})try(PdfRenderer.Page page=renderer.openPage(i)){
+                    Bitmap image=Bitmap.createBitmap(298,421,Bitmap.Config.ARGB_8888);
+                    try{page.render(image,null,null,PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+                        boolean ink=false;
+                        for(int y=20;y<400&&!ink;y+=2)for(int x=20;x<278;x+=2)
+                            if(image.getPixel(x,y)!=android.graphics.Color.WHITE){ink=true;break;}
+                        assertTrue("Blank stress page "+i,ink);
+                    }finally{image.recycle();}
+                }
+            }
+            assertEquals(650,db.totalMessages());
+        }finally{db.close();context.deleteDatabase("telegram_"+key+".db");file.delete();}
+    }
 }
