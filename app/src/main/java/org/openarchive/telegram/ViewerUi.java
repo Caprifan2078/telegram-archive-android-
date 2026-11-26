@@ -43,12 +43,25 @@ final class ViewerUi {
         b.setElevation(0);b.setStateListAnimator(null);b.setMinHeight(dp(b.getContext(),44));
         b.setMinWidth(0);b.setMinimumWidth(0);
     }
+    static android.content.SharedPreferences appearance(Context c){
+        String name=new android.content.ComponentName(c,MainActivity.class).getShortClassName();
+        if(name.startsWith("."))name=name.substring(1);
+        return c.getSharedPreferences(name,Context.MODE_PRIVATE);
+    }
+    static int motionDuration(Context c,int normal){
+        android.content.SharedPreferences prefs=appearance(c);
+        int mode=Math.max(0,Math.min(3,prefs.getInt("appearance_performance",0)));
+        if(mode==3){
+            android.app.ActivityManager manager=(android.app.ActivityManager)c.getSystemService(Context.ACTIVITY_SERVICE);
+            if(manager!=null)mode=PerformanceAdvisor.mode(manager.getMemoryClass(),manager.isLowRamDevice());
+        }
+        return PremiumMotion.duration(normal,prefs.getBoolean("appearance_less_motion",false),
+            android.animation.ValueAnimator.areAnimatorsEnabled(),mode);
+    }
     static int themeIndex(Context c){
         // Activity.getPreferences uses the actual local class name; applicationId
         // suffixes can make that the full Java class name instead of MainActivity.
-        String name=new android.content.ComponentName(c,MainActivity.class).getShortClassName();
-        if(name.startsWith("."))name=name.substring(1);
-        return c.getSharedPreferences(name,Context.MODE_PRIVATE).getInt("appearance_theme",0);
+        return appearance(c).getInt("appearance_theme",0);
     }
     static ViewerPalette palette(Context c){return ViewerPalette.of(themeIndex(c));}
     static boolean light(Context c){return palette(c).light;}
