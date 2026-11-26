@@ -1,13 +1,13 @@
-name: Qwen compact quality restoration
+name: Qwen evidence prompt and memory diagnostics
 on:
   pull_request:
-    branches: [qa/consolidated-analyst-ui-20261127]
+    branches: [qa/consolidated-analyst-polish-20261127]
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   real_model:
-    if: github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || github.head_ref == 'qa/consolidated-analyst-polish-20261127')
+    if: github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || github.head_ref == 'qa/analyst-model-evidence-quality-20261127')
     name: Native model / ${{ matrix.model }}
     strategy:
       fail-fast: false
