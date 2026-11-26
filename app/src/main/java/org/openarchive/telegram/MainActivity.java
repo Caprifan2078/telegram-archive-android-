@@ -3270,6 +3270,7 @@ public class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
+        if(request==119){if(result==RESULT_OK&&data!=null&&!home&&"analytics".equals(screen)&&activeKey.equals(data.getStringExtra("archive"))){long id=data.getLongExtra("message",-1);if(id>0)jump(id,"analytics");}return;}
         if(request==SAVE_CONVERSATION_PDF_REQUEST){
             final String key=pendingPdfKey,name=pendingPdfName;pendingPdfKey=null;pendingPdfName=null;
             if(result==RESULT_OK&&data!=null&&data.getData()!=null&&key!=null){
@@ -3927,6 +3928,11 @@ public class MainActivity extends Activity {
         AlertDialog dialog=new FontDialog.Builder(this).setTitle("Аналитик переписки")
             .setView(viewport).setNegativeButton("Закрыть",null).create();
         dialog.setOnDismissListener(d->cancelled.set(true));
+        Button deepModel=btn("Глубокий анализ · локальная ИИ");panel.addView(deepModel,1,p(-1,48));
+        deepModel.setOnClickListener(v->{if(!sameScreenRequest(source,archive,token))return;
+            String initial=question.getText().toString();dialog.dismiss();
+            startActivityForResult(new Intent(this,DeepAnalystActivity.class).putExtra("archive",archive).putExtra("question",initial),119);
+        });
         ask.setOnClickListener(v->{
             if(!dialog.isShowing()||!sameScreenRequest(source,archive,token))return;
             ChatQuestionAnalyst.Query query=ChatQuestionAnalyst.parse(question.getText().toString());

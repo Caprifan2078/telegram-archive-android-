@@ -247,3 +247,9 @@ gradle.taskGraph.whenReady { graph ->
         if (!file(System.getenv('ARCHIVE_QA_KEYSTORE')).isFile()) throw new GradleException('Stable QA keystore file not found')
     }
 }
+
+// Explicit experimental opt-in: the normal lightweight Viewer does not carry a native LLM runtime.
+if (project.findProperty('qaLocalModel') == 'true') {
+    android.sourceSets.main.java.srcDir 'src/localModel/java'
+    dependencies { implementation 'com.google.ai.edge.litertlm:litertlm-android:0.10.2' }
+}

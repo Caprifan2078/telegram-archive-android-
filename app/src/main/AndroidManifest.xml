@@ -1,6 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application android:allowBackup="false" android:dataExtractionRules="@xml/ta_data_extraction_rules" android:fullBackupContent="false" android:label="Telegram Archive 0.51 QA" android:theme="@style/AppTheme" android:usesCleartextTraffic="false">
         <activity android:name=".ProtectedArchiveActivity" android:exported="false" />
+        <activity android:name=".DeepAnalystActivity" android:exported="false" android:process=":analyst" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".AttachmentPreviewActivity" android:exported="false" android:enableOnBackInvokedCallback="true" />
         <activity android:name=".DemoChatActivity" android:exported="false" />
         <activity android:name=".MusicPlayerActivity" android:exported="false" />
