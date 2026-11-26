@@ -61,10 +61,10 @@ final class RelationshipScan {
             }
             if(hasReply){
                 if(target==null){unresolvedReplies++;return;}
-                if(p!=null)p.explicitReplies++;
                 String to=name(target);
                 if(from.equals(to)){selfReplies++;return;}
-                Person recipient=people.get(to);if(recipient!=null)recipient.receivedReplies++;
+                if(p!=null)p.explicitReplies++;
+                Person recipient=person(to);if(recipient!=null)recipient.receivedReplies++;
                 List<String> key=Arrays.asList(from,to);
                 Pair pair=replies.get(key);
                 if(pair==null){if(replies.size()>=MAX_PAIRS){capped=true;return;}pair=new Pair(from,to);replies.put(key,pair);}
