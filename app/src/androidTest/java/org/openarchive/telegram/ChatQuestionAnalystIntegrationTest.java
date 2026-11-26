@@ -56,6 +56,9 @@ public class ChatQuestionAnalystIntegrationTest {
                 assertTrue("Unknown saved preset: "+group[i],expected.containsKey(query.kind));
                 ChatQuestionAnalyst.Answer answer=db.askChat(query,cancel);
                 assertNotNull(answer);
+                assertTrue(ChatQuestionAnalyst.supports(group[i]));
+                ChatQuestionAnalyst.Answer exact=ChatQuestionAnalyst.readOnly(ctx.getDatabasePath("telegram_"+key+".db"),query,cancel);
+                assertNotNull(exact);assertEquals(answer.text,exact.text);
                 assertTrue(group[i]+": "+answer.text,answer.text.contains(expected.get(query.kind)));
                 if(query.kind==ChatQuestionAnalyst.Kind.FIRST||query.kind==ChatQuestionAnalyst.Kind.FIRST_TOPIC)
                     assertEquals(first,answer.sources.get(0).id);
@@ -63,6 +66,9 @@ public class ChatQuestionAnalystIntegrationTest {
                 count++;
             }
             assertEquals(10,count);
+            assertFalse(ChatQuestionAnalyst.supports("Как менялось отношение участников?"));
+            cancel.set(true);
+            assertNull(ChatQuestionAnalyst.readOnly(ctx.getDatabasePath("telegram_"+key+".db"),ChatQuestionAnalyst.parse("Сколько сообщений?"),cancel));
             assertEquals(4,db.totalMessages());
         }finally{db.close();ctx.deleteDatabase("telegram_"+key+".db");}
     }
