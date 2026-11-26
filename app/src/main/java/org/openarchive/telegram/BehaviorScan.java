@@ -11,12 +11,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class BehaviorScan {
     static final String[] LABELS={"Прямые оскорбления","Давление и ультиматумы","Обобщения и обвинения","Извинения","Поддержка и благодарность","Уважение границ"};
     static final Pattern[] RULES={
-        Pattern.compile("(?iuU)(?<![\\p{L}])(?:идиот(?:ка|ом)?|дурак|дура|тупица|ничтожество|дебил(?:ка)?)(?![\\p{L}])"),
-        Pattern.compile("(?iuU)\\b(?:ты обязан[а]?|ты долж[е]?н[а]?|если не .* то|иначе я|или .* или я|я запрещаю|не смей)\\b"),
-        Pattern.compile("(?iuU)\\b(?:ты всегда|ты никогда|все из-за тебя|всё из-за тебя|ты во вс[её]м виноват[а]?)\\b"),
-        Pattern.compile("(?iuU)\\b(?:прости|простите|извини|извиняюсь|моя вина|я был[а]? неправ[а]?)\\b"),
-        Pattern.compile("(?iuU)\\b(?:спасибо|благодарю|я рядом|горжусь тобой|держись|я тебя поддерживаю)\\b"),
-        Pattern.compile("(?iuU)\\b(?:как тебе удобно|если хочешь|не буду давить|уважаю твой выбор|я понимаю твой отказ|можешь отказаться)\\b")
+        Pattern.compile("(?<![\\p{L}\\p{N}_])(?:идиот(?:ка|ом)?|дурак|дура|тупица|ничтожество|дебил(?:ка)?)(?![\\p{L}\\p{N}_])",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE),
+        Pattern.compile("(?<![\\p{L}\\p{N}_])(?:ты обязан[а]?|ты долж[е]?н[а]?|если не .* то|иначе я|или .* или я|я запрещаю|не смей)(?![\\p{L}\\p{N}_])",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE),
+        Pattern.compile("(?<![\\p{L}\\p{N}_])(?:ты всегда|ты никогда|все из-за тебя|всё из-за тебя|ты во вс[её]м виноват[а]?)(?![\\p{L}\\p{N}_])",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE),
+        Pattern.compile("(?<![\\p{L}\\p{N}_])(?:прости|простите|извини|извиняюсь|моя вина|я был[а]? неправ[а]?)(?![\\p{L}\\p{N}_])",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE),
+        Pattern.compile("(?<![\\p{L}\\p{N}_])(?:спасибо|благодарю|я рядом|горжусь тобой|держись|я тебя поддерживаю)(?![\\p{L}\\p{N}_])",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE),
+        Pattern.compile("(?<![\\p{L}\\p{N}_])(?:как тебе удобно|если хочешь|не буду давить|уважаю твой выбор|я понимаю твой отказ|можешь отказаться)(?![\\p{L}\\p{N}_])",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE)
     };
     static final int MAX_AUTHORS=2000, MAX_EXAMPLES=24;
     static final class Example {
@@ -32,6 +32,8 @@ final class BehaviorScan {
         final long[] totals=new long[LABELS.length];
         long scanned,textRows;boolean limited,complete;
         private final int[] samples=new int[LABELS.length];
+        private final java.util.regex.Matcher[] matchers=new java.util.regex.Matcher[RULES.length];
+        Report(){for(int i=0;i<RULES.length;i++)matchers[i]=RULES[i].matcher("");}
         void add(long id,String name,String date,String body){
             scanned++;String author=name==null||name.trim().isEmpty()?"Неизвестный отправитель":name.trim();
             Person p=people.get(author);
@@ -40,8 +42,8 @@ final class BehaviorScan {
             if(body==null||body.isEmpty())return;
             textRows++;
             for(int i=0;i<RULES.length;i++){
-                java.util.regex.Matcher hit=RULES[i].matcher(body);
-                if(!hit.find())continue;
+                java.util.regex.Matcher hit=matchers[i].reset(body);
+                if(!hit.find()){hit.reset("");continue;}
                 totals[i]++;if(p!=null)p.counts[i]++;
                 if(samples[i]<4){
                     int start=Math.max(0,hit.start()-90),end=Math.min(body.length(),hit.end()+140);
@@ -50,6 +52,7 @@ final class BehaviorScan {
                     String excerpt=(start>0?"…":"")+body.substring(start,end)+(end<body.length()?"…":"");
                     evidence.add(new Example(i,new DeepChatContext.Source(id,author,date,excerpt)));samples[i]++;
                 }
+                hit.reset("");
             }
         }
         String summary(){
@@ -67,9 +70,13 @@ final class BehaviorScan {
         }
     }
     static Report read(File file,AtomicBoolean cancel,java.util.function.LongConsumer progress){
+        try(SQLiteDatabase db=SQLiteDatabase.openDatabase(file.getAbsolutePath(),null,SQLiteDatabase.OPEN_READONLY)){
+            return read(db,cancel,progress);
+        }
+    }
+    static Report read(SQLiteDatabase db,AtomicBoolean cancel,java.util.function.LongConsumer progress){
         Report report=new Report();
-        try(SQLiteDatabase db=SQLiteDatabase.openDatabase(file.getAbsolutePath(),null,SQLiteDatabase.OPEN_READONLY);
-            Cursor rows=db.rawQuery("SELECT id,author,date_text,body FROM messages ORDER BY id",null)){
+        try(Cursor rows=db.rawQuery("SELECT id,author,date_text,body FROM messages ORDER BY id",null)){
             while(!cancel.get()&&rows.moveToNext()){
                 report.add(rows.getLong(0),rows.getString(1),rows.getString(2),rows.getString(3));
                 if(report.scanned%1000==0)progress.accept(report.scanned);

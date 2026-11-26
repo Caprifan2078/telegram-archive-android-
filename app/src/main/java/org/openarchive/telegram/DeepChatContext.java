@@ -23,16 +23,27 @@ final class DeepChatContext {
     }
     static DeepChatContext read(File file,String question,AtomicBoolean cancelled){
         try(SQLiteDatabase db=SQLiteDatabase.openDatabase(file.getAbsolutePath(),null,SQLiteDatabase.OPEN_READONLY)){
-            long total=0;try(Cursor c=db.rawQuery("SELECT COUNT(*) FROM messages",null)){if(c.moveToFirst())total=c.getLong(0);}
-            StringBuilder facts=new StringBuilder("Всего сообщений: "+total+". Имена отправителей и количество: ");
-            try(Cursor c=db.rawQuery("SELECT author,COUNT(*) FROM messages GROUP BY author ORDER BY COUNT(*) DESC,author LIMIT 8",null)){
-                while(!cancelled.get()&&c.moveToNext())facts.append(clip(c.getString(0),70)).append(" = ").append(c.getLong(1)).append("; ");
-            }
-            LinkedHashMap<Long,Source> picked=new LinkedHashMap<>();
             String lower=question.toLowerCase(Locale.ROOT);
             boolean behavior=lower.matches("(?s).*(конфликт|ссор|обид|манипул|токсич|поведен|неправ|виноват|паттерн|отношени|оскорб|давлен|границ|кто прав|кто плох|кто хорош).*");
-            if(behavior&&!cancelled.get()){
-                BehaviorScan.Report report=BehaviorScan.read(file,cancelled,n->{});
+            BehaviorScan.Report report=behavior&&!cancelled.get()?BehaviorScan.read(db,cancelled,n->{}):null;
+            long total=0;
+            if(report!=null&&report.complete)total=report.scanned;
+            else if(!cancelled.get())try(Cursor c=db.rawQuery("SELECT COUNT(*) FROM messages",null)){if(c.moveToFirst())total=c.getLong(0);}
+            StringBuilder facts=new StringBuilder("Всего сообщений: "+total+". Имена отправителей и количество: ");
+            if(report!=null&&report.complete&&!report.limited){
+                List<Map.Entry<String,BehaviorScan.Person>> top=new ArrayList<>(report.people.entrySet());
+                top.sort(Comparator.<Map.Entry<String,BehaviorScan.Person>>comparingLong(x->x.getValue().messages).reversed().thenComparing(Map.Entry::getKey));
+                for(int i=0;i<Math.min(8,top.size());i++){
+                    Map.Entry<String,BehaviorScan.Person> person=top.get(i);
+                    facts.append(clip(person.getKey(),70)).append(" = ").append(person.getValue().messages).append("; ");
+                }
+            }else if(!cancelled.get()){
+                try(Cursor c=db.rawQuery("SELECT author,COUNT(*) FROM messages GROUP BY author ORDER BY COUNT(*) DESC,author LIMIT 8",null)){
+                    while(!cancelled.get()&&c.moveToNext())facts.append(clip(c.getString(0),70)).append(" = ").append(c.getLong(1)).append("; ");
+                }
+            }
+            LinkedHashMap<Long,Source> picked=new LinkedHashMap<>();
+            if(report!=null&&!cancelled.get()){
                 facts.append("\n").append(report.summary());
                 // Two examples per category first; avoid letting one category dominate context.
                 int[] used=new int[BehaviorScan.LABELS.length];
@@ -42,12 +53,22 @@ final class DeepChatContext {
             // Relationship templates often use abstract wording absent in actual messages.
             // Reserve a few candidate passages from curated topic cues, then search the question.
             int cueBefore=picked.size();
-            for(String cue:RelationshipEvidence.cues(question)){
-                if(cancelled.get()||picked.size()>=Math.min(10,cueBefore+4))break;
-                String sql="SELECT id,author,date_text,body FROM messages WHERE instr(COALESCE(body_fold,''),?)>0 ORDER BY id ";
-                try(Cursor c=db.rawQuery(sql+"ASC LIMIT 1",new String[]{cue})){add(c,picked,cancelled);}
-                if(picked.size()<Math.min(10,cueBefore+4))
-                    try(Cursor c=db.rawQuery(sql+"DESC LIMIT 1",new String[]{cue})){add(c,picked,cancelled);}
+            List<String> cues=RelationshipEvidence.cues(question);
+            if(!cues.isEmpty()&&!cancelled.get()){
+                // Search the existing FTS index first; only missing lexical hits need a fallback.
+                List<String> missing=new ArrayList<>();
+                for(String cue:cues){
+                    if(cancelled.get()||picked.size()>=Math.min(10,cueBefore+4))break;
+                    int before=picked.size();
+                    try{
+                        OfflineSynonymSearch.Plan plan=OfflineSynonymSearch.make(cue,false,false);
+                        collect(db,plan.fts,1,picked,cancelled,false);
+                        if(picked.size()<Math.min(10,cueBefore+4))collect(db,plan.fts,1,picked,cancelled,true);
+                    }catch(IllegalArgumentException ignored){}
+                    if(picked.size()==before)missing.add(cue);
+                }
+                if(picked.size()<Math.min(10,cueBefore+4)&&!missing.isEmpty()&&!cancelled.get())
+                    literalExtremes(db,missing,picked,Math.min(10,cueBefore+4),cancelled);
             }
             if(picked.size()>cueBefore)method+=" + тематические признаки (не доказательство)";
             // First prefer the intersection, then backfill individual terms. Never treat
@@ -127,6 +148,27 @@ final class DeepChatContext {
             }
             ArrayList<Source> sources=new ArrayList<>(picked.values());sources.sort(Comparator.comparingLong(x->x.id));
             return new DeepChatContext(sources,total,facts.toString(),method);
+        }
+    }
+    // One scan for several rare cues, then indexed primary-key lookups.
+    private static void literalExtremes(SQLiteDatabase db,List<String> terms,Map<Long,Source> picked,int cap,AtomicBoolean cancel){
+        if(terms.isEmpty()||cancel.get())return;
+        StringBuilder sql=new StringBuilder("SELECT ");List<String> args=new ArrayList<>();
+        for(String term:terms){
+            if(!args.isEmpty())sql.append(",");
+            sql.append("MIN(CASE WHEN instr(COALESCE(body_fold,''),?)>0 THEN id END),MAX(CASE WHEN instr(COALESCE(body_fold,''),?)>0 THEN id END)");
+            args.add(term);args.add(term);
+        }
+        sql.append(" FROM messages");
+        LinkedHashSet<Long> ids=new LinkedHashSet<>();
+        if(cancel.get())return;
+        try(Cursor c=db.rawQuery(sql.toString(),args.toArray(new String[0]))){
+            if(c.moveToFirst())for(int j=0;j<args.size();j++)if(!c.isNull(j))ids.add(c.getLong(j));
+        }
+        for(long id:ids){
+            if(cancel.get()||picked.size()>=cap)break;
+            if(picked.containsKey(id))continue;
+            try(Cursor c=db.rawQuery("SELECT id,author,date_text,body FROM messages WHERE id=?",new String[]{Long.toString(id)})){add(c,picked,cancel);}
         }
     }
     private static void addTimelineSamples(SQLiteDatabase db,Map<Long,Source> picked,AtomicBoolean cancel){

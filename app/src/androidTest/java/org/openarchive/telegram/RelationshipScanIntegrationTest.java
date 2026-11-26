@@ -60,4 +60,12 @@ public class RelationshipScanIntegrationTest {
         assertEquals(60,r.people.get("Б").replySeconds);
         assertEquals(0,r.people.get("А").explicitReplies);
     }
+    @Test public void regexEngineWorksOnAndroidWithCyrillicAndReuse(){
+        BehaviorScan.Report r=new BehaviorScan.Report();
+        r.add(1,"А","","СПАСИБО! Прости.");
+        r.add(2,"Б","","спасибочка, проститься");
+        r.add(3,"Б","","Я рядом. Ты идиот.");
+        assertEquals(2,r.totals[4]);assertEquals(1,r.totals[3]);assertEquals(1,r.totals[0]);
+        assertEquals(3,r.scanned);
+    }
 }
