@@ -37,7 +37,7 @@ import java.util.concurrent.Executors;
 public final class MusicPlayerActivity extends Activity {
     private final ExecutorService io=Executors.newSingleThreadExecutor();
     private final Handler ui=new Handler(Looper.getMainLooper());
-    private static final int BG=0xff081321, TEXT=0xfff5f8ff, MUTED=0xffb7ccdf, ACCENT=0xff77d5ff;
+    private static final int BG=ViewerUi.BACKGROUND, TEXT=ViewerUi.TEXT, MUTED=ViewerUi.MUTED, ACCENT=ViewerUi.ACCENT;
     private static final float[] SPEEDS={0.25f,0.5f,0.75f,1f,1.25f,1.5f,2f};
     private MusicQueue queue;
     private int position=-1,serial=0;
@@ -79,7 +79,7 @@ public final class MusicPlayerActivity extends Activity {
         Button b=new Button(this);b.setText(text);b.setTextColor(TEXT);b.setTextSize(18);b.setAllCaps(false);
         b.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
         b.setMinWidth(0);b.setMinimumWidth(0);b.setPadding(dp(6),0,dp(6),0);
-        b.setBackground(new RippleDrawable(ColorStateList.valueOf(0x4496dffc),gradient(0xff233e59,0xff14283f,17),null));
+        b.setBackground(ViewerUi.control(this,ViewerUi.RAISED,ViewerUi.CONTROL,false));
         b.setStateListAnimator(null);b.setElevation(0);
         b.setLayoutParams(new LinearLayout.LayoutParams(dp(width),dp(51)));return b;
     }
@@ -119,6 +119,9 @@ public final class MusicPlayerActivity extends Activity {
     private void buildUi(){
         android.widget.ScrollView screen=new android.widget.ScrollView(this);screen.setFillViewport(true);
         screen.setBackgroundColor(BG);setContentView(screen);
+        screen.setOnApplyWindowInsetsListener((v,insets)->{
+            if(android.os.Build.VERSION.SDK_INT>=30){android.graphics.Insets safe=insets.getInsets(android.view.WindowInsets.Type.systemBars()|android.view.WindowInsets.Type.displayCutout());screen.setPadding(safe.left,safe.top,safe.right,safe.bottom);}
+            else screen.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});screen.requestApplyInsets();
         LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setGravity(Gravity.CENTER_HORIZONTAL);
         panel.setPadding(dp(18),dp(18),dp(18),dp(24));screen.addView(panel,new android.widget.ScrollView.LayoutParams(-1,-1));
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
@@ -129,7 +132,7 @@ public final class MusicPlayerActivity extends Activity {
         header.addView(heading,new LinearLayout.LayoutParams(0,-1,1));
         Button settings=control("⚙",55);settings.setContentDescription("Настройки скорости музыки");header.addView(settings);
         settings.setOnClickListener(v->chooseSpeed());
-        FrameLayout artwork=new FrameLayout(this);artwork.setBackground(gradient(0xff2f5f79,0xff172e48,26));
+        FrameLayout artwork=new FrameLayout(this);artwork.setBackground(ViewerUi.surface(this,ViewerUi.SURFACE,ViewerUi.HERO,false,true));
         artwork.setClipToOutline(true);int screenWidth=getResources().getDisplayMetrics().widthPixels;
         int artworkHeight=Math.min(screenWidth-dp(36),dp(340));
         LinearLayout.LayoutParams artworkBox=new LinearLayout.LayoutParams(-1,artworkHeight);

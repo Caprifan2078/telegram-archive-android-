@@ -337,13 +337,13 @@ public class MainActivity extends Activity {
         glassStyle=prefs.getBoolean("appearance_glass",true);
         thumbs.resize(PerformanceAdvisor.thumbnailCacheBytes(memoryClassMb(),performanceMode));
         if(themeIndex==1){ // Dark graphite
-            BG=0xff101216;PANEL=0xff23262d;INCOMING=0xff30343d;OUTGOING=0xff33544e;
+            BG=0xff101216;PANEL=0xff1e222a;INCOMING=0xff2a303b;OUTGOING=0xff2b514a;
             FG=0xfff5f5f7;SUB=0xffb8bdc7;ACCENT=0xffb5b9ff;CHIP=0xff393e4b;HIGHLIGHT=0xff474b80;
         }else if(themeIndex==2){ // Light pearl
             BG=0xfff3f6fa;PANEL=0xffffffff;INCOMING=0xffe2e9f2;OUTGOING=0xffc5eade;
             FG=0xff172b43;SUB=0xff506780;ACCENT=0xff1468a4;CHIP=0xffdce8f4;HIGHLIGHT=0xffb3d9ed;
         }else{
-            BG=0xff0b1424;PANEL=0xff18283e;INCOMING=0xff29405b;OUTGOING=0xff1a6159;
+            BG=ViewerUi.BACKGROUND;PANEL=ViewerUi.SURFACE;INCOMING=0xff24364b;OUTGOING=0xff24554f;
             FG=0xfff5f9ff;SUB=0xffafc1d4;ACCENT=0xff7ad2ff;CHIP=0xff29465f;HIGHLIGHT=0xff326e8f;
         }
         getWindow().setStatusBarColor(BG);
@@ -538,13 +538,8 @@ public class MainActivity extends Activity {
     private GradientDrawable shape(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(px(radius));return d;}
     private GradientDrawable glass(int color,int radius){
         if(!glassStyle||effectivePerformanceMode()==2)return shape(color,radius);
-        // Single drawable pass: premium sheen without expensive real-time GPU blur.
-        int bright=themeIndex==2?0x22ffffff:0x137cdefa;
-        int top=mixColors(color,bright,themeIndex==2?.20f:.24f);
-        GradientDrawable d=new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-            new int[]{(top&0x00ffffff)|0xf1000000,(color&0x00ffffff)|0xe9000000});
-        d.setCornerRadius(px(radius));d.setStroke(px(1),themeIndex==2?0x337695ae:0x3379b9de);
-        return d;
+        // Subtle tonal surface; preserve the original alpha and avoid blue haze on every card.
+        return ViewerUi.surface(this,color,radius,themeIndex==2,true);
     }
     private GradientDrawable outlined(int color,int radius,boolean active){
         GradientDrawable d=glass(color,radius);
@@ -565,7 +560,7 @@ public class MainActivity extends Activity {
         b.setPadding(px(10),0,px(10),0);b.setMinWidth(0);b.setMinHeight(0);
         b.setElevation(0);b.setStateListAnimator(null);
         b.setBackground(new RippleDrawable(ColorStateList.valueOf(themeIndex==2?0x22336c9c:0x397ad2ff),
-            outlined(PANEL,18,false),shape(0xffffffff,18)));
+            outlined(PANEL,ViewerUi.CONTROL,false),shape(0xffffffff,ViewerUi.CONTROL)));
         if(motionDuration(120)>0){
             android.animation.StateListAnimator states=new android.animation.StateListAnimator();
             android.animation.AnimatorSet pressed=new android.animation.AnimatorSet();
@@ -955,12 +950,11 @@ public class MainActivity extends Activity {
         pane.setPadding(px(14),px(13),px(14),px(12));
         // This panel touches the display edge: rounded top corners exposed the
         // dark dialog scrim behind Android's status bar as a black notch.
-        pane.setBackground(gradient(themeIndex==2?0xfaffffff:0xff172b3d,
-            themeIndex==2?0xffe8edf4:0xff112132,0));pane.setElevation(px(12));
+        pane.setBackgroundColor(themeIndex==2?0xfff5f7fb:PANEL);pane.setElevation(px(12));
         int width=Math.min(px(348),getResources().getDisplayMetrics().widthPixels-px(38));
         FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(width,-1,Gravity.START);
         overlay.addView(pane,lp);
-        TextView app=text("TELEGRAM ARCHIVE",16,FG);
+        TextView app=text("Telegram Archive",20,FG);
         app.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
         app.setPadding(px(5),px(3),0,px(2));pane.addView(app);
         TextView desc=text("Чаты, файлы и настройки",12,SUB);
@@ -1063,7 +1057,7 @@ public class MainActivity extends Activity {
         LinearLayout group=column();parent.addView(group,p(-1,-2));
         TextView title=text((opened?"⌄  ":"›  ")+name,13,ACCENT);
         title.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
-        title.setPadding(px(10),px(12),px(6),px(12));
+        title.setPadding(px(12),px(15),px(8),px(15));title.setMinHeight(px(48));
         title.setContentDescription((opened?"Свернуть ":"Развернуть ")+name);
         title.setBackground(shape(Color.TRANSPARENT,9));
         group.addView(title,p(-1,-2));
@@ -1093,7 +1087,7 @@ public class MainActivity extends Activity {
                               String heading,String detail,Runnable action){
         int split=heading.indexOf("  ");
         String label=split>=0?heading.substring(split+2).trim():heading;
-        LinearLayout item=row();item.setPadding(px(11),px(8),px(9),px(8));
+        LinearLayout item=row();item.setPadding(px(11),px(10),px(9),px(10));item.setMinimumHeight(px(56));
         item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x265aaad8),
             shape(Color.TRANSPARENT,10),null));
         LinearLayout.LayoutParams params=p(-1,-2);params.bottomMargin=px(2);parent.addView(item,params);
@@ -1569,14 +1563,14 @@ public class MainActivity extends Activity {
             Button actions=btn("⋮");actions.setContentDescription("Управление чатом "+name);
             item.addView(actions,p(39,42));
             actions.setOnClickListener(v->showChatActions(key,name));
-            item.setOnClickListener(v->{item.animate().alpha(.75f).setDuration(90).withEndAction(()->{item.setAlpha(1);activateArchive(key);}).start();});
+            item.setOnClickListener(v->{item.animate().cancel();item.setAlpha(1f);activateArchive(key);});
             item.setOnLongClickListener(v->{showChatActions(key,name);return true;});
         }
         TextView add=text("＋   Добавить переписку",15,ACCENT);add.setTypeface(null,Typeface.BOLD);
         add.setGravity(Gravity.CENTER);add.setPadding(px(12),px(17),px(12),px(17));
         add.setTextColor(themeIndex==2?0xff193852:0xffe7f8ff);
         add.setBackground(new RippleDrawable(ColorStateList.valueOf(0x66ffffff),
-            gradient(themeIndex==2?0xffc2e8f7:0xff12628a,themeIndex==2?0xff81d0f0:0xff17425d,20),
+            shape(themeIndex==2?0xffb9e1f7:0xff19547b,ViewerUi.CARD),
             shape(0xffffffff,20)));
         add.setContentDescription("Добавить переписку из экспорта Telegram");
         LinearLayout.LayoutParams ap=p(-1,60);ap.setMargins(px(2),px(9),px(2),px(8));list.addView(add,ap);
@@ -2773,12 +2767,12 @@ public class MainActivity extends Activity {
             return insets;
         });root.requestApplyInsets();
         LinearLayout head=row();head.setPadding(px(7),px(4),px(7),px(4));
-        head.setBackground(glass(PANEL,19));
-        LinearLayout.LayoutParams headBounds=p(-1,52);headBounds.bottomMargin=px(5);
+        head.setBackground(ViewerUi.surface(this,PANEL,ViewerUi.CARD,themeIndex==2,false));
+        LinearLayout.LayoutParams headBounds=p(-1,52);headBounds.bottomMargin=px(9);
         base.addView(head,headBounds);
-        menuButton=btn("☰");menuButton.setTextSize(22);menuButton.setGravity(Gravity.CENTER);
+        menuButton=btn("☰");menuButton.setTextSize(22);menuButton.setGravity(Gravity.CENTER);menuButton.setContentDescription("Открыть главное меню");
         head.addView(menuButton,p(42,42));menuButton.setOnClickListener(v->showSideMenu());
-        navBack=btn("‹");navBack.setTextSize(25);navBack.setGravity(Gravity.CENTER);
+        navBack=btn("‹");navBack.setTextSize(25);navBack.setGravity(Gravity.CENTER);navBack.setContentDescription("Назад");
         head.addView(navBack,p(42,42));
         navBack.setOnClickListener(v->{if("help".equals(screen)){leaveHelp();return;}
             if(floatingPanel!=null){closeFloatingRound();return;}
@@ -2793,9 +2787,9 @@ public class MainActivity extends Activity {
         // Keep the heading away from the circular Back button on compact phones.
         headings.setPadding(px(7),0,0,0);
         head.addView(headings,new LinearLayout.LayoutParams(0,px(44),1));
-        title=text("Telegram Archive",17,FG);title.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+        title=text("Telegram Archive",18,FG);title.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
         title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.END);headings.addView(title,p(-1,26));
-        subtitle=text("Личный архив · офлайн",11,SUB);
+        subtitle=text("Личный архив · офлайн",12,SUB);
         subtitle.setSingleLine(true);subtitle.setEllipsize(TextUtils.TruncateAt.END);headings.addView(subtitle,p(-1,18));
         pdfButton=btn("PDF");pdfButton.setContentDescription("Сохранить переписку в PDF");head.addView(pdfButton,p(44,42));
         pdfButton.setOnClickListener(v->{if(!home&&"chat".equals(screen))chooseConversationPdf();});
@@ -4407,7 +4401,7 @@ public class MainActivity extends Activity {
     private LinearLayout analyticsCard(String caption){return analyticsCard(caption,list);}
     private LinearLayout analyticsCard(String caption,LinearLayout destination){
         LinearLayout card=column();card.setPadding(px(14),px(13),px(14),px(15));
-        card.setBackground(glass(PANEL,18));
+        card.setBackground(ViewerUi.surface(this,PANEL,ViewerUi.CARD,themeIndex==2,false));
         LinearLayout.LayoutParams lp=p(-1,-2);lp.setMargins(px(5),px(5),px(5),px(11));
         destination.addView(card,lp);
         TextView title=text(caption,16,FG);
@@ -4761,7 +4755,7 @@ public class MainActivity extends Activity {
 
     private LinearLayout relationshipCard(LinearLayout parent,String title){
         LinearLayout card=column();card.setPadding(px(13),px(12),px(13),px(13));
-        card.setBackground(glass(PANEL,17));
+        card.setBackground(ViewerUi.surface(this,PANEL,ViewerUi.CARD,themeIndex==2,false));
         LinearLayout.LayoutParams params=p(-1,-2);params.setMargins(px(6),px(5),px(6),px(9));
         parent.addView(card,params);
         TextView heading=text(title,16,FG);heading.setTypeface(null,Typeface.BOLD);
@@ -4809,6 +4803,21 @@ public class MainActivity extends Activity {
             });
         });
     }
+    /** One descriptive destination per chronology feature, not a stack of identical buttons. */
+    private LinearLayout historyDestination(LinearLayout parent,String label,String detail,Runnable open){
+        LinearLayout item=row();item.setPadding(px(12),px(11),px(12),px(11));item.setMinimumHeight(px(66));
+        item.setBackground(ViewerUi.control(this,PANEL,ViewerUi.CARD,themeIndex==2));
+        LinearLayout.LayoutParams outer=p(-1,-2);outer.setMargins(px(2),px(3),px(2),px(4));parent.addView(item,outer);
+        ImageView icon=new ImageView(this);icon.setImageDrawable(new MenuOutlineIcon(label,ACCENT));
+        icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams iconLp=p(24,24);iconLp.rightMargin=px(12);item.addView(icon,iconLp);
+        LinearLayout details=column();item.addView(details,new LinearLayout.LayoutParams(0,-2,1));
+        TextView heading=text(label,15,FG);heading.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));details.addView(heading);
+        TextView description=text(detail,12,SUB);description.setPadding(0,px(4),0,0);description.setLineSpacing(px(2),1f);details.addView(description);
+        TextView arrow=text("›",22,ACCENT);arrow.setPadding(px(10),0,0,0);item.addView(arrow);
+        item.setContentDescription(label+". "+detail);item.setFocusable(true);item.setOnClickListener(v->open.run());
+        return item;
+    }
     private void renderRelationshipsPage(){
         int token=++loadToken;
         if(home){screen="chat";showPage();return;}
@@ -4834,46 +4843,30 @@ public class MainActivity extends Activity {
         findEvent.setOnEditorActionListener((v,action,event)->{
             searchHistoryEvents(findEvent.getText().toString());return true;
         });
-        TextView events=secondaryDisclosure(historyEventsExpanded?
-            "01 · События переписки  ▴":"01 · События переписки  ▾");
-        list.addView(events,p(-1,48));
-        events.setContentDescription("События: личные отметки, привязанные к сообщениям");
-        events.setOnClickListener(v->{
-            historyEventsExpanded=!historyEventsExpanded;
-            renderRelationshipsPage();
-        });
-        TextView stages=secondaryDisclosure("02 · Этапы переписки  ›");list.addView(stages,p(-1,48));
-        stages.setContentDescription("Этапы: от одного сообщения до другого");
-        stages.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="stages";screen="chronology";showPage();});
-        TextView calendar=secondaryDisclosure("03 · Периоды по датам  ›");list.addView(calendar,p(-1,48));
-        calendar.setContentDescription("Периоды по датам: личные даты, даже за пределами переписки");
-        calendar.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="calendar";screen="chronology";showPage();});
-        TextView charts=secondaryDisclosure("04 · Сравнение этапов  ›");list.addView(charts,p(-1,48));
-        charts.setContentDescription("Сравнение этапов: число сообщений и вложений в отмеченных этапах");
-        charts.setOnClickListener(v->{historyEventsExpanded=false;chronologySection="chart";screen="chronology";showPage();});
-        TextView memories=secondaryDisclosure("05 · В этот день  ›");list.addView(memories,p(-1,48));
-        memories.setContentDescription("В этот день: сообщения за одну дату в разных годах");
-        memories.setOnClickListener(v->{LocalDate today=LocalDate.now();showOnThisDay(today.getMonthValue(),today.getDayOfMonth());});
-        Button backToChat=btn("+ Отметить событие в переписке");list.addView(backToChat,p(-1,46));
-        backToChat.setOnClickListener(v->{screen="chat";showPage();
-            toast("Удерживай важное сообщение и выбери «Добавить событие истории»");});
+        historyDestination(list,historyEventsExpanded?"События переписки ▴":"События переписки ▾",
+            "Личные отметки, привязанные к отдельным сообщениям.",()->{historyEventsExpanded=!historyEventsExpanded;renderRelationshipsPage();});
+        historyDestination(list,"Этапы переписки","От одного сообщения до другого. "+RelationshipFeatureGuide.STAGES,
+            ()->{historyEventsExpanded=false;chronologySection="stages";screen="chronology";showPage();});
+        historyDestination(list,"Периоды по датам","Выбери любые даты, даже за пределами переписки.",
+            ()->{historyEventsExpanded=false;chronologySection="calendar";screen="chronology";showPage();});
+        historyDestination(list,"Сравнение этапов","Сопоставь количество сообщений и вложений в отмеченных этапах.",
+            ()->{historyEventsExpanded=false;chronologySection="chart";screen="chronology";showPage();});
+        historyDestination(list,"В этот день","Сообщения за одну и ту же дату в разные годы.",
+            ()->{LocalDate today=LocalDate.now();showOnThisDay(today.getMonthValue(),today.getDayOfMonth());});
+        Button backToChat=btn("+ Отметить событие в переписке");LinearLayout.LayoutParams add=p(-1,48);
+        add.setMargins(px(2),px(7),px(2),px(8));list.addView(backToChat,add);
+        backToChat.setOnClickListener(v->{screen="chat";showPage();toast("Удерживай важное сообщение и выбери «Добавить событие истории»");});
         analyticsText(list,"Событие — одно сообщение. Этап — между двумя сообщениями. Период — любые даты.",SUB,12);
         analyticsText(list,"Личные отметки не меняют оригиналы.",SUB,12);
-        TextView more=secondaryDisclosure("Другие инструменты истории  ▾");
-        list.addView(more,p(-1,44));
+        TextView more=secondaryDisclosure("Другие инструменты истории  ▾");list.addView(more,p(-1,48));
         LinearLayout advanced=column();advanced.setVisibility(View.GONE);list.addView(advanced,p(-1,-2));
-        more.setOnClickListener(v->{
-            boolean expand=advanced.getVisibility()!=View.VISIBLE;
-            advanced.setVisibility(expand?View.VISIBLE:View.GONE);
-            more.setText(expand?"Скрыть дополнительные инструменты  ▴":"Другие инструменты истории  ▾");
-        });
-        Button echoes=btn("Повторяющиеся фразы");advanced.addView(echoes,p(-1,48));
-        echoes.setOnClickListener(v->{screen="echo";showPage();});
-        Button fullCompare=btn("Сравнить две переписки");advanced.addView(fullCompare,p(-1,48));
-        fullCompare.setOnClickListener(v->{comparisonFromHome=false;chooseDualChat("dual_compare");});
-        fullCompare.setContentDescription("Сравнить статистику, календари и общую историю двух переписок");
-        Button gaps=btn("Паузы между сообщениями");advanced.addView(gaps,p(-1,48));
-        gaps.setOnClickListener(v->showConversationPauses());
+        more.setOnClickListener(v->{boolean expand=advanced.getVisibility()!=View.VISIBLE;advanced.setVisibility(expand?View.VISIBLE:View.GONE);
+            more.setText(expand?"Скрыть дополнительные инструменты  ▴":"Другие инструменты истории  ▾");});
+        historyDestination(advanced,"Повторяющиеся фразы",RelationshipFeatureGuide.ECHO,()->{screen="echo";showPage();});
+        historyDestination(advanced,"Сравнить две переписки",RelationshipFeatureGuide.COMPARE+" "+RelationshipFeatureGuide.MEMORIES+" "+RelationshipFeatureGuide.CALENDARS,
+            ()->{comparisonFromHome=false;chooseDualChat("dual_compare");});
+        historyDestination(advanced,"Паузы между сообщениями","Найди длительные промежутки между сообщениями. Это не доказывает пропуск данных.",this::showConversationPauses);
+        analyticsText(advanced,RelationshipFeatureGuide.INTRO,SUB,12);
         LinearLayout eventsHolder=column();list.addView(eventsHolder,p(-1,-2));
         if(!historyEventsExpanded){
             status.setText("");status.setVisibility(View.GONE);

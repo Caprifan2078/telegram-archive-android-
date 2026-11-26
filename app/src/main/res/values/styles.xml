@@ -12,7 +12,7 @@
 
     <!-- Native AlertDialogs keep familiar Android behavior but match our dark slate UI. -->
     <style name="ArchiveAlertDialog" parent="android:style/Theme.Material.Dialog.Alert">
-        <item name="android:windowBackground">#192A3C</item>
+        <item name="android:windowBackground">@drawable/viewer_dialog_surface</item>
         <item name="android:colorAccent">#7AD2FF</item>
         <item name="android:textColorPrimary">#F0F8FF</item>
         <item name="android:textColorSecondary">#B4C6D6</item>

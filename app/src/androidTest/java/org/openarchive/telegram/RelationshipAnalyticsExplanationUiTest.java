@@ -43,7 +43,7 @@ public class RelationshipAnalyticsExplanationUiTest {
         }
         return false;
     }
-    @Test public void relationshipScreenShowsReasonsForAllSevenActions()throws Exception {
+    @Test public void chronologyShowsReasonsForCurrentDestinations()throws Exception {
         Instrumentation inst=InstrumentationRegistry.getInstrumentation();
         Context ctx=inst.getTargetContext();
         MainActivity a=activity.getActivity();
@@ -70,8 +70,7 @@ public class RelationshipAnalyticsExplanationUiTest {
             for(String description:new String[]{
                 RelationshipFeatureGuide.STAGES,RelationshipFeatureGuide.ECHO,
                 RelationshipFeatureGuide.COMPARE,RelationshipFeatureGuide.MEMORIES,
-                RelationshipFeatureGuide.CALENDARS,RelationshipFeatureGuide.CINEMA,
-                RelationshipFeatureGuide.MEDIA_HEALTH})
+                RelationshipFeatureGuide.CALENDARS})
                 assertTrue("Missing visible feature explanation: "+description,
                     contains(list,description));
             assertTrue(contains(list,RelationshipFeatureGuide.INTRO));

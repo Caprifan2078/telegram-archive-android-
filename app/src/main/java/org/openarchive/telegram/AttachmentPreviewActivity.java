@@ -40,16 +40,26 @@ public final class AttachmentPreviewActivity extends Activity {
     private boolean nestedOpen;
     private android.window.OnBackInvokedCallback systemBackCallback;
     private static final int PAGE_SIZE=100;
-    private static final int BACKGROUND=0xff101827,FG=0xffeef2f7,SUB=0xffa7b7cc,ACCENT=0xff6ddbc9;
+    private int BACKGROUND=ViewerUi.BACKGROUND,FG=ViewerUi.TEXT,SUB=ViewerUi.MUTED,ACCENT=ViewerUi.ACCENT,SURFACE=ViewerUi.SURFACE;
+    private boolean light;
     @Override public void onCreate(Bundle saved){
-        super.onCreate(saved);
+        super.onCreate(saved);FontStyler.bind(this);
+        light=ViewerUi.light(this);
+        if(light){BACKGROUND=0xfff3f6fa;FG=0xff172b43;SUB=0xff506780;ACCENT=0xff1468a4;SURFACE=0xffffffff;}
+        getWindow().setStatusBarColor(BACKGROUND);getWindow().setNavigationBarColor(BACKGROUND);
+        if(light)getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         source=getIntent().getData();fileName=getIntent().getStringExtra("display_name");
         if(fileName==null||fileName.isEmpty())fileName=source==null?"Файл":source.getLastPathSegment();
         if(source==null){finish();return;}
-        scroll=new ScrollView(this);
+        scroll=new ScrollView(this);scroll.setBackgroundColor(BACKGROUND);scroll.setFillViewport(true);
         panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(15),dp(20),dp(15),dp(20));panel.setBackgroundColor(BACKGROUND);
         scroll.addView(panel);setContentView(scroll);
+        scroll.setOnApplyWindowInsetsListener((v,insets)->{
+            int top,bottom,left,right;
+            if(android.os.Build.VERSION.SDK_INT>=30){android.graphics.Insets safe=insets.getInsets(android.view.WindowInsets.Type.systemBars()|android.view.WindowInsets.Type.displayCutout());top=safe.top;bottom=safe.bottom;left=safe.left;right=safe.right;}
+            else{top=insets.getSystemWindowInsetTop();bottom=insets.getSystemWindowInsetBottom();left=insets.getSystemWindowInsetLeft();right=insets.getSystemWindowInsetRight();}
+            scroll.setPadding(left,top,right,bottom);return insets;});scroll.requestApplyInsets();
         if(android.os.Build.VERSION.SDK_INT>=33){
             systemBackCallback=()->{if(nestedOpen)renderIndex();else finish();};
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
@@ -67,7 +77,8 @@ public final class AttachmentPreviewActivity extends Activity {
     private Button button(String label,Runnable action){
         Button b=new Button(this);b.setAllCaps(false);b.setText(label);
         b.setSingleLine(false);b.setMinHeight(dp(53));b.setPadding(dp(12),dp(8),dp(12),dp(8));
-        panel.addView(b,new LinearLayout.LayoutParams(-1,ViewGroup.LayoutParams.WRAP_CONTENT));
+        ViewerUi.styleButton(b,SURFACE,FG,light);
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,ViewGroup.LayoutParams.WRAP_CONTENT);lp.bottomMargin=dp(7);panel.addView(b,lp);
         b.setOnClickListener(v->action.run());return b;
     }
     private void showHeader(){
@@ -93,7 +104,7 @@ public final class AttachmentPreviewActivity extends Activity {
         EditText input=new EditText(this);input.setHint("Пароль архива");
         input.setSingleLine(true);
         input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        new AlertDialog.Builder(this).setTitle("Пароль архива")
+        new FontDialog.Builder(this).setTitle("Пароль архива")
             .setMessage("Пароль используется только в памяти для чтения локального файла.")
             .setView(input).setNegativeButton("Отмена",null)
             .setPositiveButton("Открыть",(d,which)->{
