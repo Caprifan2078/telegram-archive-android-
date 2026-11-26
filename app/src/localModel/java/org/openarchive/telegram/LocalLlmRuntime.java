@@ -13,7 +13,7 @@ import java.util.Collections;
 public final class LocalLlmRuntime {
     public static String generate(String path,String prompt) {
         Engine.Companion.setNativeMinLogSeverity(LogSeverity.ERROR);
-        Engine engine=new Engine(new EngineConfig(path,new Backend.CPU(4),null,null,8192,null,":nocache"));
+        Engine engine=new Engine(new EngineConfig(path,new Backend.CPU(2),null,null,4096,null,":nocache"));
         try{
             engine.initialize();
             ConversationConfig config=new ConversationConfig(null,Collections.emptyList(),Collections.emptyList(),
