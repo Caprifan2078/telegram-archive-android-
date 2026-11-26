@@ -370,6 +370,45 @@ public final class DeepAnalystActivity extends Activity {
         });
     }
     /** Useful evidence retrieval even on lightweight builds or phones without downloaded weights. */
+    private void scanRelationships(){
+        busy("Сканирую весь архив…");results.removeAllViews();
+        worker.execute(()->{
+            try{
+                RelationshipScan.Report report=RelationshipScan.read(getDatabasePath(DeepChatContext.dbName(archive)),taskCancel,
+                    n->runOnUiThread(()->{if(!stopped.get()&&!taskCancel.get())status.setText("Проверено сообщений: "+n);}));
+                runOnUiThread(()->{
+                    if(stopped.get())return;busy=false;refresh();
+                    if(!report.complete||taskCancel.get()){status.setText("Сканирование отменено.");return;}
+                    results.addView(text("Взаимоотношения · "+report.total+" сообщений",20));
+                    results.addView(text("Начало разговора: первое сообщение архива или после паузы от 6 часов. Неизвестные даты и обратный порядок ограничивают точность. Ответы — только явные связи Telegram, не все сообщения.",13));
+                    results.addView(text("Начал разговоров: "+report.sessions+" · без времени: "+report.missingTime+" · обратный порядок: "+report.unorderedTime,13));
+                    java.util.List<java.util.Map.Entry<String,RelationshipScan.Person>> people=new java.util.ArrayList<>(report.people.entrySet());
+                    people.sort((a,b)->Long.compare(b.getValue().messages,a.getValue().messages));
+                    for(int i=0;i<Math.min(20,people.size());i++){
+                        java.util.Map.Entry<String,RelationshipScan.Person> item=people.get(i);RelationshipScan.Person p=item.getValue();
+                        results.addView(text(item.getKey()+" · "+p.messages+" сообщений\nНачал разговор: "+p.starts+" · со знаком вопроса: "+p.questions+" · явных ответов: "+p.explicitReplies,15));
+                    }
+                    if(people.size()>20||report.capped)results.addView(text("Разбивка по участникам ограничена.",13));
+                    results.addView(text("Кто кому отвечал",18));
+                    java.util.List<RelationshipScan.Pair> pairs=new java.util.ArrayList<>(report.replies.values());
+                    pairs.sort((a,b)->Long.compare(b.count,a.count));
+                    for(int i=0;i<Math.min(20,pairs.size());i++){
+                        RelationshipScan.Pair p=pairs.get(i);results.addView(text(p.from+" → "+p.to+": "+p.count,14));
+                    }
+                    if(pairs.isEmpty())results.addView(text("Нет разрешённых связей явных ответов.",13));
+                    results.addView(text("Неразрешённых ответов: "+report.unresolvedReplies,13));
+                    results.addView(text("Формулировки поведения · не оценка человека",18));
+                    results.addView(text(report.behavior.summary(),14));
+                    for(BehaviorScan.Example example:report.behavior.evidence){
+                        DeepChatContext.Source src=example.source;
+                        Button link=button(BehaviorScan.LABELS[example.category]+" · "+src.author+"\n"+src.body);
+                        link.setAllCaps(false);results.addView(link);
+                        link.setOnClickListener(v->{setResult(RESULT_OK,new Intent().putExtra("archive",archive).putExtra("message",src.id));finish();});
+                    }
+                });
+            }catch(Exception failure){runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();status.setText("Не удалось прочитать архив.");});}
+        });
+    }
     private void findEvidence(String q){
         busy("Подбираю источники из локального архива…");results.removeAllViews();
         worker.execute(()->{
