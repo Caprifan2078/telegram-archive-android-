@@ -17,6 +17,7 @@ public final class DeepAnalystActivity extends Activity {
     private final AtomicBoolean stopped=new AtomicBoolean();
     private static final AtomicBoolean MODEL_BUSY=new AtomicBoolean();
     private String archive,compareArchive;
+    private boolean relationships;
     private File model;
     private int selectedModel;
     private Button modelSelector;
@@ -44,6 +45,7 @@ public final class DeepAnalystActivity extends Activity {
         archive=getIntent().getStringExtra("archive");
         try{if(!getDatabasePath(DeepChatContext.dbName(archive)).isFile()){finish();return;}}catch(IllegalArgumentException bad){finish();return;}
         compareArchive=getIntent().getStringExtra("compare_archive");
+        relationships=getIntent().getBooleanExtra("relationships",false)&&compareArchive==null;
         if(compareArchive!=null){
             try{if(archive.equals(compareArchive)||!getDatabasePath(DeepChatContext.dbName(compareArchive)).isFile()){finish();return;}}
             catch(IllegalArgumentException bad){finish();return;}
@@ -55,8 +57,8 @@ public final class DeepAnalystActivity extends Activity {
         model=AnalystModelCatalog.file(getNoBackupFilesDir(),selectedModel);
         ScrollView scroll=new ScrollView(this);panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(16),dp(16),dp(16),dp(24));panel.setBackgroundColor(palette.background);scroll.addView(panel);setContentView(scroll);
-        TextView title=text(compareArchive==null?"Глубокий анализ":"Сравнение двух переписок",22);title.setTypeface(null,android.graphics.Typeface.BOLD);panel.addView(title);
-        panel.addView(text(compareArchive==null?"Локальный ИИ · быстрый вопрос или полный проход. Ответы могут ошибаться.":"Локальный ИИ · отдельные выборки А и Б. Сравнение по цитатам, не полный проход.",14));
+        TextView title=text(relationships?"Взаимоотношения":compareArchive==null?"Глубокий анализ":"Сравнение двух переписок",22);title.setTypeface(null,android.graphics.Typeface.BOLD);panel.addView(title);
+        panel.addView(text(relationships?"Поступки, взаимность, забота и конфликты. Выводы только по сообщениям, не оценка личности.":compareArchive==null?"Локальный ИИ · быстрый вопрос или полный проход. Ответы могут ошибаться.":"Локальный ИИ · отдельные выборки А и Б. Сравнение по цитатам, не полный проход.",14));
         status=text("",13);panel.addView(status);
         modelCard=new LinearLayout(this);modelCard.setOrientation(LinearLayout.VERTICAL);
         modelCard.setPadding(dp(12),dp(10),dp(12),dp(12));
@@ -84,8 +86,9 @@ public final class DeepAnalystActivity extends Activity {
         question.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(360)});
         question.setText(getIntent().getStringExtra("question"));LinearLayout.LayoutParams qlp=new LinearLayout.LayoutParams(-1,-2);qlp.topMargin=dp(12);qlp.bottomMargin=dp(8);panel.addView(question,qlp);
         ask=button("Спросить");ViewerUi.styleButton(ask,palette.chip,palette.accent,palette.light);panel.addView(ask);
-        Button presets=button("Идеи вопросов  ›");panel.addView(presets);
+        Button presets=button(relationships?"80 вопросов об отношениях  ›":"Идеи вопросов  ›");panel.addView(presets);
         presets.setOnClickListener(v->showQuestionLibrary());
+        if(relationships){Button report=button("Сводка отношений · весь архив");panel.addView(report);report.setOnClickListener(v->{if(!busy)scanRelationships();});}
         question.addTextChangedListener(new android.text.TextWatcher(){
             public void beforeTextChanged(CharSequence s,int start,int count,int after){}
             public void onTextChanged(CharSequence s,int start,int before,int count){updateAsk();}
@@ -123,8 +126,8 @@ public final class DeepAnalystActivity extends Activity {
     }
     private void showQuestionLibrary(){
         if(busy)return;
-        final String[][] semantic=compareArchive==null?AnalystQuestionLibrary.SINGLE:AnalystQuestionLibrary.DUAL;
-        final String[][] exact=compareArchive==null?ChatQuestionAnalyst.PRESETS:new String[0][];
+        final String[][] semantic=relationships?RelationshipQuestions.GROUPS:compareArchive==null?AnalystQuestionLibrary.SINGLE:AnalystQuestionLibrary.DUAL;
+        final String[][] exact=compareArchive==null&&!relationships?ChatQuestionAnalyst.PRESETS:new String[0][];
         final java.util.ArrayList<String[]> groups=new java.util.ArrayList<>();
         final java.util.ArrayList<String> labels=new java.util.ArrayList<>();
         for(String[] group:exact){groups.add(group);labels.add("Факты · "+group[0]+" ("+(group.length-1)+")");}
