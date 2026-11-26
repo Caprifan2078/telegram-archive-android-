@@ -47,6 +47,6 @@ final class DualAnalystContext {
         return a&&b;
     }
     String prompt(String question){
-        return context.prompt("Сравни А и Б отдельно. Формат: А — ответ и ссылка на строку А; Б — ответ и ссылка на строку Б; различие. Не объединяй одинаковые имена. "+DeepChatContext.clip(question,250))+"\nДай только итоговый ответ. Для А и Б укажи реальные номера источников в формате [#число].";
+        return context.prompt("Не объединяй одинаковые имена. "+DeepChatContext.clip(question,250),true);
     }
 }
