@@ -23,7 +23,7 @@ case "${1:-}" in
   interface_audit) classes=(InterfaceFunctionRegressionTest UiChromeOverlapRegressionTest QaUiChatNavigationRegressionTest MediaInfiniteGalleryRegressionTest MediaFastScrollRegressionTest SearchLifecycleRegressionTest ChronologyHubRegressionTest) ;;
   current_help) classes=(Qa00HelpLifecycleTest Qa00MediaFilterTest Qa00NavigationCoreTest UiMenuTourRegressionTest Qa01TwoChatsTest ConversationPdfExporterTest) ;;
   chat_polish) classes=(ChatVisualConsistencyRegressionTest ViewerThemeRegressionTest UiChromeOverlapRegressionTest QaVisualAuditScreenshotsTest LightAnalyticsVisualTest MediaGridResponsiveAndroidTest) ;;
-  section_clarity) classes=(ChronologyHubRegressionTest RelationshipAnalyticsExplanationUiTest RelationshipPaginationRegressionTest AnalyticsSectionNavigationRegressionTest LightAnalyticsVisualTest QaVisualAuditScreenshotsTest GroupTimelineScreenRegressionTest) ;;
+  section_clarity) classes=(SavedWorkspaceRegressionTest QuoteSavedStoreIntegrationTest Qa00NavigationCoreTest ChronologyHubRegressionTest RelationshipAnalyticsExplanationUiTest RelationshipPaginationRegressionTest AnalyticsSectionNavigationRegressionTest LightAnalyticsVisualTest QaVisualAuditScreenshotsTest GroupTimelineScreenRegressionTest) ;;
   *) echo "Unknown audit suite" >&2; exit 2 ;;
 esac
 qualified=()

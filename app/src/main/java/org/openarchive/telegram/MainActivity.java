@@ -94,6 +94,7 @@ import java.util.concurrent.Executors;
 public class MainActivity extends Activity {
     private int relationshipPageIndex=0;
     private boolean historyEventsExpanded=false;
+    private boolean savedFavoritesOnly=false;private String noteDraft="";private EditText noteInput;
     private String chronologySection="overview";
     private String cinemaReturnScreen="chat";
     // Read-only side-by-side workspaces. The first archive is always the active chat.
@@ -221,6 +222,7 @@ public class MainActivity extends Activity {
         if(state!=null){
             pendingPdfKey=state.getString("ta_pending_pdf_key");pendingPdfName=state.getString("ta_pending_pdf_name");
             home=state.getBoolean("ta_home",true);screen=state.getString("ta_screen","chat");
+            savedFavoritesOnly=state.getBoolean("ta_saved_favorites",false);noteDraft=state.getString("ta_note_draft","");
             if("help".equals(screen)){
                 helpReturnHome=state.getBoolean("ta_help_return_home",true);
                 helpReturnScreen=state.getString("ta_help_return_screen","chat");
@@ -291,6 +293,8 @@ public class MainActivity extends Activity {
         }
         if(!home&&"chat".equals(screen))saveReadingProgress();
         state.putBoolean("ta_home",home);state.putString("ta_screen",screen);
+        state.putBoolean("ta_saved_favorites",savedFavoritesOnly);
+        state.putString("ta_note_draft",noteInput!=null?noteInput.getText().toString():noteDraft);
         state.putString("ta_search_query",q);state.putString("ta_search_author",byAuthor);
         state.putBoolean("ta_search_deep",deep);state.putBoolean("ta_search_media",onlyMedia);
         if("search".equals(screen)){
@@ -957,8 +961,8 @@ public class MainActivity extends Activity {
         LinearLayout items=column();menuScroll.addView(items);
         sideMenuItem(items,dialog,pane,"Переписки","К списку всех чатов",()->{
             home=true;screen="chat";showPage();});
-        sideMenuItem(items,dialog,pane,"Личные заметки","Заметки из разных переписок",()->{
-            home=false;screen="saved";renderSaved();});
+        sideMenuItem(items,dialog,pane,"Личные заметки","Заметки, цитаты и избранное",()->{
+            savedFavoritesOnly=false;home=false;screen="saved";renderSaved();});
         sideMenuItem(items,dialog,pane,"Корзина","Вернуть убранные переписки",this::showChatTrash);
         View divider=new View(this);divider.setBackgroundColor(0xff2a455c);
         LinearLayout.LayoutParams dividerMargin=p(-1,1);
@@ -2259,12 +2263,22 @@ public class MainActivity extends Activity {
         list.setPadding(px(3),px(6),px(3),px(14));
         ++loadToken;home=false;screen="saved";list.removeAllViews();filterBar.removeAllViews();searchArea.removeAllViews();pinnedBar.removeAllViews();bottomNav.setVisibility(View.GONE);bottomPager.setVisibility(View.GONE);verticalTimeline.setVisibility(View.GONE);
         menuButton.setVisibility(View.GONE);navBack.setVisibility(View.VISIBLE);
-        title.setText("Личные заметки");subtitle.setText("Цитаты и избранное из всех переписок");
-        savedComposer.removeAllViews();savedComposer.setVisibility(View.VISIBLE);
+        title.setText(savedFavoritesOnly?"Избранное":"Личные заметки");subtitle.setText(savedFavoritesOnly?"Из всех переписок":"Личные записи и цитаты");
+        if(noteInput!=null){noteDraft=noteInput.getText().toString();noteInput=null;}
+        LinearLayout modes=row();LinearLayout.LayoutParams modesLp=p(-1,50);modesLp.setMargins(px(5),px(3),px(5),px(9));list.addView(modes,modesLp);
+        for(boolean favorites:new boolean[]{false,true}){
+            Button tab=btn(favorites?"Избранное":"Заметки");tab.setSelected(favorites==savedFavoritesOnly);
+            if(favorites==savedFavoritesOnly)tab.setBackground(ViewerUi.control(this,CHIP,ViewerUi.CONTROL,themeIndex==2));
+            LinearLayout.LayoutParams bounds=new LinearLayout.LayoutParams(0,-1,1);bounds.setMargins(px(2),0,px(2),0);modes.addView(tab,bounds);
+            tab.setContentDescription(favorites?"Избранное из всех переписок":"Личные записи и цитаты");
+            tab.setOnClickListener(v->{if(savedFavoritesOnly!=favorites){savedFavoritesOnly=favorites;renderSaved();}});
+        }
+        savedComposer.removeAllViews();savedComposer.setVisibility(savedFavoritesOnly?View.GONE:View.VISIBLE);
         savedComposer.setPadding(px(6),px(4),px(6),px(4));
+        if(!savedFavoritesOnly){
         LinearLayout compose=row();compose.setGravity(Gravity.CENTER_VERTICAL);
         savedComposer.addView(compose,p(-1,-2));
-        EditText input=new EditText(this);input.setHint("Написать заметку…");
+        EditText input=new EditText(this);input.setHint("Написать заметку…");input.setText(noteDraft);noteInput=input;
         input.setTextColor(FG);input.setHintTextColor(SUB);
         input.setTextSize(14);input.setMinLines(1);input.setMaxLines(3);
         input.setPadding(px(10),px(6),px(6),px(6));
@@ -2278,7 +2292,13 @@ public class MainActivity extends Activity {
         Button send=btn("➤");send.setContentDescription("Сохранить заметку");
         LinearLayout.LayoutParams sendSize=p(46,50);sendSize.leftMargin=px(4);
         compose.addView(send,sendSize);
-        send.setOnClickListener(v->{String value=input.getText().toString().trim();if(value.isEmpty())return;worker.execute(()->{savedStore.add(value,null,null,null);runOnUiThread(()->{if("saved".equals(screen)&&!isFinishing())renderSaved();});});});
+        send.setOnClickListener(v->{String value=input.getText().toString().trim();if(value.isEmpty())return;
+            send.setEnabled(false);worker.execute(()->{try{savedStore.add(value,null,null,null);runOnUiThread(()->{
+                if(input.getText().toString().trim().equals(value))input.setText("");
+                if(noteDraft.trim().equals(value))noteDraft="";send.setEnabled(true);
+                if("saved".equals(screen)&&!savedFavoritesOnly&&!isFinishing())renderSaved();
+            });}catch(Exception error){runOnUiThread(()->{send.setEnabled(true);toast("Не удалось сохранить заметку");});}});});
+        }
         scroll.post(()->{if("saved".equals(screen))scroll.scrollTo(0,0);});
         // An empty list should explain the next action, not leave a blank canvas.
         final LinearLayout emptyState=column();
@@ -2286,24 +2306,24 @@ public class MainActivity extends Activity {
         emptyState.setBackground(outlined(PANEL,16,false));
         LinearLayout.LayoutParams emptyLp=p(-1,-2);
         emptyLp.setMargins(px(5),px(17),px(5),px(8));list.addView(emptyState,emptyLp);
-        TextView emptyHeading=text("Здесь будут твои заметки",17,FG);
+        TextView emptyHeading=text(savedFavoritesOnly?"Нет избранных сообщений":"Здесь будут твои заметки",17,FG);
         emptyHeading.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
         emptyState.addView(emptyHeading,p(-1,-2));
-        TextView emptyHint=text("Пиши ниже или сохраняй цитаты и сообщения из переписок. "+
-            "Все записи остаются локальными.",13,SUB);
+        TextView emptyHint=text(savedFavoritesOnly?"Удерживай сообщение в чате и добавь его в избранное.":"Напиши заметку или сохрани цитату из переписки.",13,SUB);
         emptyHint.setPadding(0,px(7),0,0);emptyState.addView(emptyHint,p(-1,-2));
         final int savedToken=loadToken;
+        if(!savedFavoritesOnly){
         worker.execute(()->{List<SavedStore.Note> notes=savedStore.recent(150);runOnUiThread(()->{if(savedToken!=loadToken||!screen.equals("saved"))return;
             if(!notes.isEmpty())list.removeView(emptyState);
             for(SavedStore.Note n:notes){
-                TextView text=text("★ "+(n.body==null?"":n.body)+(n.fileName!=null?"\n📎 "+n.fileName:""),15,FG);
+                TextView text=text((n.body==null?"":n.body)+(n.fileName!=null?"\n📎 "+n.fileName:""),15,FG);
                 text.setPadding(px(14),px(12),px(14),px(12));text.setBackground(shape(PANEL,12));
                 LinearLayout.LayoutParams mp=p(-1,-2);mp.setMargins(0,px(5),0,px(5));list.addView(text,mp);
                 if(n.originArchive!=null&&n.originMessageId>0){
                     TextView source=text("↗ К исходному сообщению",12,ACCENT);
                     source.setPadding(px(15),px(6),px(12),px(12));list.addView(source);
                     source.setOnClickListener(v->openSavedQuote(n.originMessageId,n.originArchive));
-                    TextView context=text("◌ Карта источника · ±2 сообщения",12,ACCENT);
+                    TextView context=text("Контекст цитаты",12,ACCENT);
                     context.setPadding(px(15),px(5),px(12),px(12));list.addView(context);
                     context.setOnClickListener(v->showQuoteSourceMap(n.originArchive,n.originMessageId));
                 }
@@ -2318,10 +2338,14 @@ public class MainActivity extends Activity {
                 else if(n.fileName!=null)text.setOnClickListener(v->toast("Вложение отсутствует: для переноса нужна полная резервная копия"));
             }
         });});
-        // A global list of starred items across all registered archives.
+        return;
+        }
+        // A separate read-only overview of starred items; notes never appear here.
+        analyticsText(list,"До 50 избранных сообщений из каждого чата. Полный список — в медиатеке чата.",SUB,12);
         for(int i=0;i<archives.length();i++){
             JSONObject item=archives.optJSONObject(i);if(item==null)continue;
             String key=item.optString("key"),label=item.optString("name","Чат");
+            if(isChatHidden(key)&&!getPreferences(MODE_PRIVATE).getBoolean("show_hidden_chats",false))continue;
             worker.execute(()->{
                 MessageDb other=new MessageDb(this,key);
                 List<MessageDb.Item> favorites;
@@ -2332,7 +2356,7 @@ public class MainActivity extends Activity {
                         TextView t=text("★ "+label+" · "+day(m.date)+"\n"+clip(m.body,180),14,FG);
                         t.setPadding(px(12),px(12),px(12),px(12));t.setBackground(shape(CHIP,12));
                         LinearLayout.LayoutParams pad=p(-1,-2);pad.topMargin=px(5);list.addView(t,pad);
-                        t.setOnClickListener(v->{activateArchive(key);jump(m.id,"");});
+                        t.setOnClickListener(v->{if(importing)return;activateArchive(key,m.id);});
                     }
                 });
             });
@@ -5423,7 +5447,7 @@ public class MainActivity extends Activity {
                 Button remove=btn("Удалить");remove.setContentDescription("Удалить период "+period.name);
                 actions.addView(remove,new LinearLayout.LayoutParams(0,px(44),1));
                 remove.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Удалить период?")
-                    .setMessage("Удалится только личная отметка. Переписка останется.").setNegativeButton("Отмена",null).setPositiveButton("Удалить",(d,w)->worker.execute(()->{source.deleteCalendarPeriod(period.id);runOnUiThread(()->{if(key.equals(activeKey))renderChronologyPage();});})).show());
+                    .setMessage("Удалится только личная отметка. Переписка останется.").setNegativeButton("Отмена",null).setPositiveButton("Удалить",(d,w)->worker.execute(()->{source.deleteCalendarPeriod(period.id);runOnUiThread(()->{if(key.equals(activeKey)&&"chronology".equals(screen)&&"calendar".equals(chronologySection))renderChronologyPage();});})).show());
             }
         });}catch(Exception error){runOnUiThread(()->{if(token==loadToken)analyticsText(container,"Не удалось прочитать периоды",SUB,14);});}});
     }

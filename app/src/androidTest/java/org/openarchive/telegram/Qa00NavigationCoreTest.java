@@ -289,8 +289,8 @@ public class Qa00NavigationCoreTest {
             assertNull("The redundant media tab must be absent",visible("▦ Медиа"));
             for(int i=0;i<10;i++){
                 tap("QA00 быстрые вкладки");
-                assertEquals("media",field(a,"screen"));
-                tap("‹");
+                awaitScreen(a,"media");
+                tap("‹");awaitScreen(a,"chat");
             }
             assertEquals("Returning from media must preserve chat screen","chat",field(a,"screen"));
             shown("Медиа — по названию чата");
