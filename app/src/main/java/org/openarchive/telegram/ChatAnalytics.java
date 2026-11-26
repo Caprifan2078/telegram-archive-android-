@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
@@ -30,6 +31,11 @@ final class ChatAnalytics {
         final Map<String,Long> kinds=new HashMap<>();
         Person(String k,String name){key=k;display=name;}
         long kind(String kind){Long n=kinds.get(kind);return n==null?0:n;}
+        Person copy(){
+            Person p=new Person(key,display);
+            p.messages=messages;p.words=words;p.characters=characters;p.attachments=attachments;
+            p.kinds.putAll(kinds);return p;
+        }
     }
     static final class WordCount {
         final String word;final long count;
@@ -123,7 +129,8 @@ final class ChatAnalytics {
             types.put(k,types.getOrDefault(k,0L)+count);
         }
         Snapshot snapshot(){
-            ArrayList<Person> persons=new ArrayList<>(byAuthor.values());
+            ArrayList<Person> persons=new ArrayList<>(byAuthor.size());
+            for(Person person:byAuthor.values())persons.add(person.copy());
             persons.sort((a,b)->{int n=Long.compare(b.messages,a.messages);return n!=0?n:a.display.compareToIgnoreCase(b.display);});
             return new Snapshot(persons,rank(false),rank(true),new TreeMap<>(days),new HashMap<>(types),
                 messageCount,wordCount,charCount,mediaCount,capped,trends.snapshot(),
@@ -140,13 +147,17 @@ final class ChatAnalytics {
             return false;
         }
         private List<WordCount> rank(boolean excludeCommon){
-            ArrayList<WordCount> ordered=new ArrayList<>();
+            Comparator<WordCount> order=(a,b)->{int n=Long.compare(b.count,a.count);return n!=0?n:a.word.compareTo(b.word);};
+            // Keep only the best 20 candidates; the head is the worst retained word.
+            PriorityQueue<WordCount> best=new PriorityQueue<>(20,order.reversed());
             for(Map.Entry<String,Long> e:vocabulary.entrySet()){
                 if(excludeCommon&&(COMMON.contains(e.getKey())||!hasLetter(e.getKey())))continue;
-                ordered.add(new WordCount(e.getKey(),e.getValue()));
+                WordCount candidate=new WordCount(e.getKey(),e.getValue());
+                if(best.size()<20)best.add(candidate);
+                else if(order.compare(candidate,best.peek())<0){best.poll();best.add(candidate);}
             }
-            ordered.sort((a,b)->{int n=Long.compare(b.count,a.count);return n!=0?n:a.word.compareTo(b.word);});
-            if(ordered.size()>20)ordered.subList(20,ordered.size()).clear();
+            ArrayList<WordCount> ordered=new ArrayList<>(best);
+            ordered.sort(order);
             return ordered;
         }
     }
