@@ -42,7 +42,8 @@ public final class MusicPlayerActivity extends Activity {
     private MusicQueue queue;
     private int position=-1,serial=0;
     private float speed=1f;
-    private boolean prepared=false,scrubbing=false,foreground=false;
+    private boolean prepared=false,scrubbing=false,foreground=false,retryAvailable=false;
+    private Runnable prepareTimeout;
     private MediaPlayer player;
     private DocumentFolder source;
     private String chatKey;
@@ -62,7 +63,7 @@ public final class MusicPlayerActivity extends Activity {
                 int duration=Math.max(0,player.getDuration());
                 int progress=Math.max(0,player.getCurrentPosition());
                 if(!scrubbing){seek.setMax(Math.max(1,duration));seek.setProgress(Math.min(duration,progress));}
-                clock.setText(time(progress)+" / "+time(duration));
+                if(!scrubbing)clock.setText(time(progress)+" / "+time(duration));
                 refreshPlayback();
             }catch(Exception ignored){}
         }
@@ -161,7 +162,7 @@ public final class MusicPlayerActivity extends Activity {
         panel.addView(controls,new LinearLayout.LayoutParams(-1,dp(91)));
         previous=control("⏮",77);previous.setContentDescription("Предыдущий трек");controls.addView(previous);
         previous.setOnClickListener(v->skip(false));
-        toggle=control("▶",88);toggle.setContentDescription("Воспроизвести или поставить на паузу");
+        toggle=control("▶",88);toggle.setEnabled(false);toggle.setContentDescription("Воспроизвести или поставить на паузу");
         LinearLayout.LayoutParams playParams=(LinearLayout.LayoutParams)toggle.getLayoutParams();playParams.leftMargin=dp(9);playParams.rightMargin=dp(9);
         controls.addView(toggle,playParams);toggle.setOnClickListener(v->pauseOrPlay());
         next=control("⏭",77);next.setContentDescription("Следующий трек");controls.addView(next);
@@ -205,6 +206,8 @@ public final class MusicPlayerActivity extends Activity {
         releasePlayer();
         position=index;
         final int request=++serial;
+        prepareTimeout=()->{if(request==serial&&!prepared&&!isDestroyed())failTrack("Подготовка аудио заняла слишком много времени.");};
+        ui.postDelayed(prepareTimeout,15000);
         MusicQueue.Track song=queue.tracks.get(index);
         title.setText(MusicQueue.cleanTitle(song.path));artist.setText(song.author.isEmpty()?"Неизвестный исполнитель":song.author);
         positionText.setText("Трек "+(index+1)+" из "+queue.tracks.size()+" · окно архива");
@@ -234,7 +237,7 @@ public final class MusicPlayerActivity extends Activity {
                 if(metadataTitle!=null&&!metadataTitle.trim().isEmpty())title.setText(metadataTitle.trim());
                 if(metadataArtist!=null&&!metadataArtist.trim().isEmpty())artist.setText(metadataArtist.trim());
                 if(bitmap!=null){art.setImageBitmap(bitmap);setCoverVisible(true);}
-                if(resolved==null){feedback("Файл отсутствует в папке экспорта. Выбери соседний трек.");return;}
+                if(resolved==null){failTrack("Файл отсутствует в папке экспорта.");return;}
                 startMedia(resolved,request);
             });
         });
@@ -247,14 +250,15 @@ public final class MusicPlayerActivity extends Activity {
             mp.setDataSource(this,uri);
             mp.setOnPreparedListener(p->{
                 if(p!=player||request!=serial)return;
-                prepared=true;seek.setEnabled(true);
+                cancelPrepareTimeout();prepared=true;seek.setEnabled(true);toggle.setEnabled(true);
+                toggle.setContentDescription("Воспроизвести или поставить на паузу");
                 seek.setMax(Math.max(1,p.getDuration()));
                 clock.setText("0:00 / "+time(p.getDuration()));
                 try{
                     if(foreground&&(audio==null||audio.requestAudioFocus(audioFocusChange,AudioManager.STREAM_MUSIC,AudioManager.AUDIOFOCUS_GAIN)==AudioManager.AUDIOFOCUS_REQUEST_GRANTED)){
                         p.start();applySpeed();feedback("Воспроизведение · без интернета");
                     }else feedback("Другое приложение использует звук. Нажми ▶ позже.");
-                }catch(Exception e){feedback("Ошибка запуска аудио. Проверь формат файла.");}
+                }catch(Exception e){failTrack("Ошибка запуска аудио. Проверь формат файла.");}
                 refreshPlayback();
             });
             mp.setOnCompletionListener(p->{if(p!=player||request!=serial)return;
@@ -262,18 +266,30 @@ public final class MusicPlayerActivity extends Activity {
                 else {refreshPlayback();feedback("Конец очереди");}
             });
             mp.setOnErrorListener((p,what,extra)->{
-                if(p==player&&request==serial){feedback("Не удалось декодировать этот трек. Оригинал сохранён.");releasePlayer();updateButtons();}
+                if(p==player&&request==serial){failTrack("Не удалось декодировать этот трек. Оригинал сохранён.");}
                 return true;
             });
             mp.prepareAsync();
-        }catch(Exception e){releasePlayer();feedback("Файл не поддерживается или недоступен. Оригинал сохранён.");}
+        }catch(Exception e){failTrack("Файл не поддерживается или недоступен. Оригинал сохранён.");}
+    }
+    private void cancelPrepareTimeout(){
+        if(prepareTimeout!=null){ui.removeCallbacks(prepareTimeout);prepareTimeout=null;}
+    }
+    private void failTrack(String message){
+        ++serial; // Invalidate late metadata and decoder callbacks.
+        releasePlayer();
+        retryAvailable=queue!=null&&position>=0&&position<queue.tracks.size();
+        if(retryAvailable){toggle.setText("Повторить");toggle.setContentDescription("Повторить открытие трека");toggle.setEnabled(true);}
+        feedback(message+(retryAvailable?" Нажми «Повторить» или выбери соседний трек.":""));
+        updateButtons();
     }
     private void releasePlayer(){
-        prepared=false;
+        cancelPrepareTimeout();prepared=false;scrubbing=false;retryAvailable=false;
+        if(seek!=null)seek.setEnabled(false);
         if(player!=null){MediaPlayer old=player;player=null;try{old.reset();}catch(Exception ignored){}
             try{old.release();}catch(Exception ignored){}}
         if(audio!=null)audio.abandonAudioFocus(audioFocusChange);
-        if(toggle!=null)toggle.setText("▶");
+        if(toggle!=null){toggle.setEnabled(false);toggle.setText("▶");}
     }
     private void skip(boolean forward){
         if(queue==null)return;
@@ -282,6 +298,7 @@ public final class MusicPlayerActivity extends Activity {
         openTrack(p);
     }
     private void pauseOrPlay(){
+        if(retryAvailable){if(foreground)openTrack(position);return;}
         if(player==null||!prepared)return;
         try{
             if(player.isPlaying()){player.pause();feedback("Пауза");}
