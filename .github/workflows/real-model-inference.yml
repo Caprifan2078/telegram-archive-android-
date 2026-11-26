@@ -1,15 +1,21 @@
-name: Real Qwen minified JNI recovery
+name: Real Russian analyst model benchmark
 on:
   pull_request:
-    branches: [qa/analyst-question-library-20261126]
+    branches: [qa/native-analyst-jni-recovery-20261127]
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   real_model:
-    if: github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || github.head_ref == 'qa/native-analyst-jni-recovery-20261127')
+    if: github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || github.head_ref == 'qa/analyst-model-benchmark-20261127')
+    name: Native model / ${{ matrix.model }}
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        model: [qwen06, qwen17, qwen3508, huihui352]
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,7 +36,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Real public model download and native inference on Android 15
+      - name: Verified weights and Russian native inference on Android 15
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -38,15 +44,15 @@ jobs:
           target: google_apis
           profile: pixel_2
           ram-size: 5120M
-          disk-size: 6144M
+          disk-size: 8192M
           disable-animations: true
           emulator-boot-timeout: 420
-          script: bash .github/scripts/real-model-smoke.sh
+          script: bash .github/scripts/real-model-smoke.sh '${{ matrix.model }}'
       - name: Preserve actual inference logs and test report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: real-qwen-inference-report
+          name: real-model-${{ matrix.model }}-report
           retention-days: 14
           path: |
             app/build/outputs/androidTest-results/
