@@ -11,5 +11,8 @@ cd "$tmp"
 "$seven" a -tzip -mem=ZipCrypto -pqa-7zip-password "$dest/zipcrypto.zip" messages.html
 "$seven" a -t7z -mhe=on -pqa-7zip-password "$dest/headers.7z" messages.html
 for f in "$dest"/aes256.zip "$dest"/zipcrypto.zip "$dest"/headers.7z; do "$seven" t -pqa-7zip-password "$f"; done
-"$seven" a -tzip -mem=AES256 "-p пробел-Ё-123 ! " "$dest/aes256-unicode.zip" messages.html
-"$seven" t "-p пробел-Ё-123 ! " "$dest/aes256-unicode.zip"
+"$seven" a -tzip -mem=AES256 "-p Space-123 ! " "$dest/aes256-spaces.zip" messages.html
+"$seven" t "-p Space-123 ! " "$dest/aes256-spaces.zip"
+
+"$seven" a -t7z -mhe=on "-p пробел-Ё-123 ! " "$dest/unicode.7z" messages.html
+"$seven" t "-p пробел-Ё-123 ! " "$dest/unicode.7z"

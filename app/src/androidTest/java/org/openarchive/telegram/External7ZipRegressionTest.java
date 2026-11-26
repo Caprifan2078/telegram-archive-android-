@@ -14,7 +14,7 @@ public class External7ZipRegressionTest {
     @Test public void realSevenZipArchivesPromptRejectAndOpen()throws Exception{
         Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
         Context test=InstrumentationRegistry.getInstrumentation().getContext();
-        for(String name:new String[]{"aes256.zip","zipcrypto.zip","headers.7z","aes256-unicode.zip"}){
+        for(String name:new String[]{"aes256.zip","zipcrypto.zip","headers.7z","aes256-spaces.zip","unicode.7z"}){
             File file=File.createTempFile("external7zip-",name.endsWith(".7z")?".7z":".zip",ctx.getCacheDir());
             String format=name.endsWith(".7z")?"7z":"zip";
             String key=UUID.randomUUID().toString().replace("-","");
@@ -33,7 +33,7 @@ public class External7ZipRegressionTest {
                 try{ArchiveFileImport.extract(ctx,uri,format,key,"wrong-password".toCharArray(),p->{});}
                 catch(Exception expected){rejected=true;}
                 assertTrue(name+" wrong password accepted",rejected);assertFalse(root.exists());
-                char[] secret=(name.equals("aes256-unicode.zip")?" пробел-Ё-123 ! ":"qa-7zip-password").toCharArray();
+                char[] secret=(name.equals("unicode.7z")?" пробел-Ё-123 ! ":name.equals("aes256-spaces.zip")?" Space-123 ! ":"qa-7zip-password").toCharArray();
                 File extracted;
                 try{extracted=ArchiveFileImport.extract(ctx,uri,format,key,secret,p->{});}finally{java.util.Arrays.fill(secret,'\0');}
                 assertTrue(new File(extracted,"messages.html").isFile());
