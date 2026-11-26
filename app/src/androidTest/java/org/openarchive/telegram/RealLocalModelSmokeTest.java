@@ -64,6 +64,7 @@ public final class RealLocalModelSmokeTest {
             DeepChatContext selected=DeepChatContext.read(context.getDatabasePath(DeepChatContext.dbName(key)),"Встреча",cancel);
             assertTrue("Actual evidence missing from prompt",selected.sources.stream().anyMatch(x->x.id==evidence));
             String prompt=selected.prompt("Во сколько назначили встречу? Укажи время цифрами и номер источника.");
+            if(spec.shortContext()||"qwen25unc15".equals(spec.key))prompt=selected.compactPrompt("Во сколько назначили встречу? Укажи время и номер цитаты.",false);
             assertTrue(DeepChatContext.sentSource(prompt,evidence));
             android.util.Log.i("ModelSmoke","Stage: first native generation");
             logMemory(context,"before-single");
@@ -90,6 +91,7 @@ public final class RealLocalModelSmokeTest {
             String comparisonPrompt=dual.prompt("Назови время встречи в А и Б цифрами, со ссылками [#1] и [#2].");
             android.util.Log.i("ModelSmoke","Stage: second native generation");
             logMemory(context,"before-comparison");
+            if(spec.shortContext()||"qwen25unc15".equals(spec.key))comparisonPrompt=dual.context.compactPrompt("Когда назначили встречу в каждом чате? Укажи время и цитаты.",true);
             long comparisonStart=android.os.SystemClock.elapsedRealtime();
             String comparison=(String)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
                 .getMethod("generate",String.class,String.class).invoke(null,model.getAbsolutePath(),comparisonPrompt);
