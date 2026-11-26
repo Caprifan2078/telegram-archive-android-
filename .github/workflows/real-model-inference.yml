@@ -1,13 +1,13 @@
 name: Real Qwen model download and inference smoke
 on:
-  push:
-    branches: [qa/analyst-integrity-followup-20261126]
+  pull_request:
+    branches: [qa/analyst-model-catalog-20261126]
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   real_model:
-    if: github.event.repository.private == false
+    if: github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || github.head_ref == 'qa/analyst-integrity-followup-20261126')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
