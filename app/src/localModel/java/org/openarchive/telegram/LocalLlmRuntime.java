@@ -8,6 +8,7 @@ import com.google.ai.edge.litertlm.ConversationConfig;
 import com.google.ai.edge.litertlm.SamplerConfig;
 import com.google.ai.edge.litertlm.LogSeverity;
 import java.util.Collections;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Opt-in local model build; LiteRT-LM 0.18.0. CPU-first, one engine at a time. */
 public final class LocalLlmRuntime {
@@ -17,15 +18,41 @@ public final class LocalLlmRuntime {
         engine.initialize();
         return engine;
     }
-    private static String infer(Engine engine,String prompt,int outputLimit){
+    private static String infer(Engine engine,String prompt,int outputLimit,AtomicBoolean cancel)throws InterruptedException{
+        if(cancel.get())throw new InterruptedException();
         ConversationConfig config=new ConversationConfig(null,Collections.emptyList(),Collections.emptyList(),
             new SamplerConfig(20,0.85,0.2,0),false,null,Collections.emptyMap(),null,false,outputLimit,null,false,false,null);
         try(Conversation conversation=engine.createConversation(config)){
-            return conversation.sendMessage(prompt,Collections.emptyMap()).toString();
+            // The upstream API explicitly supports cancellation of an ongoing
+            // conversation. Join the watcher before closing native resources.
+            AtomicBoolean finished=new AtomicBoolean();
+            Thread watcher=new Thread(()->{
+                while(!finished.get()){
+                    if(cancel.get()){
+                        try{conversation.cancelProcess();}catch(RuntimeException|LinkageError ignored){}
+                    }
+                    try{Thread.sleep(150);}catch(InterruptedException end){return;}
+                }
+            },"analyst-cancel");
+            watcher.setDaemon(true);watcher.start();
+            try{
+                String answer=conversation.sendMessage(prompt,Collections.emptyMap()).toString();
+                if(cancel.get())throw new InterruptedException();
+                return answer;
+            }catch(RuntimeException error){
+                if(cancel.get())throw new InterruptedException();
+                throw error;
+            }finally{
+                finished.set(true);watcher.interrupt();
+                boolean interrupted=false;
+                for(;;)try{watcher.join();break;}catch(InterruptedException e){interrupted=true;}
+                if(interrupted)Thread.currentThread().interrupt();
+            }
         }
     }
-    private static String single(String path,String prompt,int outputLimit){
-        try(Engine engine=open(path)){return infer(engine,prompt,outputLimit);}
+    private static String single(String path,String prompt,int outputLimit,AtomicBoolean cancel)throws InterruptedException{
+        if(cancel.get())throw new InterruptedException();
+        try(Engine engine=open(path)){return infer(engine,prompt,outputLimit,cancel);}
     }
     public static FullChatModelScan.Report generateFull(String path,String dbPath,String question,
             java.util.concurrent.atomic.AtomicBoolean cancel,FullChatModelScan.Progress progress)throws Exception{
@@ -34,12 +61,15 @@ public final class LocalLlmRuntime {
         // in upstream 0.18.x (#3165). Recreate the engine for unknown/hybrid weights.
         // This trades full-scan speed for independent prompts; do not hold two engines.
         if(!AnalystModelCatalog.canReuseEngine(path))
-            return FullChatModelScan.read(db,question,cancel,prompt->single(path,prompt,512),progress);
+            return FullChatModelScan.read(db,question,cancel,prompt->single(path,prompt,512,cancel),progress);
         try(Engine engine=open(path)){
-            return FullChatModelScan.read(db,question,cancel,prompt->infer(engine,prompt,512),progress);
+            return FullChatModelScan.read(db,question,cancel,prompt->infer(engine,prompt,512,cancel),progress);
         }
     }
-    public static String generate(String path,String prompt){
-        return single(path,prompt,768);
+    public static String generate(String path,String prompt)throws InterruptedException{
+        return generate(path,prompt,new AtomicBoolean());
+    }
+    public static String generate(String path,String prompt,AtomicBoolean cancel)throws InterruptedException{
+        return single(path,prompt,768,cancel);
     }
 }

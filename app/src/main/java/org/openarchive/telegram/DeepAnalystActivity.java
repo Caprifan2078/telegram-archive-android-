@@ -81,9 +81,9 @@ public final class DeepAnalystActivity extends Activity {
         ask.setOnClickListener(v->analyze());
         scan.setOnClickListener(v->scanBehavior());
         full.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Полный проход нейросети?")
-            .setMessage("Модель прочитает текст по блокам. Большой архив может занять часы, нагреть телефон и разрядить аккумулятор. Конспект сжимается, поэтому отдельные детали могут потеряться. Можно отменить между блоками. Для новых и пользовательских моделей каждый блок запускается в чистом движке: медленнее, но без переноса скрытого состояния.")
+            .setMessage("Модель прочитает текст по блокам. Большой архив может занять часы, нагреть телефон и разрядить аккумулятор. Конспект сжимается, поэтому отдельные детали могут потеряться. Можно запросить отмену генерации; загрузка модели может завершаться не сразу. Для новых и пользовательских моделей каждый блок запускается в чистом движке: медленнее, но без переноса скрытого состояния.")
             .setNegativeButton("Отмена",null).setPositiveButton("Начать",(d,n)->scanWithModel()).show());
-        stop.setOnClickListener(v->{taskCancel.set(true);status.setText("Отмена запрошена…");});
+        stop.setOnClickListener(v->{taskCancel.set(true);stop.setEnabled(false);status.setText("Отмена запрошена…");});
         download.setOnClickListener(v->{
             if(selectedModel>=AnalystModelCatalog.CUSTOM)return;
             AnalystModelCatalog.Model spec=AnalystModelCatalog.MODELS[selectedModel];
@@ -207,7 +207,7 @@ public final class DeepAnalystActivity extends Activity {
             try{
                 long start=android.os.SystemClock.elapsedRealtime();
                 String answer=(String)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
-                    .getMethod("generate",String.class,String.class).invoke(null,path,AnalystSelfCheck.PROMPT);
+                    .getMethod("generate",String.class,String.class,AtomicBoolean.class).invoke(null,path,AnalystSelfCheck.PROMPT,taskCancel);
                 long duration=android.os.SystemClock.elapsedRealtime()-start;
                 if(taskCancel.get()||stopped.get())throw new IOException("Cancelled");
                 final String value=answer==null?"":answer.trim();
@@ -231,7 +231,15 @@ public final class DeepAnalystActivity extends Activity {
         worker.execute(()->{
             try{
                 FullChatModelScan.Progress progress=(rows,total,blocks)->runOnUiThread(()->{
-                    if(!stopped.get()&&!taskCancel.get())status.setText("Прочитано строк "+rows+" из "+total+" · обработано блоков "+blocks);
+                    if(!stopped.get()&&!taskCancel.get()){
+                        if(android.os.Build.VERSION.SDK_INT>=29){
+                            android.os.PowerManager power=(android.os.PowerManager)getSystemService(POWER_SERVICE);
+                            if(power!=null&&power.getCurrentThermalStatus()>=android.os.PowerManager.THERMAL_STATUS_SEVERE){
+                                taskCancel.set(true);status.setText("Проход остановлен из-за перегрева.");return;
+                            }
+                        }
+                        status.setText("Прочитано строк "+rows+" из "+total+" · обработано блоков "+blocks);
+                    }
                 });
                 FullChatModelScan.Report report=(FullChatModelScan.Report)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
                     .getMethod("generateFull",String.class,String.class,String.class,AtomicBoolean.class,FullChatModelScan.Progress.class)
@@ -264,7 +272,7 @@ public final class DeepAnalystActivity extends Activity {
                 if(context.sources.isEmpty())throw new IOException("No sources");
                 String prompt=context.prompt(q);
                 String response=(String)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
-                    .getMethod("generate",String.class,String.class).invoke(null,model.getAbsolutePath(),prompt);
+                    .getMethod("generate",String.class,String.class,AtomicBoolean.class).invoke(null,model.getAbsolutePath(),prompt,taskCancel);
                 if(taskCancel.get())throw new IOException("Cancelled");
                 if(stopped.get())return;
                 final String answer=response==null?"":response.trim();
@@ -273,7 +281,8 @@ public final class DeepAnalystActivity extends Activity {
                     results.addView(text(answer.isEmpty()?"Модель не вернула текст.":DeepChatContext.clip(answer,16000),15));
                     if(!DeepChatContext.unknownCitations(answer,prompt).isEmpty())results.addView(text("Внимание: ответ содержит неизвестные номера источников. Перепроверь выводы.",14));
                     if(!answer.matches("(?s).*\\[#\\d+\\].*"))results.addView(text("Модель не сослалась на конкретные сообщения. Выводы не подтверждены.",14));
-                    results.addView(text(context.method+" · до "+context.sources.size()+" выдержек из "+context.total+" сообщений",13));
+                    long sent=context.sources.stream().filter(src->DeepChatContext.sentSource(prompt,src.id)).count();
+                    results.addView(text(context.method+" · "+sent+" выдержек из "+context.total+" сообщений",13));
                     for(DeepChatContext.Source src:context.sources){
                         // Only offer sources that were actually sent to the model.
                         if(!DeepChatContext.sentSource(prompt,src.id))continue;

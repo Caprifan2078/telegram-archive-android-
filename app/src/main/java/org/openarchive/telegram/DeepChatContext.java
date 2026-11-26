@@ -16,7 +16,7 @@ final class DeepChatContext {
     final List<Source> sources;final long total;final String facts,method;
     DeepChatContext(List<Source> s,long n,String f,String m){sources=Collections.unmodifiableList(new ArrayList<>(s));total=n;facts=f;method=m;}
     static String clip(String value,int max){if(value==null)return "";if(value.length()<=max)return value;
-        int end=max;if(Character.isHighSurrogate(value.charAt(end-1)))end--;return value.substring(0,end)+"…";}
+        if(max<=0)return "";int end=max;if(Character.isHighSurrogate(value.charAt(end-1)))end--;return value.substring(0,end)+"…";}
     static String dbName(String key){
         if(key==null||!key.matches("[A-Za-z0-9_-]{1,160}"))throw new IllegalArgumentException("Invalid archive key");
         return key.equals("default")?"telegram_archive.db":"telegram_"+key+".db";
@@ -36,26 +36,48 @@ final class DeepChatContext {
                 facts.append("\n").append(report.summary());
                 // Two examples per category first; avoid letting one category dominate context.
                 int[] used=new int[BehaviorScan.LABELS.length];
-                for(BehaviorScan.Example e:report.evidence)if(used[e.category]++<2&&picked.size()<12)picked.put(e.source.id,e.source);
+                for(BehaviorScan.Example e:report.evidence)if(used[e.category]++<2&&picked.size()<8)picked.put(e.source.id,e.source);
             }
             String method=behavior?"Полный проход по формулировкам + ограниченные цитаты":"Совпадения слов и локальных синонимов: ранние и поздние сообщения";
             // First prefer the intersection, then backfill individual terms. Never treat
             // a synonym match as proof of an actual event.
-            OfflineSynonymSearch.Plan plan=null;
-            try{plan=OfflineSynonymSearch.make(question,true,false);}catch(IllegalArgumentException ignored){}
-            if(plan!=null&&!cancelled.get()){
-                collect(db,plan.fts,3,picked,cancelled,false);
-                collect(db,plan.fts,3,picked,cancelled,true);
-                int n=0;for(String term:plan.terms){
-                    if(cancelled.get()||n++>=7||picked.size()>=10)break;
-                    try{collect(db,OfflineSynonymSearch.make(term,true,false).fts,2,picked,cancelled,false);
-                        if(picked.size()<10)collect(db,OfflineSynonymSearch.make(term,true,false).fts,1,picked,cancelled,true);}catch(IllegalArgumentException ignored){}
+            List<OfflineSynonymSearch.Plan> plans=OfflineSynonymSearch.analystPlans(question);
+            for(OfflineSynonymSearch.Plan plan:plans){
+                if(cancelled.get()||picked.size()>=10)break;
+                collect(db,plan.fts,Math.min(3,10-picked.size()),picked,cancelled,false);
+                if(picked.size()<10)collect(db,plan.fts,Math.min(3,10-picked.size()),picked,cancelled,true);
+                if(plans.size()==1){
+                    int n=0;for(String term:plan.terms){
+                        if(cancelled.get()||n++>=7||picked.size()>=10)break;
+                        try{
+                            OfflineSynonymSearch.Plan single=OfflineSynonymSearch.make(term,true,false);
+                            collect(db,single.fts,Math.min(2,10-picked.size()),picked,cancelled,false);
+                            if(picked.size()<10)collect(db,single.fts,1,picked,cancelled,true);
+                        }catch(IllegalArgumentException ignored){}
+                    }
                 }
             }
-            // Add adjacent messages to restore conversational context around hits.
+            // Restore explicit Telegram reply links before generic neighboring rows.
+            // A quoted target can be thousands of messages away from a matching answer.
             List<Source> hits=new ArrayList<>(picked.values());
+            int links=0;
             for(Source hit:hits){
+                if(cancelled.get()||picked.size()>=MAX_SOURCES-2||links>=4)break;
+                int before=picked.size();
+                try(Cursor c=db.rawQuery("SELECT m.id,m.author,m.date_text,m.body FROM message_replies r JOIN messages m ON m.id=r.target_message_id WHERE r.message_id=? LIMIT 1",new String[]{Long.toString(hit.id)})){add(c,picked,cancelled);}
+                if(picked.size()>before)links++;
+                if(picked.size()>=MAX_SOURCES-2||links>=4)break;
+                before=picked.size();
+                try(Cursor c=db.rawQuery("SELECT m.id,m.author,m.date_text,m.body FROM message_replies r JOIN messages m ON m.id=r.message_id WHERE r.target_message_id=? ORDER BY m.id LIMIT 1",new String[]{Long.toString(hit.id)})){add(c,picked,cancelled);}
+                if(picked.size()>before)links++;
+            }
+            if(links>0)method+=" + связанные ответы Telegram";
+            // Alternate across early/late hits rather than exhausting the context
+            // around the first few messages only.
+            hits.sort(Comparator.comparingLong(x->x.id));
+            for(int i=0;i<hits.size();i++){
                 if(cancelled.get()||picked.size()>=MAX_SOURCES)break;
+                Source hit=hits.get(i%2==0?i/2:hits.size()-1-i/2);
                 try(Cursor c=db.rawQuery("SELECT id,author,date_text,body FROM messages WHERE id<? ORDER BY id DESC LIMIT 1",new String[]{Long.toString(hit.id)})){add(c,picked,cancelled);}
                 try(Cursor c=db.rawQuery("SELECT id,author,date_text,body FROM messages WHERE id>? ORDER BY id LIMIT 1",new String[]{Long.toString(hit.id)})){add(c,picked,cancelled);}
             }
@@ -86,9 +108,23 @@ final class DeepChatContext {
             "Для каждого важного вывода указывай [#ID] источника. Если данных не хватает, так и скажи. "+
             "Выборка не является всей перепиской; не делай вывод об отсутствии события по отсутствию в выборке. Ответ до 8 коротких абзацев.\n"+
             "Факты: "+data(facts,850)+"\nМетод: "+data(method,160)+"\nВопрос: "+data(question,360)+"\nИсточники:\n");
-        for(Source row:sources){
-            String line="[#"+row.id+"] "+data(row.author,90)+" | "+data(row.date,60)+" | "+data(row.body,320)+"\n";
-            if(s.length()+line.length()>MAX_PROMPT_CHARS)break;s.append(line);
+        // Reserve every source header first. Share remaining text budget across
+        // all selected sources so the last chronological evidence is not silently lost.
+        List<String> headers=new ArrayList<>();
+        int overhead=0;
+        int count=Math.min(sources.size(),MAX_SOURCES);
+        for(int i=0;i<count;i++){
+            Source row=sources.get(i);
+            String header="[#"+row.id+"] "+data(row.author,90)+" | "+data(row.date,60)+" | ";
+            headers.add(header);overhead+=header.length()+1;
+        }
+        int remaining=Math.max(0,MAX_PROMPT_CHARS-s.length()-overhead);
+        for(int i=0;i<count;i++){
+            int share=Math.min(320,remaining/(count-i));
+            String body=share<=1?"":data(sources.get(i).body,share-1);
+            String line=headers.get(i)+body+"\n";
+            if(s.length()+line.length()>MAX_PROMPT_CHARS)break;
+            s.append(line);remaining-=body.length();
         }
         return s.toString();
     }

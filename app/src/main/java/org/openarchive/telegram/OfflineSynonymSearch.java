@@ -264,6 +264,24 @@ final class OfflineSynonymSearch {
             return (broader?"Широкая тема, проверь контекст · ":"")+negation+String.join("; ",reports);
         }
     }
+    /** Long natural-language analyst questions: bounded independent keyword plans.
+     * Normal interactive search limits remain unchanged. */
+    static List<Plan> analystPlans(String question){
+        List<Plan> result=new ArrayList<>();
+        try{result.add(make(question,true,false));return result;}catch(IllegalArgumentException ignored){}
+        if(question==null)return result;
+        LinkedHashSet<String> words=new LinkedHashSet<>();
+        for(String word:question.split("[^\\p{L}\\p{N}]+")){
+            String normalized=normalize(word);
+            if(normalized.length()<3||normalized.length()>40||QUESTIONS.contains(normalized))continue;
+            words.add(word);
+            if(words.size()>=14)break;
+        }
+        // Individual plans preserve case for names and do not require all terms to
+        // appear in one message. Avoid arbitrary SQL or model-generated FTS.
+        for(String word:words)try{result.add(make(word,true,false));}catch(IllegalArgumentException ignored){}
+        return result;
+    }
     static Plan make(String input,boolean synonyms){return make(input,synonyms,false);}
     static Plan make(String input,boolean synonyms,boolean allowRelated){
         return make(input,synonyms,allowRelated,Collections.<String,List<String>>emptyMap());
