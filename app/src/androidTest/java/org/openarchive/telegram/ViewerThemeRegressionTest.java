@@ -61,6 +61,12 @@ public final class ViewerThemeRegressionTest {
                 try(ActivityScenario<DemoChatActivity> screen=ActivityScenario.launch(DemoChatActivity.class)){
                     screen.onActivity(a->{
                         background(a,expected.background);
+                        android.app.AlertDialog dialog=new FontDialog.Builder(a).setTitle("QA palette").setMessage("Synthetic").setPositiveButton("OK",null).create();
+                        dialog.show();try{
+                            android.util.TypedValue accent=new android.util.TypedValue();
+                            assertTrue(dialog.getContext().getTheme().resolveAttribute(android.R.attr.colorAccent,accent,true));
+                            assertEquals(expected.accent,accent.data);
+                        }finally{dialog.dismiss();}
                         TextView title=find(root(a),"Учебная переписка");
                         assertNotNull(title);assertEquals(expected.text,title.getCurrentTextColor());
                     });

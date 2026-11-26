@@ -18,6 +18,19 @@
         <item name="android:textColorSecondary">#B4C6D6</item>
         <item name="android:fontFamily">sans</item>
     </style>
+    <style name="AppThemeGraphite" parent="AppTheme">
+        <item name="android:statusBarColor">#101216</item>
+        <item name="android:navigationBarColor">#101216</item>
+        <item name="android:windowBackground">#101216</item>
+        <item name="android:colorAccent">#B5B9FF</item>
+        <item name="android:alertDialogTheme">@style/ArchiveAlertDialogGraphite</item>
+    </style>
+    <style name="ArchiveAlertDialogGraphite" parent="ArchiveAlertDialog">
+        <item name="android:windowBackground">@drawable/viewer_dialog_surface_graphite</item>
+        <item name="android:colorAccent">#B5B9FF</item>
+        <item name="android:textColorPrimary">#F5F5F7</item>
+        <item name="android:textColorSecondary">#B8BDC7</item>
+    </style>
     <style name="AppThemeLight" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">true</item>
