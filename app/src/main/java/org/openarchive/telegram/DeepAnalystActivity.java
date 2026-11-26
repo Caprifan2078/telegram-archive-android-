@@ -328,12 +328,7 @@ public final class DeepAnalystActivity extends Activity {
         });
     }
     private void scanWithModel(){
-        if(!canStartModel()){
-            new FontDialog.Builder(this).setTitle("Модель сейчас не готова")
-                .setMessage(status.getText()+"\nМожно посмотреть найденные сообщения без запуска модели.")
-                .setNegativeButton("Закрыть",null).setPositiveButton("Найти источники",(d,n)->findEvidence(q)).show();
-            return;
-        }
+        if(!canStartModel())return;
         if(!MODEL_BUSY.compareAndSet(false,true)){status.setText("Предыдущий запрос ещё завершается.");return;}
         String input=question.getText().toString().trim();
         final String q=input.isEmpty()?"Разбери поведение обоих участников, конфликты, поддержку и изменения общения.":input;
