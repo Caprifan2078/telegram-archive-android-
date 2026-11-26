@@ -404,6 +404,16 @@ class MessageDb extends SQLiteOpenHelper {
 
     /** Stream the current chat without loading message bodies or attachments into a list.
      * Read-only: no schema migration, no files, no network access. Run on worker thread. */
+    ChatQuestionAnalyst.Answer askChat(ChatQuestionAnalyst.Query query,java.util.concurrent.atomic.AtomicBoolean cancelled){
+        ChatQuestionAnalyst.Accumulator answer=new ChatQuestionAnalyst.Accumulator(query);
+        if(query.kind==ChatQuestionAnalyst.Kind.UNKNOWN)return answer.finish();
+        try(Cursor rows=getReadableDatabase().rawQuery("SELECT id,author,date_text,body FROM messages ORDER BY id",null)){
+            while(!cancelled.get()&&rows.moveToNext())
+                answer.add(rows.getLong(0),rows.getString(1),rows.getString(2),rows.getString(3));
+        }
+        return cancelled.get()?null:answer.finish();
+    }
+
     ChatAnalytics.Snapshot analytics(){
         SQLiteDatabase database=getReadableDatabase();
         ChatAnalytics.Accumulator stats=new ChatAnalytics.Accumulator();
