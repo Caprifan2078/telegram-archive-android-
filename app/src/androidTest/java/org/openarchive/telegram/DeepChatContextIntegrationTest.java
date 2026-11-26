@@ -27,6 +27,9 @@ public class DeepChatContextIntegrationTest {
             assertTrue("Distant replied-to message missing: "+result.method,result.sources.stream().anyMatch(x->x.id==target));
             assertTrue("Topic search hit missing: "+result.method,result.sources.stream().anyMatch(x->x.id==answer));
             assertTrue("Reply provenance missing: "+result.method,result.method.contains("ответы Telegram"));
+            String fast=result.compactPrompt("ноутбук",false);
+            assertTrue(DeepChatContext.sentSource(fast,target));
+            assertTrue(DeepChatContext.sentSource(fast,answer));
             assertEquals(42,db.totalMessages());
         }finally{db.close();c.deleteDatabase(DeepChatContext.dbName(key));}
     }
@@ -87,6 +90,7 @@ public class DeepChatContextIntegrationTest {
             assertEquals(10000,romance.total);
             final long expected=target;
             assertTrue("Rare central relationship evidence was missed",romance.sources.stream().anyMatch(x->x.id==expected));
+            assertTrue("Fast mode must preserve rare evidence",DeepChatContext.sentSource(romance.compactPrompt("Какие признания в любви встречались?",false),expected));
             start=android.os.SystemClock.elapsedRealtime();
             DeepChatContext behavior=DeepChatContext.read(c.getDatabasePath(DeepChatContext.dbName(key)),"Какие конфликты были в отношениях?",new AtomicBoolean());
             long behaviorMs=android.os.SystemClock.elapsedRealtime()-start;
@@ -95,6 +99,22 @@ public class DeepChatContextIntegrationTest {
             assertTrue(romance.sources.size()<=DeepChatContext.MAX_SOURCES);
             assertEquals(10000,db.totalMessages());
             android.util.Log.i("AnalystPerf","10000 rows: romance_ms="+romanceMs+" behavior_ms="+behaviorMs);
+        }finally{db.close();c.deleteDatabase(DeepChatContext.dbName(key));}
+    }
+    @Test public void longMatchingMessagePreservesRelevantExcerpt(){
+        Context c=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key="deep_long_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb db=new MessageDb(c,key);
+        try{
+            SQLiteDatabase sql=db.getWritableDatabase();
+            String body=String.join("",java.util.Collections.nCopies(300,"Обычный текст. "))+" Ноутбук стоит 54000 рублей.";
+            long target=db.stage(sql,"QA","2026-02-01",body,null,"");
+            db.publishStaged(sql);
+            DeepChatContext context=DeepChatContext.read(c.getDatabasePath(DeepChatContext.dbName(key)),"ноутбук",new AtomicBoolean());
+            String prompt=context.compactPrompt("ноутбук",false);
+            assertTrue(DeepChatContext.sentSource(prompt,target));
+            assertTrue(prompt.contains("54000"));
+            assertEquals(1,db.totalMessages());
         }finally{db.close();c.deleteDatabase(DeepChatContext.dbName(key));}
     }
 }
