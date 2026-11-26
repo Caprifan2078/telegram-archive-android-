@@ -118,6 +118,28 @@ public final class AnalyticsSectionNavigationRegressionTest {
                 assertNull("Heatmap must be lazy",has(a,"Тепловая карта · день недели × час"));
                 assertNull("Participants must be lazy",has(a,"Кто сколько написал"));
             });
+            // A real click opens the analyst; a colored preset runs the SQLite query.
+            androidx.test.uiautomator.UiDevice device=androidx.test.uiautomator.UiDevice.getInstance(instrument);
+            instrument.runOnMainSync(()->{
+                View entry=has(a,"Задать вопрос о переписке");
+                assertNotNull("Analyst entry missing",entry);entry.performClick();
+            });
+            try{
+                assertNotNull(device.wait(androidx.test.uiautomator.Until.findObject(androidx.test.uiautomator.By.text("Аналитик переписки")),10000));
+                androidx.test.uiautomator.UiObject2 preset=device.wait(androidx.test.uiautomator.Until.findObject(
+                    androidx.test.uiautomator.By.desc("Готовый вопрос: Кто первый написал?")),10000);
+                assertNotNull("Ready-made question missing",preset);preset.click();
+                idle(a);
+                assertNotNull("Answer must contain actual synthetic author",device.wait(
+                    androidx.test.uiautomator.Until.findObject(androidx.test.uiautomator.By.textContains("Анна · 2026-11-01 10:30:00")),10000));
+                assertNotNull("Answer must have a source message",device.wait(
+                    androidx.test.uiautomator.Until.findObject(androidx.test.uiautomator.By.textContains("Открыть сообщение")),10000));
+            }finally{
+                androidx.test.uiautomator.UiObject2 close=device.wait(androidx.test.uiautomator.Until.findObject(
+                    androidx.test.uiautomator.By.text(java.util.regex.Pattern.compile("Закрыть",java.util.regex.Pattern.CASE_INSENSITIVE|java.util.regex.Pattern.UNICODE_CASE))),5000);
+                if(close!=null)close.click();else device.pressBack();
+                instrument.waitForIdleSync();
+            }
             navigate(a,"Графики","trends");
             instrument.runOnMainSync(()->{
                 assertNotNull(has(a,"Графики активности"));
