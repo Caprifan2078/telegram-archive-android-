@@ -17,9 +17,9 @@ final class AnalystModelCatalog {
         String display(){return label+" · "+String.format(Locale.ROOT,"%.2f ГБ",size/1e9)+" · "+description;}
     }
     static final Model[] MODELS={
-        new Model("qwen06","Qwen3-0.6B","Быстрая · меньше памяти",
+        new Model("qwen06","Qwen3-0.6B","Лёгкая · реальный запуск подтверждён; сравнение проверяется",
             AnalystModelDownload.URL,AnalystModelDownload.SIZE,AnalystModelDownload.SHA),
-        new Model("qwen17","Qwen3-1.7B","Основная для подробных ответов",
+        new Model("qwen17","Qwen3-1.7B","Ранее выбранная · повышенная нагрузка на ОЗУ",
             "https://huggingface.co/litert-community/Qwen3-1.7B/resolve/4b46d76eccd6033af5032ebe2f186e3377dd1d10/Qwen3_1.7B.litertlm",
             2056729520L,"66064a4e9269cb693e124c4e3040bcb8a446b10bca42663896329495add3861c"),
         new Model("gemma4community","Gemma 4 E2B Uncensored","Сторонняя экспериментальная версия; совместимость не подтверждена",
@@ -34,7 +34,7 @@ final class AnalystModelCatalog {
         new Model("lfm2526","LFM2.5 2.6B INT4","Компактная альтернатива · русский язык требует проверки",
             "https://huggingface.co/litert-community/LFM2.5-2.6B/resolve/74de0c552676734655e3d282070ffc6ea78cda5d/LFM2.5-2.6B_int4.litertlm",
             1668151680L,"f4797d5a16812231deb6d505b4f417dd835b9b3dc47bb74d9ec71facfd0c91a4"),
-        new Model("huihui352","Huihui Qwen3.5 2B Abliterated","Ослабленные ограничения · экспериментальная, качество не проверено",
+        new Model("huihui352","Huihui Qwen3.5 2B Abliterated","Ослабленные ограничения · экспериментальная, стабильность не подтверждена",
             "https://huggingface.co/geladons/Huihui-Qwen3.5-2B-abliterated/resolve/22f7b5edefb2251f1d189f02f4fe668b06066d25/Huihui-Qwen3.5-2B-abliterated_int8_v2.litertlm",
             2116592816L,"3d51c41abe591db12a497dbc4fcfd8ec17f474ef1a5fa8e16814e9cce6e9b873"),
         new Model("gemma4skillsafe","Gemma 4 E2B Community","Сторонняя модификация Skillsafe · экспериментальная",
@@ -48,10 +48,10 @@ final class AnalystModelCatalog {
     // Stable indices are storage identities, not presentation order.
     static int[] pickerOrder(){return new int[]{0,3,1,4,5,2,6,7,CUSTOM};}
     // Keep the old stable catalog IDs for upgrades, but do not advertise eight downloads.
-    static boolean recommended(int index){return index==0||index==1||index==6;}
+    static boolean recommended(int index){return index==0||index==6;}
     static int[] focusedPickerOrder(File directory,int selected){
         java.util.ArrayList<Integer> items=new java.util.ArrayList<>();
-        for(int i:new int[]{0,1,6})items.add(i);
+        for(int i:new int[]{0,6})items.add(i);
         for(int i:pickerOrder()){
             if(i==CUSTOM||recommended(i))continue;
             if(i==selected||file(directory,i).exists())items.add(i);
@@ -61,8 +61,8 @@ final class AnalystModelCatalog {
     }
     static String focusedGroup(int index){
         if(index==CUSTOM)return "Дополнительно";
-        if(index==0||index==1)return "Основные модели";
-        if(index==6)return "Модель с ослабленными ограничениями";
+        if(index==0)return "Основной кандидат";
+        if(index==6)return "Экспериментальная модель с ослабленными ограничениями";
         return "Ранее выбранные или скачанные";
     }
     static String group(int index){
