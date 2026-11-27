@@ -86,6 +86,8 @@ public final class AnalystBackgroundService extends Service {
         long now=SystemClock.elapsedRealtime();if(now-lastUpdate<800)return;lastUpdate=now;
         ui.post(()->{if(!j.done&&job==j)notifyIfAllowed(j);});
     }
+    // Android 13+ is explicitly guarded below; the lint detector does not follow this SDK/permission guard.
+    @android.annotation.SuppressLint("NotificationPermission")
     private void notifyIfAllowed(Job j){
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)return;
         try{getSystemService(NotificationManager.class).notify(NOTIFICATION,notification(j));}catch(RuntimeException ignored){}

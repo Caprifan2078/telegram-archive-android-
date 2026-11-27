@@ -95,6 +95,33 @@ public class ConversationPdfExporterTest {
             assertTrue(image.length()>0&&image2.length()>0);
         }finally{db.close();context.deleteDatabase("telegram_"+key+".db");image.delete();image2.delete();pdf.delete();folder.delete();}
     }
+    @Test public void videoAndRoundPreviewsActuallyEnterPdf()throws Exception{
+        Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context fixtures=InstrumentationRegistry.getInstrumentation().getContext();
+        String key="pdf_video_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb db=new MessageDb(ctx,key);File folder=new File(ctx.getCacheDir(),key);assertTrue(folder.mkdirs());
+        File video=new File(folder,"regular-video.mp4"),round=new File(folder,"short-round.mp4"),pdf=new File(folder,"video.pdf");
+        try{
+            for(File file:new File[]{video,round})try(java.io.InputStream in=fixtures.getAssets().open(file.getName());FileOutputStream out=new FileOutputStream(file)){
+                byte[] buf=new byte[8192];int n;while((n=in.read(buf))!=-1)out.write(buf,0,n);
+            }
+            long id=db.stage(db.getWritableDatabase(),"QA","2026-01-01 12:34","Видео и кружок",null,"");
+            db.stageAttachment(db.getWritableDatabase(),id,video.getName(),"video");
+            db.stageAttachment(db.getWritableDatabase(),id,round.getName(),"round");
+            db.publishStaged(db.getWritableDatabase());
+            ConversationPdfExporter.Result result;
+            try(FileOutputStream out=new FileOutputStream(pdf)){result=ConversationPdfExporter.write(db,"QA видео",out,ctx,new DocumentFolder(ctx.getContentResolver(),folder),true);}
+            assertEquals("Video and round must both produce previews",2,result.previews);assertEquals(0,result.missing);
+            try(ParcelFileDescriptor fd=ParcelFileDescriptor.open(pdf,ParcelFileDescriptor.MODE_READ_ONLY);PdfRenderer renderer=new PdfRenderer(fd)){
+                assertEquals(result.pages,renderer.getPageCount());
+                for(int i=0;i<renderer.getPageCount();i++)try(PdfRenderer.Page p=renderer.openPage(i)){
+                    Bitmap b=Bitmap.createBitmap(p.getWidth(),p.getHeight(),Bitmap.Config.ARGB_8888);
+                    try{p.render(b,null,null,PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);}finally{b.recycle();}
+                }
+            }
+            assertEquals(1,db.totalMessages());
+        }finally{db.close();ctx.deleteDatabase("telegram_"+key+".db");video.delete();round.delete();pdf.delete();folder.delete();}
+    }
     @Test public void emptyConversationStillCreatesPdf() throws Exception {
         Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
         String key="pdf_"+UUID.randomUUID().toString().replace("-","");
