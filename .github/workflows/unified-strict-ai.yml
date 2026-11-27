@@ -2,8 +2,6 @@ name: Unified strict native AI quality
 on:
   push:
     branches: [qa/unified-strict-ai-20261127]
-  pull_request:
-    branches: [qa/unified-handoff-source-20261127]
   workflow_dispatch:
 permissions:
   contents: read

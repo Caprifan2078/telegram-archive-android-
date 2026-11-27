@@ -18,4 +18,8 @@ public class AnalystSelfCheckTest {
         assertFalse(AnalystSelfCheck.conflictDefects("Оскорбление: Анна [#11]\nИзвинение: Анна [#13]\n999").isEmpty());
         assertTrue(AnalystSelfCheck.conflictDefects("Оскорбление: Анна [#11]\nИзвинение: Анна [#13]").isEmpty());
     }
+    @Test public void diagnosticDoesNotAdvertiseCitationDumpAsSuccessful(){
+        assertTrue(AnalystSelfCheck.assess("Оскорбление: Анна [#11]\\nИзвинение: Анна [#13]".replace("\\n","\n")).contains("Строгая проверка: пройдена"));
+        assertTrue(AnalystSelfCheck.assess("[#11] Анна [#13] 999").contains("Строгая проверка: не пройдена"));
+    }
 }
