@@ -156,6 +156,17 @@ public final class RealLocalModelSmokeTest {
                 android.util.Log.i("ModelSmoke","Synthetic vision: "+visual);
                 if(visual==null||!visual.toLowerCase(java.util.Locale.ROOT).contains("красн"))defects.add("vision: incorrect color");
             }
+            // Exercise the real whole-archive path, not just the retrieval prompt.
+            if("gemmae2baltprobe".equals(spec.key)||"qwen06q4".equals(spec.key)||"qwen06".equals(spec.key)){
+                FullChatModelScan.Report full=(FullChatModelScan.Report)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
+                    .getMethod("generateFull",String.class,String.class,String.class,AtomicBoolean.class,FullChatModelScan.Progress.class)
+                    .invoke(null,model.getAbsolutePath(),context.getDatabasePath(DeepChatContext.dbName(key)).getAbsolutePath(),
+                        "Во сколько назначили встречу? Укажи время цифрами и номер сообщения.",cancel,(FullChatModelScan.Progress)(rows,total,blocks)->{});
+                android.util.Log.i("ModelSmoke","Whole archive: "+full.chars+"/"+full.totalChars+" chars, "+full.blocks+" blocks, "+full.passes+" calls. "+full.notes);
+                if(!full.complete||full.rows!=3||full.chars!=full.totalChars||full.blocks!=1||full.blockNotes.size()!=1)defects.add("full scan: incomplete coverage");
+                if(!full.notes.contains("17:45")||!FullChatModelScan.ids(full.notes).contains(evidence))defects.add("full scan: incorrect time or missing evidence");
+                assertEquals("Full scan must not modify archive",3,db.totalMessages());
+            }
             android.util.Log.i("ModelSmoke","Quality defects: "+defects);
             assertTrue("Model quality gate: "+defects,defects.isEmpty());
         } finally {

@@ -12,7 +12,7 @@ import java.util.regex.*;
 final class FullChatModelScan {
     static final int BLOCK=1800, PART=800, NOTES=1700;
     interface Generator { String generate(String prompt)throws Exception; }
-    interface Progress {void update(long rows,long total,long blocks);default void detail(long chars,long totalChars,long blocks,long passes){}}
+    interface Progress {void update(long rows,long total,long blocks);default void detail(long chars,long totalChars,long blocks,long passes){} default void block(long index,String note){}}
     interface Sink {void accept(String text)throws Exception;}
     static final class Chunks {
         private final StringBuilder block=new StringBuilder();
@@ -132,9 +132,11 @@ final class FullChatModelScan {
             if(logicalRows==0)return;
             flushMicro();
             String note=current.finish();
-            all.add(note);
             report.blocks++;
-            if(report.blockNotes.size()<MAX_VISIBLE_NOTES)report.blockNotes.add("Блок "+report.blocks+" · "+logicalChars+" знаков\n"+note);
+            String formatted="Блок "+report.blocks+" · "+logicalChars+" знаков\n"+note;
+            if(report.blockNotes.size()<MAX_VISIBLE_NOTES)report.blockNotes.add(formatted);
+            progress.block(report.blocks,formatted);
+            all.add(note);
             current=new Reducer(this);logicalChars=0;logicalRows=0;
             progress.update(report.rows,report.total,report.blocks);progress.detail(report.chars,report.totalChars,report.blocks,report.passes);
         }

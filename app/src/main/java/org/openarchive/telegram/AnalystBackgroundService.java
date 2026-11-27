@@ -138,6 +138,10 @@ public final class AnalystBackgroundService extends Service {
                             public void detail(long chars,long total,long blocks,long passes){
                                 updateProgress(j,chars,total,blocks);
                             }
+                            public void block(long index,String note){
+                                j.completedBlocks=index;
+                                if(index<=FullChatModelScan.MAX_VISIBLE_NOTES){java.util.ArrayList<String> copy=new java.util.ArrayList<>(j.blockNotes);copy.add(note);j.blockNotes=copy;}
+                            }
                         });
                     j.answer=(report.complete?"Вся переписка прочитана":"Неполный проход")+" · "+AnalystTextScope.number(report.chars)+" из "+AnalystTextScope.number(report.totalChars)+" знаков · "+report.rows+" из "+report.total+" сообщений.\nБлоков: "+report.blocks+" · запросов модели: "+report.passes+"\n\nИтоговый ответ (сжатие может пропускать детали):\n"+report.notes;
                     j.blockNotes=new java.util.ArrayList<>(report.blockNotes);j.completedBlocks=report.blocks;
