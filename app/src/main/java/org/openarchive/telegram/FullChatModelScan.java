@@ -34,7 +34,7 @@ final class FullChatModelScan {
     }
     static final int LOGICAL_BLOCK=10000, MAX_VISIBLE_NOTES=1000;
     static final class Report {
-        long rows,total,blocks,passes,chars,totalChars,mergeStepsWithLostRefs;boolean complete,unverified;
+        long rows,total,blocks,passes,chars,totalChars,mergeStepsWithLostRefs,mergeFallbacks;boolean complete,unverified;
         String notes="";
         final List<String> blockNotes=new ArrayList<>();
         final List<DeepChatContext.Source> sources=new ArrayList<>();
@@ -102,6 +102,10 @@ final class FullChatModelScan {
             if(!ids(result).containsAll(ids(input))){
                 report.mergeStepsWithLostRefs++;
                 report.unverified=true;
+                // Preserve original model notes with their existing citations; never
+                // attach a missing ID to an unverified generated claim.
+                String preserved=first+"\n"+second;
+                if(preserved.length()<=noteLimit){report.mergeFallbacks++;return preserved;}
             }
             return result;
         }
