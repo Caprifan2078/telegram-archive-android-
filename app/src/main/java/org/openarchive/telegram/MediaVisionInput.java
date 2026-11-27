@@ -26,7 +26,38 @@ final class MediaVisionInput {
         Bitmap bitmap;
         try(InputStream in=ctx.getContentResolver().openInputStream(uri)){if(in==null)throw new IOException("Missing image");bitmap=BitmapFactory.decodeStream(in,null,opts);}
         if(bitmap==null)throw new IOException("Image decode");
-        try{check(cancel);return new Sample(jpeg(bitmap),1);}finally{bitmap.recycle();}
+        Bitmap oriented=bitmap;
+        try{
+            check(cancel);
+            // BitmapFactory returns encoded pixel orientation, not the camera's
+            // EXIF display orientation. Preserve it before making a new JPEG.
+            if("image/jpeg".equalsIgnoreCase(bounds.outMimeType)){
+                int orientation=android.media.ExifInterface.ORIENTATION_NORMAL;
+                try(InputStream in=ctx.getContentResolver().openInputStream(uri)){
+                    if(in!=null)orientation=new android.media.ExifInterface(in).getAttributeInt(
+                        android.media.ExifInterface.TAG_ORIENTATION,android.media.ExifInterface.ORIENTATION_NORMAL);
+                }catch(IOException|RuntimeException ignored){/* Valid decoded pixels are still usable. */}
+                check(cancel);
+                oriented=orient(bitmap,orientation);
+            }
+            check(cancel);return new Sample(jpeg(oriented),1);
+        }finally{if(oriented!=bitmap)oriented.recycle();bitmap.recycle();}
+    }
+    private static Bitmap orient(Bitmap bitmap,int orientation){
+        Matrix matrix=new Matrix();
+        // Explicit linear transforms avoid ambiguous pre/post concatenation for
+        // mirrored rotations. Bitmap.createBitmap offsets the resulting bounds.
+        switch(orientation){
+            case 2: matrix.setScale(-1,1);break;
+            case 3: matrix.setRotate(180);break;
+            case 4: matrix.setScale(1,-1);break;
+            case 5: matrix.setValues(new float[]{0,1,0,1,0,0,0,0,1});break;
+            case 6: matrix.setRotate(90);break;
+            case 7: matrix.setValues(new float[]{0,-1,0,-1,0,0,0,0,1});break;
+            case 8: matrix.setRotate(270);break;
+            default:return bitmap;
+        }
+        return Bitmap.createBitmap(bitmap,0,0,bitmap.getWidth(),bitmap.getHeight(),matrix,true);
     }
     private static Sample video(Context ctx,Uri uri,AtomicBoolean cancel)throws Exception{
         if(Build.VERSION.SDK_INT<27)throw new IOException("Video sampling requires Android 8.1");
