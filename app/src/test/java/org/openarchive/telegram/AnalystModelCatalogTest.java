@@ -54,15 +54,20 @@ public class AnalystModelCatalogTest {
             assertFalse(AnalystModelDownload.allowed(URI.create(url)));
     }
 
-    @Test public void focusedPickerHasTwoPrimaryChoicesAndPreservesLegacyDownloads()throws Exception{
+    @Test public void focusedPickerHasOneVerifiedChoiceAndPreservesLegacyDownloads()throws Exception{
         File dir=java.nio.file.Files.createTempDirectory("focused-catalog").toFile();
         File old=AnalystModelCatalog.file(dir,4);
         try{
-            assertArrayEquals(new int[]{10,8,0,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,0));
+            assertArrayEquals(new int[]{10,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,10));
+            assertTrue(AnalystModelCatalog.recommended(10));
+            assertFalse(AnalystModelCatalog.recommended(0));
+            assertFalse(AnalystModelCatalog.recommended(8));
+            assertArrayEquals(new int[]{10,0,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,0));
+            assertArrayEquals(new int[]{10,8,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,8));
             assertTrue(old.createNewFile());
-            assertArrayEquals(new int[]{10,8,0,4,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,0));
-            assertArrayEquals(new int[]{10,8,4,7,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,7));
-            assertArrayEquals(new int[]{10,8,1,4,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,1));
+            assertArrayEquals(new int[]{10,0,4,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,0));
+            assertArrayEquals(new int[]{10,4,7,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,7));
+            assertArrayEquals(new int[]{10,1,4,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,1));
             assertEquals(4,AnalystModelCatalog.initialSelection("qwen352",3,false));
         }finally{old.delete();dir.delete();}
     }

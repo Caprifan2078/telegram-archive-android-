@@ -42,7 +42,7 @@ final class AnalystModelCatalog {
         new Model("gemma4skillsafe","Gemma 4 E2B Community","Сторонняя модификация Skillsafe · экспериментальная",
             "https://huggingface.co/skillsafe-ai/Gemma-4-E2B-Uncensored/resolve/97fb035680f1af0c39789bb48b45e0fe380912ce/model.litertlm",
             2008432640L,"a6132d4e449c56de2b33bc0a12d8508b87f5c62f870ab8ec574e6767f92f7c7b"),
-        new Model("qwen06q4","Qwen3 0.6B INT4","Быстрая · короткий контекст; ошибка автора в строгом тесте",
+        new Model("qwen06q4","Qwen3 0.6B INT4","Экспериментальная · короткий контекст; ошибка автора в строгом тесте",
             "https://huggingface.co/litert-community/Qwen3-0.6B-int4/resolve/6aa2daf8aba4aa456797fb8040b36a3948bcfda7/qwen3_0.6b_nothink_q4_block32_ekv1280.litertlm",347251840L,"2df6821ec12702dafd33915e7a1a1adc7c4b053f3672fd9555dfaf3a114c4139"),
         new Model("qwen2515","Qwen2.5 1.5B Instruct","Резерв · сбой памяти на эмуляторе",
             "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/19edb84c69a0212f29a6ef17ba0d6f278b6a1614/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm",1597931520L,"faa60663b333290c1496c499828b21d3e3254a788cacd8cce917ce0f761a2dc9"),
@@ -56,10 +56,10 @@ final class AnalystModelCatalog {
     // Stable indices are storage identities, not presentation order.
     static int[] pickerOrder(){return new int[]{10,8,0,9,3,1,4,5,2,6,7,CUSTOM};}
     // Keep the old stable catalog IDs for upgrades, but do not advertise eight downloads.
-    static boolean recommended(int index){return index==10||index==8;}
+    static boolean recommended(int index){return index==10;}
     static int[] focusedPickerOrder(File directory,int selected){
         java.util.ArrayList<Integer> items=new java.util.ArrayList<>();
-        for(int i:new int[]{10,8})items.add(i);
+        items.add(10);
         for(int i:pickerOrder()){
             if(i==CUSTOM||recommended(i))continue;
             if(i==selected||file(directory,i).exists())items.add(i);
@@ -81,14 +81,14 @@ final class AnalystModelCatalog {
     static String focusedGroup(int index){
         if(index==CUSTOM)return "Дополнительно";
         if(index==10)return "Глубокий анализ · строгие синтетические тесты пройдены";
-        if(index==8)return "Быстрый режим · экспериментальный";
-        if(index==0)return "Стандартный контекст · ограниченная точность";
+        if(index==8||index==0)return "Экспериментальные Qwen · точность не подтверждена";
         return "Ранее выбранные или скачанные";
     }
     static String group(int index){
         if(index==CUSTOM)return "Локальный файл";
         if(MODELS[index].reserve())return "Резервные кандидаты";
-        if(index==10)return "Модифицированная · 3 сценария пройдены";
+        if(index==10)return "Модифицированная · 3 строгих сценария пройдены";
+        if(index==0||index==8)return "Экспериментальные Qwen · не прошли строгую проверку";
         if(MODELS[index].modified())return "Сторонние модификации";
         return index==0||index==3?"Компактные":"Основные альтернативы";
     }
@@ -97,7 +97,7 @@ final class AnalystModelCatalog {
         if(storedKey!=null){
             if(CUSTOM_KEY.equals(storedKey))return CUSTOM;
             for(int i=0;i<CUSTOM;i++)if(MODELS[i].key.equals(storedKey))return i;
-            return 0;
+            return 10;
         }
         // The old catalog had exactly 3 entries. Its index 3 meant custom.
         if(legacyIndex==3||legacyIndex==-1&&customExists)return CUSTOM;

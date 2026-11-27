@@ -55,8 +55,6 @@ public final class DeepAnalystActivity extends Activity {
         android.content.SharedPreferences prefs=getSharedPreferences(MODEL_PREFS,MODE_PRIVATE);
         selectedModel=AnalystModelCatalog.initialSelection(prefs.getString("selected_key",null),
             prefs.getInt("selected",-1),AnalystModelCatalog.file(getNoBackupFilesDir(),AnalystModelCatalog.CUSTOM).isFile());
-        if(!prefs.contains("selected_key")&&!prefs.contains("selected")&&selectedModel==10&&
-            !deviceFit().fits(10,AnalystModelCatalog.file(getNoBackupFilesDir(),10)))selectedModel=8;
         prefs.edit().putString("selected_key",AnalystModelCatalog.key(selectedModel)).apply();
         model=AnalystModelCatalog.file(getNoBackupFilesDir(),selectedModel);
         pageScroll=new ScrollView(this);pageScroll.setFillViewport(true);panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);
@@ -202,7 +200,7 @@ public final class DeepAnalystActivity extends Activity {
         boolean runtime=runtimeAvailable(),present=AnalystModelCatalog.installed(model,selectedModel);
         modelCard.setVisibility(runtime?android.view.View.VISIBLE:android.view.View.GONE);
         question.setEnabled(!busy);
-        status.setText(!runtime?"В этой лёгкой сборке нет движка нейросети. Нужна экспериментальная ИИ-сборка.":present?"Выбранная модель установлена локально · "+(model.length()/1000000)+" МБ.":selectedModel==AnalystModelCatalog.CUSTOM?"Выбери совместимую модель LiteRT-LM из файлов телефона.":"Скачай выбранную модель. Для слабого телефона начни с Qwen3-0.6B.");
+        status.setText(!runtime?"В этой лёгкой сборке нет движка нейросети. Нужна экспериментальная ИИ-сборка.":present?"Выбранная модель установлена локально · "+(model.length()/1000000)+" МБ.":selectedModel==AnalystModelCatalog.CUSTOM?"Выбери совместимую модель LiteRT-LM из файлов телефона.":"Скачай выбранную модель. При нехватке памяти можно искать сообщения и отвечать на фактические вопросы без ИИ.");
         modelState.setText(!runtime?"Движок недоступен в этой сборке":present?"Установлена · "+(model.length()/1000000)+" МБ":selectedModel==AnalystModelCatalog.CUSTOM?"Выбери локальный файл":"Не скачана");
         modelSelector.setText((selectedModel==AnalystModelCatalog.CUSTOM?"Своя модель":AnalystModelCatalog.MODELS[selectedModel].label)+"  ›");
         modelSelector.setEnabled(!busy);install.setEnabled(runtime&&!busy&&selectedModel==AnalystModelCatalog.CUSTOM);remove.setEnabled(model.exists()&&!busy);updateAsk();
@@ -515,7 +513,7 @@ public final class DeepAnalystActivity extends Activity {
             android.app.AlertDialog.Builder fallback=new FontDialog.Builder(this).setTitle("ИИ сейчас недоступен").setMessage(status.getText()+"\nМожно найти исходные сообщения без модели.")
                 .setNegativeButton("Закрыть",null).setPositiveButton("Найти источники",(d,n)->{if(!busy)findEvidence(q);});
             int alternative=deviceFit().lightweightAlternative(getNoBackupFilesDir(),selectedModel);
-            if(alternative>=0)fallback.setNeutralButton("Лёгкая модель",(d,n)->selectModel(alternative));
+            if(alternative>=0)fallback.setNeutralButton("Экспериментальная Qwen",(d,n)->selectModel(alternative));
             fallback.show();return;
         }
         if(!MODEL_BUSY.compareAndSet(false,true)){status.setText("Предыдущий запрос ещё завершает работу.");return;}
@@ -582,6 +580,7 @@ public final class DeepAnalystActivity extends Activity {
                     if(unknown)results.addView(text("Ответ содержит неизвестные номера источников.",14));
                     if(!answer.isEmpty()&&cited.isEmpty())results.addView(text("Ответ не ссылается на конкретные сообщения.",14));
                     if(!unsupported)results.addView(text("Номера существуют в выборке; это не проверка смысла или истинности вывода.",13));
+                    if(AnalystQuestionParts.lightweight(AnalystModelCatalog.key(selectedModel)))results.addView(text("Экспериментальная модель: может ошибаться в авторстве, даже если номер цитаты существует.",14));
                     if(AnalystModelCatalog.shortContext(selectedModel))results.addView(text("Быстрый режим: до 4 цитат; для подробного анализа выберите Gemma, если хватает памяти. Ответы Qwen могут ошибаться в определении автора.",13));
                     if(!answer.isEmpty())results.addView(text(DeepChatContext.clip(answer,16000),15));
                     long sent=context.sources.stream().filter(src->DeepChatContext.sentSource(prompt,src.id)).count();

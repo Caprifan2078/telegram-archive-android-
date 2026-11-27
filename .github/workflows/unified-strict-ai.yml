@@ -1,4 +1,4 @@
-name: Unified strict native AI quality
+name: Verified Gemma and viewer release gate
 on:
   push:
     branches: [qa/unified-strict-ai-20261127]
@@ -13,7 +13,7 @@ jobs:
       fail-fast: false
       max-parallel: 2
       matrix:
-        model: [qwen06, qwen06q4, gemmae2baltprobe]
+        model: [gemmae2baltprobe]
     runs-on: ubuntu-latest
     env:
       EXTENDED_QUALITY: 'true'
@@ -37,11 +37,11 @@ jobs:
         run: |
           set -o pipefail
           for attempt in 1 2 3; do
-            if gradle --no-daemon --max-workers=2 ${RETRY_DEPENDENCIES:-} testProtectedArchiveQaUnitTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true 2>&1 | tee unit.log; then exit 0; fi
+            if gradle --no-daemon --max-workers=2 testProtectedArchiveQaUnitTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true 2>&1 | tee unit.log; then exit 0; fi
             if ! grep -Eq '429|Too Many Requests|Could not (find|resolve) (io[.]grpc|com[.]google|org[.]jetbrains|org[.]ow2[.]asm|com[.]android[.]tools):' unit.log || [[ "$attempt" == 3 ]]; then exit 1; fi
-            sleep $((attempt * 30))
+            sleep $((attempt * 60))
             # Refresh failed dependency lookups, not test assertions.
-            export RETRY_DEPENDENCIES=--refresh-dependencies
+            # Keep valid cached artifacts; avoid refreshing all dependencies.
           done
       - name: Assemble exact inference test APK
         run: gradle --no-daemon --max-workers=2 assembleProtectedArchiveQa assembleProtectedArchiveQaAndroidTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true
@@ -89,7 +89,13 @@ jobs:
         with:
           gradle-version: '8.11.1'
       - name: JVM regression and lint
-        run: gradle --no-daemon --max-workers=2 testProtectedArchiveQaUnitTest lintProtectedArchiveQa -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true
+        run: |
+          set -o pipefail
+          for attempt in 1 2 3; do
+            if gradle --no-daemon --max-workers=2 testProtectedArchiveQaUnitTest lintProtectedArchiveQa -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true 2>&1 | tee unit.log; then exit 0; fi
+            if [[ "$attempt" == 3 ]] || ! grep -Eq '429|Too Many Requests|Could not (find|resolve) (io[.]grpc|com[.]google|org[.]jetbrains|org[.]ow2[.]asm|com[.]android[.]tools):' unit.log; then exit 1; fi
+            sleep $((attempt * 60))
+          done
       - name: KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -112,3 +118,182 @@ jobs:
           path: |
             app/build/outputs/androidTest-results/
             app/build/reports/
+
+  viewer_regressions:
+    needs: factual_attribution
+    if: github.event.repository.private == false
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        api: [35]
+        suite: [analytics, navigation, media, import, backup, recovery]
+    name: Android ${{ matrix.api }} / ${{ matrix.suite }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: SDK
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: Generate independent encrypted fixtures
+        run: |
+          bash .github/scripts/generate-zip-codec-probe.sh
+          bash .github/scripts/generate-external-7zip.sh
+      - name: Assemble application and test APK, run JVM tests
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if gradle --no-daemon --max-workers=2 assembleProtectedArchiveQa assembleProtectedArchiveQaAndroidTest testProtectedArchiveQaUnitTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true 2>&1 | tee build-attempt.log; then
+              exit 0
+            fi
+            if [[ "$attempt" == 3 ]] || ! grep -Eq '429|Too Many Requests|Could not (find|resolve) (io[.]grpc|com[.]google|org[.]jetbrains|org[.]ow2[.]asm|com[.]android[.]tools):' build-attempt.log; then
+              exit 1
+            fi
+            sleep "$((attempt * 60))"
+          done
+          exit 1
+      - name: Lint
+        if: matrix.suite == 'analytics'
+        run: gradle --no-daemon --max-workers=2 lintProtectedArchiveQa -PqaLocalModel=true -PqaProtectedArchiveInstrumentation=true
+      - name: Verify APK signature and explicit model-download permission
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/protectedArchiveQa/app-protectedArchiveQa.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$apk" | grep -q 'android.permission.INTERNET'
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -F "package: name='org.openarchive.telegram.qa.analyst20261126'"
+          sha256sum "$apk" > apk-before-test.sha256
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Android regression suite
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: ANALYST_QA_PACKAGE=org.openarchive.telegram.qa.analyst20261126 ORG_GRADLE_PROJECT_qaLocalModel=true bash .github/scripts/integrated-viewer-audit.sh ${{ matrix.suite }}
+      - name: Verify exact APK after emulator tests
+        run: sha256sum -c apk-before-test.sha256
+      - name: Save exact tested APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: analyst-tested-api${{ matrix.api }}-${{ matrix.suite }}
+          retention-days: 7
+          path: |
+            app/build/outputs/apk/protectedArchiveQa/app-protectedArchiveQa.apk
+            apk-before-test.sha256
+      - name: Preserve logs, test reports and synthetic screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: viewer-audit-api${{ matrix.api }}-${{ matrix.suite }}
+          retention-days: 7
+          path: |
+            app/build/outputs/androidTest-results/
+            app/build/reports/androidTests/
+            app/build/test-results/
+            app/build/ui-audit/
+
+  build:
+    needs: [real_model, factual_attribution, viewer_regressions]
+    if: github.event.repository.private == false && github.ref == 'refs/heads/qa/unified-strict-ai-20261127'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: SDK
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: Build and JVM tests
+        run: |
+          set -o pipefail
+          for attempt in 1 2 3; do
+            if gradle --no-daemon --max-workers=2 assembleProtectedArchiveQa testProtectedArchiveQaUnitTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true -PqaVerifiedHandoff=true -PqaVersionCode=80 2>&1 | tee build.log; then exit 0; fi
+            if [[ "$attempt" == 3 ]] || ! grep -Eq '429|Too Many Requests|Could not (find|resolve) (io[.]grpc|com[.]google|org[.]jetbrains|org[.]ow2[.]asm|com[.]android[.]tools):' build.log; then exit 1; fi
+            sleep $((attempt * 60))
+          done
+      - name: Verify APK and prepare handoff
+        run: |
+          mkdir -p handoff
+          cp app/build/outputs/apk/protectedArchiveQa/app-protectedArchiveQa.apk handoff/Telegram-Archive-Viewer-verified-20261127.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose handoff/*.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging handoff/*.apk | tee handoff/apk-info.txt
+          grep -F "package: name='org.openarchive.telegram.qa.verified20261127'" handoff/apk-info.txt
+          grep -F "native-code:" handoff/apk-info.txt | grep -F "arm64-v8a"
+          (cd handoff && sha256sum *.apk > SHA256SUMS.txt)
+          git rev-parse HEAD > handoff/commit.txt
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install and launch exact handoff APK on Android 15
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          emulator-boot-timeout: 420
+          script: |
+            adb install handoff/Telegram-Archive-Viewer-verified-20261127.apk
+            adb shell am start -W -n org.openarchive.telegram.qa.verified20261127/org.openarchive.telegram.MainActivity | tee handoff/launch.txt
+            grep -q 'Status: ok' handoff/launch.txt
+            sleep 3
+            adb shell pidof org.openarchive.telegram.qa.verified20261127
+            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | grep -F org.openarchive.telegram.qa.verified20261127
+            adb exec-out screencap -p > handoff/launch.png
+      - name: Verify same APK
+        run: cd handoff && sha256sum -c SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-handoff-apk
+          path: handoff/
+          retention-days: 14
+  publish:
+    needs: build
+    if: github.event.repository.private == false && github.ref == 'refs/heads/qa/unified-strict-ai-20261127'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-handoff-apk
+          path: handoff
+      - name: Publish explicitly experimental APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          cd handoff
+          sha256sum -c SHA256SUMS.txt
+          test "$(cat commit.txt)" = "$HEAD_SHA"
+          tag="verified-qa-20261127-${HEAD_SHA:0:8}"
+          gh release create "$tag" *.apk SHA256SUMS.txt --target "$HEAD_SHA" --prerelease --title "Verified Gemma Android QA ${HEAD_SHA:0:8}" --notes "QA prerelease: strict Gemma synthetic native inference, factual regression, JVM, lint, selected Android 15 viewer suites and exact APK launch passed on this commit. Qwen models remain experimental and did not pass prior strict quality tests; not a stable release or physical-device validation. Separate app ID and ephemeral debug signature; no automatic archive migration. Gemma downloads separately."
