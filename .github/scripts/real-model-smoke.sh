@@ -14,6 +14,7 @@ if [[ "$model" == qwen25unc15 || "$model" == *probe ]]; then
   fi
 fi
 if [[ "${EXTENDED_QUALITY:-false}" == true ]]; then extra+=("-Pandroid.testInstrumentationRunnerArguments.extendedQuality=true"); fi
+if [[ "${VISION_QUALITY:-false}" == true ]]; then extra+=("-Pandroid.testInstrumentationRunnerArguments.visionQuality=true"); fi
 gradle --no-daemon --max-workers=2 connectedProtectedArchiveQaAndroidTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true -Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.RealLocalModelSmokeTest -Pandroid.testInstrumentationRunnerArguments.analystModel="$model" "${extra[@]}" || result=$?
 adb logcat -d -t 10000 > app/build/ui-audit/real-model-logcat.txt || true
 grep -E "ModelSmoke:" app/build/ui-audit/real-model-logcat.txt | tail -n 60 || true

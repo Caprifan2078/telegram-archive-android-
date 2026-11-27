@@ -147,6 +147,15 @@ public final class RealLocalModelSmokeTest {
                 }
                 assertEquals("Inference must not modify archive",3,db.totalMessages());
             }
+            if("true".equals(InstrumentationRegistry.getArguments().getString("visionQuality","false"))){
+                android.graphics.Bitmap bitmap=android.graphics.Bitmap.createBitmap(256,256,android.graphics.Bitmap.Config.ARGB_8888);
+                bitmap.eraseColor(android.graphics.Color.RED);byte[] image;
+                try{image=MediaVisionInput.jpeg(bitmap);}finally{bitmap.recycle();}
+                String visual=(String)Class.forName("org.openarchive.telegram.LocalLlmRuntime").getMethod("generateVision",String.class,byte[].class,String.class,AtomicBoolean.class)
+                    .invoke(null,model.getAbsolutePath(),image,"Какого цвета это изображение? Ответь одним словом по-русски.",cancel);
+                android.util.Log.i("ModelSmoke","Synthetic vision: "+visual);
+                if(visual==null||!visual.toLowerCase(java.util.Locale.ROOT).contains("красн"))defects.add("vision: incorrect color");
+            }
             android.util.Log.i("ModelSmoke","Quality defects: "+defects);
             assertTrue("Model quality gate: "+defects,defects.isEmpty());
         } finally {
