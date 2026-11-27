@@ -159,8 +159,7 @@ public final class DeepAnalystActivity extends Activity {
         });
         refresh();
         readArchiveScope();
-        backgroundUi.post(backgroundPoll);
-        pageScroll.requestFocus();pageScroll.post(()->pageScroll.scrollTo(0,0));
+        pageScroll.requestFocus();pageScroll.post(()->{if(displayedJob==null)pageScroll.scrollTo(0,0);});
     }
     private void showQuestionLibrary(){
         if(busy)return;
@@ -761,5 +760,7 @@ public final class DeepAnalystActivity extends Activity {
             finally{MODEL_BUSY.set(false);}
         });
     }
+    @Override protected void onResume(){super.onResume();if(backgroundAction!=null){backgroundUi.removeCallbacks(backgroundPoll);displayedJob=null;backgroundUi.post(backgroundPoll);}}
+    @Override protected void onPause(){backgroundUi.removeCallbacks(backgroundPoll);super.onPause();}
     @Override protected void onDestroy(){stopped.set(true);backgroundUi.removeCallbacks(backgroundPoll);taskCancel.set(true);worker.shutdownNow();super.onDestroy();}
 }

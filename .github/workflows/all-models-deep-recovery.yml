@@ -1,0 +1,91 @@
+name: All catalog models deep scan and background recovery
+on:
+  pull_request:
+    branches: [qa/unified-strict-ai-20261127]
+permissions:
+  contents: read
+jobs:
+  ui_regression:
+    if: github.event.repository.private == false && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'qa/deep-all-models-recovery-20261127'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: JVM regression
+        run: gradle --no-daemon --max-workers=2 testProtectedArchiveQaUnitTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Full scan and background return
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: gradle --no-daemon --max-workers=2 connectedProtectedArchiveQaAndroidTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true -Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.AnalystBackgroundSearchUiTest,org.openarchive.telegram.FullChatModelScanIntegrationTest
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: recovery-regression
+          path: app/build/outputs/androidTest-results/
+  native:
+    if: github.event.repository.private == false && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'qa/deep-all-models-recovery-20261127'
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        model: [gemmae2baltprobe, qwen06q4, qwen06, qwen17, qwen3508, qwen352, lfm2526, huihui352, gemma4community, gemma4skillsafe, qwen2515]
+    name: Deep scan / ${{ matrix.model }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      DEEP_ALL_MODELS: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Native full archive benchmark
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          ram-size: 5120M
+          disk-size: 8192M
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: bash .github/scripts/real-model-smoke.sh '${{ matrix.model }}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deep-${{ matrix.model }}-report
+          path: |
+            app/build/outputs/androidTest-results/
+            app/build/ui-audit/

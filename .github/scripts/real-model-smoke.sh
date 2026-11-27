@@ -3,9 +3,9 @@ set -euo pipefail
 mkdir -p app/build/ui-audit
 result=0
 model=${1:-qwen06}
-case "$model" in qwen06|qwen17|qwen3508|huihui352|qwen25unc15|qwen06q4|qwen2515|lfm350probe|gemmae2bprobe|gemmae2baltprobe|gemma4community|gemma4skillsafe) ;; *) echo 'Unknown benchmark model'; exit 2;; esac
+case "$model" in qwen06|qwen17|qwen3508|qwen352|lfm2526|huihui352|qwen25unc15|qwen06q4|qwen2515|lfm350probe|gemmae2bprobe|gemmae2baltprobe|gemma4community|gemma4skillsafe) ;; *) echo 'Unknown benchmark model'; exit 2;; esac
 extra=()
-if [[ "$model" == qwen25unc15 || "$model" == *probe ]]; then
+if [[ "$model" == qwen25unc15 || ( "$model" == *probe && "$model" != gemmae2baltprobe ) || ( "$model" == gemmae2baltprobe && -n "${PROBE_REVISION:-}" ) ]]; then
   [[ "${PROBE_REVISION:-}" =~ ^[a-f0-9]{40}$ && "${PROBE_SHA:-}" =~ ^[a-f0-9]{64}$ ]] || exit 3
   extra+=("-Pandroid.testInstrumentationRunnerArguments.probeRevision=$PROBE_REVISION" "-Pandroid.testInstrumentationRunnerArguments.probeSha=$PROBE_SHA")
   if [[ "$model" == *probe ]]; then
@@ -13,6 +13,7 @@ if [[ "$model" == qwen25unc15 || "$model" == *probe ]]; then
     extra+=("-Pandroid.testInstrumentationRunnerArguments.probeFile=$PROBE_FILE" "-Pandroid.testInstrumentationRunnerArguments.probeSize=$PROBE_SIZE")
   fi
 fi
+if [[ "${DEEP_ALL_MODELS:-false}" == true ]]; then extra+=("-Pandroid.testInstrumentationRunnerArguments.deepAllModels=true"); fi
 if [[ "${EXTENDED_QUALITY:-false}" == true ]]; then extra+=("-Pandroid.testInstrumentationRunnerArguments.extendedQuality=true"); fi
 if [[ "${VISION_QUALITY:-false}" == true ]]; then extra+=("-Pandroid.testInstrumentationRunnerArguments.visionQuality=true"); fi
 gradle --no-daemon --max-workers=2 connectedProtectedArchiveQaAndroidTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true -Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.RealLocalModelSmokeTest -Pandroid.testInstrumentationRunnerArguments.analystModel="$model" "${extra[@]}" || result=$?

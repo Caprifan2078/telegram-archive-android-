@@ -29,6 +29,13 @@ final class AnalystAutoModel {
             File model=AnalystModelCatalog.file(dir,i);
             if(fit.fits(i,model)&&(!installed||AnalystModelCatalog.installed(model,i)))return i;
         }
+        // Explicit experimental full-scan consent also permits installed
+        // catalog alternatives, never an automatic unknown custom file.
+        for(int i:AnalystModelCatalog.pickerOrder()){
+            if(i==AnalystModelCatalog.CUSTOM)continue;
+            File file=AnalystModelCatalog.file(dir,i);
+            if(AnalystModelCatalog.installed(file,i)&&fit.fits(i,file))return i;
+        }
         return NONE;
     }
     static String range(int i){
