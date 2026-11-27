@@ -1,7 +1,7 @@
 name: Full scan and visual PDF independent QA
 on:
   pull_request:
-    branches: [qa/unified-strict-ai-20261127]
+    branches: [qa/unified-strict-ai-20261127, qa/fullscan-unicode-regression-20261127]
   workflow_dispatch:
 permissions:
   contents: read
@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   regression:
-    if: ${{ github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || github.head_ref == 'qa/fullscan-unicode-regression-20261127') }}
+    if: ${{ github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || (github.head_ref == 'qa/fullscan-unicode-regression-20261127' || github.head_ref == 'qa/fullscan-evidence-retention-20261127')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
