@@ -78,6 +78,7 @@ jobs:
 
   factual_attribution:
     name: Android factual attribution regression
+    if: github.event.repository.private == false
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -221,7 +222,12 @@ jobs:
       max-parallel: 2
       matrix:
         api: [35]
-        suite: [navigation, media, import, backup, recovery, history_export]
+        suite: [navigation, media, import, backup, recovery, history_export, archive_deep, media_export, chat_storage, protected]
+        include:
+          - api: 30
+            suite: navigation
+          - api: 30
+            suite: import
     name: Android ${{ matrix.api }} / ${{ matrix.suite }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -391,4 +397,4 @@ jobs:
           test "$(cat commit.txt)" = "$HEAD_SHA"
           test "$(gh api "repos/$GH_REPO/git/ref/heads/qa/unified-strict-ai-20261127" --jq .object.sha)" = "$HEAD_SHA"
           tag="polish-qa-20261127-${HEAD_SHA:0:8}"
-          gh release create "$tag" *.apk SHA256SUMS.txt --target "$HEAD_SHA" --prerelease --title "Verified Gemma Android QA ${HEAD_SHA:0:8}" --notes "QA prerelease: strict Gemma synthetic native inference, factual regression, JVM, lint, selected Android 15 viewer suites and exact APK launch passed on this commit. Qwen models remain experimental and did not pass prior strict quality tests; not a stable release or physical-device validation. Separate app ID and ephemeral debug signature; no automatic archive migration. Gemma downloads separately."
+          gh release create "$tag" *.apk SHA256SUMS.txt --target "$HEAD_SHA" --prerelease --title "Verified Gemma Android QA ${HEAD_SHA:0:8}" --notes "QA prerelease: strict Gemma synthetic native inference, factual regression, JVM, lint, selected Android 15 viewer suites, Android 11 navigation/import and exact APK launch passed on this commit. Qwen models remain experimental and did not pass prior strict quality tests; not a stable release or physical-device validation. Separate app ID and ephemeral debug signature; no automatic archive migration. Gemma downloads separately."
