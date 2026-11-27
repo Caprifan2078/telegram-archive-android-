@@ -49,8 +49,21 @@ public class FullChatModelScanTest {
         FullChatModelScan.Report report=new FullChatModelScan.Report();
         FullChatModelScan.Session s=new FullChatModelScan.Session(report,"Что произошло?",true,new java.util.concurrent.atomic.AtomicBoolean(),p->"[#1] Анна", (a,b,c)->{});
         String merged=s.merge("[#1] Анна","[#2] Борис");
-        assertEquals(Collections.singleton(1L),FullChatModelScan.ids(merged));
+        assertEquals(new LinkedHashSet<>(Arrays.asList(1L,2L)),FullChatModelScan.ids(merged));
+        assertTrue(merged.contains("[#2] Борис"));
+        assertEquals(1,report.mergeFallbacks);
         assertEquals(1,report.mergeStepsWithLostRefs);
+        assertTrue(report.unverified);
+    }
+    @Test public void oversizedNotesDoNotInventAssociationsOrExceedBudget()throws Exception{
+        FullChatModelScan.Report report=new FullChatModelScan.Report();
+        FullChatModelScan.Session s=new FullChatModelScan.Session(report,"Вопрос",true,new java.util.concurrent.atomic.AtomicBoolean(),p->"[#1] Первый", (a,b,c)->{});
+        String first="[#1] "+String.join("",Collections.nCopies(200,"а"));
+        String second="[#2] "+String.join("",Collections.nCopies(200,"б"));
+        String merged=s.merge(first,second);
+        assertTrue(merged.length()<=s.noteLimit);
+        assertEquals(1,report.mergeStepsWithLostRefs);
+        assertEquals(0,report.mergeFallbacks);
         assertTrue(report.unverified);
     }
     @Test public void retainingAllDistinctReferencesDoesNotFlagCompression()throws Exception{
