@@ -33,13 +33,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-      - name: Run all local-model unit regressions (retry only Maven rate limits)
+      - name: Run all local-model unit regressions (retry transient repository resolution)
         run: |
           set -o pipefail
           for attempt in 1 2 3; do
-            if gradle --no-daemon --max-workers=2 testProtectedArchiveQaUnitTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true 2>&1 | tee unit.log; then exit 0; fi
-            if ! grep -Eq '429|Too Many Requests' unit.log || [[ "$attempt" == 3 ]]; then exit 1; fi
+            if gradle --no-daemon --max-workers=2 ${RETRY_DEPENDENCIES:-} testProtectedArchiveQaUnitTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true 2>&1 | tee unit.log; then exit 0; fi
+            if ! grep -Eq '429|Too Many Requests|Could not (find|resolve) (io[.]grpc|com[.]google|org[.]jetbrains|org[.]ow2[.]asm|com[.]android[.]tools):' unit.log || [[ "$attempt" == 3 ]]; then exit 1; fi
             sleep $((attempt * 30))
+            # Refresh failed dependency lookups, not test assertions.
+            export RETRY_DEPENDENCIES=--refresh-dependencies
           done
       - name: Assemble exact inference test APK
         run: gradle --no-daemon --max-workers=2 assembleProtectedArchiveQa assembleProtectedArchiveQaAndroidTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true

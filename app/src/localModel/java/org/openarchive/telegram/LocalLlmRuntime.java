@@ -103,6 +103,16 @@ public final class LocalLlmRuntime {
             return FullChatModelScan.read(db,question,cancel,prompt->infer(engine,prompt,512,cancel,false),progress);
         }
     }
+    /** Independent native calls; never synthesize a missing answer or load two engines. */
+    public static String[] generateParts(String path,String[] prompts,AtomicBoolean cancel)throws InterruptedException{
+        if(prompts==null||prompts.length<1||prompts.length>3)throw new IllegalArgumentException("Question plan size");
+        String[] answers=new String[prompts.length];
+        for(int i=0;i<prompts.length;i++){
+            if(cancel.get())throw new InterruptedException();
+            answers[i]=single(path,prompts[i],512,cancel);
+        }
+        return answers;
+    }
     public static String generate(String path,String prompt)throws InterruptedException{
         return generate(path,prompt,new AtomicBoolean());
     }

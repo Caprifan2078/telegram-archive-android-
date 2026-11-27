@@ -348,11 +348,20 @@ public final class DeepAnalystActivity extends Activity {
                 long duration=android.os.SystemClock.elapsedRealtime()-start;
                 if(taskCancel.get()||stopped.get())throw new IOException("Cancelled");
                 final String value=answer==null?"":answer.trim();
-                final String assessment=AnalystSelfCheck.assess(value);
+                final String rawAssessment=AnalystSelfCheck.assess(value);
+                final String assisted;
+                if(AnalystQuestionParts.lightweight(AnalystModelCatalog.key(selectedModel))&&!AnalystSelfCheck.conflictDefects(value).isEmpty()){
+                    String[] answers=(String[])Class.forName("org.openarchive.telegram.LocalLlmRuntime")
+                        .getMethod("generateParts",String.class,String[].class,AtomicBoolean.class)
+                        .invoke(null,path,AnalystSelfCheck.independentPrompts(),taskCancel);
+                    assisted=String.join("\n",answers);
+                }else assisted=null;
+                final String assessment=rawAssessment;
                 runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();
                     results.addView(text("Проверка на вымышленном диалоге",18));revealResults();
                     results.addView(text(String.format(java.util.Locale.ROOT,"Запуск и ответ: %.1f с. Это не скорость токенов и не полноценный тест качества.",duration/1000.0),13));
                     results.addView(text(assessment,14));results.addView(text(DeepChatContext.clip(value,4000),14));
+                    if(assisted!=null){results.addView(text("Отдельные вопросы (не заменяют исходный тест)",16));results.addView(text(AnalystSelfCheck.assess(assisted),14));results.addView(text(DeepChatContext.clip(assisted,4000),14));}
                     results.addView(text("Личные сообщения не использовались. Этот тест не доказывает отсутствие отказов или галлюцинаций.",13));
                 });
             }catch(Exception|LinkageError error){runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();status.setText(modelFailure(error,"Модель не прошла пробный запуск. Проверь совместимость и память."));});}
@@ -537,8 +546,27 @@ public final class DeepAnalystActivity extends Activity {
                 }
                 verifyModelForRun();
                 String prompt=AnalystModelCatalog.shortContext(selectedModel)?context.compactPrompt(q,dual!=null):dual==null?context.prompt(q):dual.prompt(q);
-                String response=(String)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
-                    .getMethod("generate",String.class,String.class,AtomicBoolean.class).invoke(null,model.getAbsolutePath(),prompt,taskCancel);
+                Class<?> runtime=Class.forName("org.openarchive.telegram.LocalLlmRuntime");
+                java.util.List<String> parts=AnalystQuestionParts.lightweight(AnalystModelCatalog.key(selectedModel))&&dual==null?
+                    AnalystQuestionParts.split(q):java.util.Collections.singletonList(q);
+                String response;boolean missingPart=false;
+                if(parts.size()>1){
+                    String[] prompts=new String[parts.size()];
+                    for(int n=0;n<prompts.length;n++)prompts[n]=AnalystModelCatalog.shortContext(selectedModel)?
+                        context.compactPrompt(parts.get(n),false):context.prompt(parts.get(n));
+                    String[] answers=(String[])runtime.getMethod("generateParts",String.class,String[].class,AtomicBoolean.class)
+                        .invoke(null,model.getAbsolutePath(),prompts,taskCancel);
+                    StringBuilder joined=new StringBuilder();
+                    for(int n=0;n<answers.length;n++){
+                        boolean grounded=AnalystQuestionParts.hasEvidence(answers[n],prompts[n]);missingPart|=!grounded;
+                        if(n>0)joined.append("\n\n");
+                        joined.append("Вопрос ").append(n+1).append(": ").append(parts.get(n)).append("\n")
+                            .append(grounded?answers[n]:"Не подтверждено источниками. "+(answers[n]==null?"":answers[n]));
+                    }
+                    response=joined.toString();
+                }else response=(String)runtime.getMethod("generate",String.class,String.class,AtomicBoolean.class)
+                    .invoke(null,model.getAbsolutePath(),prompt,taskCancel);
+                final boolean incomplete=missingPart;
                 if(taskCancel.get())throw new IOException("Cancelled");
                 if(stopped.get())return;
                 final String answer=response==null?"":response.trim();
@@ -546,9 +574,10 @@ public final class DeepAnalystActivity extends Activity {
                     java.util.Set<Long> cited=FullChatModelScan.ids(answer);
                     boolean unknown=!DeepChatContext.unknownCitations(answer,prompt).isEmpty();
                     boolean missingSide=dual!=null&&!dual.citesBoth(answer,prompt);
-                    boolean unsupported=answer.isEmpty()||cited.isEmpty()||unknown||missingSide;
+                    boolean unsupported=answer.isEmpty()||cited.isEmpty()||unknown||missingSide||incomplete;
                     results.addView(text(unsupported?"Ответ требует проверки":"Ответ модели · сверены номера цитат",18));revealResults();
                     if(answer.isEmpty())results.addView(text("Модель не вернула итоговый текст. Ниже доступны найденные источники.",14));
+                    if(incomplete)results.addView(text("Не все части запроса получили ссылки на источники.",14));
                     if(missingSide)results.addView(text("Нет ссылок на обе переписки. Сравнение не подтверждено.",14));
                     if(unknown)results.addView(text("Ответ содержит неизвестные номера источников.",14));
                     if(!answer.isEmpty()&&cited.isEmpty())results.addView(text("Ответ не ссылается на конкретные сообщения.",14));

@@ -135,6 +135,16 @@ public final class RealLocalModelSmokeTest {
                 logMemory(context,"after-conflict");
                 android.util.Log.i("ModelSmoke","Synthetic conflict: "+DeepChatContext.clip(conflict,2000));
                 defects.addAll(AnalystSelfCheck.conflictDefects(conflict));
+                if(AnalystQuestionParts.lightweight(spec.key)){
+                    String[] parts=(String[])Class.forName("org.openarchive.telegram.LocalLlmRuntime")
+                        .getMethod("generateParts",String.class,String[].class,AtomicBoolean.class)
+                        .invoke(null,model.getAbsolutePath(),AnalystSelfCheck.independentPrompts(),cancel);
+                    String assisted=String.join("\n",parts);
+                    android.util.Log.i("ModelSmoke","Independent conflict answer: "+DeepChatContext.clip(assisted,2000));
+                    java.util.List<String> independent=AnalystSelfCheck.conflictDefects(assisted);
+                    android.util.Log.i("ModelSmoke","Independent conflict defects: "+independent);
+                    for(String defect:independent)defects.add("independent "+defect);
+                }
                 assertEquals("Inference must not modify archive",3,db.totalMessages());
             }
             android.util.Log.i("ModelSmoke","Quality defects: "+defects);
