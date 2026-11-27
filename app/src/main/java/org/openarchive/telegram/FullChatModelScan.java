@@ -18,7 +18,7 @@ final class FullChatModelScan {
         private final StringBuilder block=new StringBuilder();
         private final Sink sink;
         Chunks(Sink sink){this.sink=sink;}
-        private static String safe(String value){return value==null?"":value.replace("[#","［#").replace('\r',' ').replace('\n',' ');}
+        private static String safe(String value){return value==null?"":value.replace((char)0,'\uFFFD').replace("[#","［#").replace('\r',' ').replace('\n',' ');}
         void add(long id,String author,String date,String body)throws Exception{
             String raw=body==null||body.isEmpty()?"[Нет текстового содержимого]":body;
             String prefix="[#"+id+"] "+safe(DeepChatContext.clip(author,60))+" | "+safe(DeepChatContext.clip(date,45))+" | ";
@@ -75,7 +75,7 @@ final class FullChatModelScan {
             microLimit=small?480:BLOCK;partLimit=small?280:PART;noteLimit=small?280:720;
             all=new Reducer(this);current=new Reducer(this);
         }
-        private static String safe(String value){return value==null?"":value.replace("[#","［#").replace('\r',' ').replace('\n',' ');}
+        private static String safe(String value){return value==null?"":value.replace((char)0,'\uFFFD').replace("[#","［#").replace('\r',' ').replace('\n',' ');}
         private void check()throws InterruptedException{if(cancel.get())throw new InterruptedException();}
         private String call(String task,String data)throws Exception{
             check();
@@ -151,13 +151,11 @@ final class FullChatModelScan {
     static Report read(File file,String question,boolean small,AtomicBoolean cancel,Generator generator,Progress progress)throws Exception{
         Report r=new Report();
         try(SQLiteDatabase db=SQLiteDatabase.openDatabase(file.getAbsolutePath(),null,SQLiteDatabase.OPEN_READONLY)){
-            try(Cursor count=db.rawQuery("SELECT COUNT(*),COALESCE(SUM(LENGTH(body)),0) FROM messages",null)){
-                if(count.moveToFirst()){r.total=count.getLong(0);r.totalChars=count.getLong(1);}
-            }
+            long[] scope=countScope(db);r.total=scope[0];r.totalChars=scope[1];
             Session session=new Session(r,question,small,cancel,generator,progress);
-            try(Cursor rows=db.rawQuery("SELECT id,author,date_text,body FROM messages ORDER BY id",null)){
+            try(Cursor rows=db.rawQuery("SELECT id,author,date_text,body,CASE WHEN instr(body,char(0))>0 THEN CAST(body AS BLOB) ELSE NULL END FROM messages ORDER BY id",null)){
                 while(!cancel.get()&&rows.moveToNext()){
-                    session.add(rows.getLong(0),rows.getString(1),rows.getString(2),rows.getString(3));r.rows++;
+                    session.add(rows.getLong(0),rows.getString(1),rows.getString(2),rows.isNull(4)?rows.getString(3):decodeBody(rows.getBlob(4)));r.rows++;
                 }
                 if(!cancel.get()){
                     session.finish();r.complete=r.rows==r.total&&r.chars==r.totalChars;
@@ -177,6 +175,21 @@ final class FullChatModelScan {
         }
         return r;
     }
+    /** SQLite LENGTH(text) stops at embedded NUL; count the remaining Unicode
+     * code points in only those exceptional rows. Ordinary text stays SQL-only. */
+    static long[] countScope(SQLiteDatabase db){
+        long rows=0,chars=0,exceptional=0;
+        try(Cursor c=db.rawQuery("SELECT COUNT(*),COALESCE(SUM(LENGTH(body)),0),COALESCE(SUM(CASE WHEN instr(body,char(0))>0 THEN 1 ELSE 0 END),0) FROM messages",null)){
+            if(c.moveToFirst()){rows=c.getLong(0);chars=c.getLong(1);exceptional=c.getLong(2);}
+        }
+        if(exceptional>0)try(Cursor c=db.rawQuery("SELECT CAST(body AS BLOB),LENGTH(body) FROM messages WHERE instr(body,char(0))>0",null)){
+            while(c.moveToNext()){
+                String body=decodeBody(c.getBlob(0));chars+=(long)body.codePointCount(0,body.length())-c.getLong(1);
+            }
+        }
+        return new long[]{rows,chars};
+    }
+    private static String decodeBody(byte[] bytes){return new String(bytes,java.nio.charset.StandardCharsets.UTF_8);}
     static Set<Long> ids(String text){
         Set<Long> ids=new LinkedHashSet<>();
         Matcher m=Pattern.compile("\\[#(\\d{1,18})\\]").matcher(text);
