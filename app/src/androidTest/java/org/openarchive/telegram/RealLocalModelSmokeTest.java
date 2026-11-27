@@ -167,6 +167,30 @@ public final class RealLocalModelSmokeTest {
                 if(!full.notes.contains("17:45")||!FullChatModelScan.ids(full.notes).contains(evidence))defects.add("full scan: incorrect time or missing evidence");
                 assertEquals("Full scan must not modify archive",3,db.totalMessages());
             }
+            // The previous whole-archive probe has only three messages and one
+            // logical block. Check native reduction across a real 10k boundary.
+            if("gemmae2baltprobe".equals(spec.key)&&"true".equals(InstrumentationRegistry.getArguments().getString("extendedQuality","false"))){
+                String multiKey="model_multi_"+UUID.randomUUID().toString().replace("-","");
+                MessageDb multi=new MessageDb(context,multiKey);
+                try{
+                    SQLiteDatabase m=multi.getWritableDatabase();
+                    long startId=multi.stage(m,"Анна","2026-02-01 10:00","Код начала: 4826.",null,"");
+                    String filler=String.join("",java.util.Collections.nCopies(10000,"."));
+                    multi.stage(m,"Система","2026-02-01 10:01",filler,null,"");
+                    long endId=multi.stage(m,"Борис","2026-02-01 10:02","Код конца: 7351.",null,"");
+                    multi.publishStaged(m);
+                    long startMs=android.os.SystemClock.elapsedRealtime();
+                    FullChatModelScan.Report cross=(FullChatModelScan.Report)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
+                        .getMethod("generateFull",String.class,String.class,String.class,AtomicBoolean.class,FullChatModelScan.Progress.class)
+                        .invoke(null,model.getAbsolutePath(),context.getDatabasePath(DeepChatContext.dbName(multiKey)).getAbsolutePath(),
+                            "Назови код начала и код конца, каждый с его номером сообщения. Игнорируй точки.",cancel,(FullChatModelScan.Progress)(rows,total,blocks)->{});
+                    android.util.Log.i("ModelSmoke","Multi-block native ms="+(android.os.SystemClock.elapsedRealtime()-startMs)+" chars="+cross.chars+"/"+cross.totalChars+" blocks="+cross.blocks+" passes="+cross.passes+" lostMergeRefs="+cross.mergeStepsWithLostRefs+" answer="+cross.notes);
+                    if(!cross.complete||cross.rows!=3||cross.chars!=cross.totalChars||cross.blocks!=2||cross.blockNotes.size()!=2)defects.add("multi-block: incomplete coverage");
+                    if(!cross.notes.contains("4826")||!cross.notes.contains("7351")||!FullChatModelScan.ids(cross.notes).containsAll(java.util.Arrays.asList(startId,endId)))defects.add("multi-block: lost early or late fact/citation");
+                    if(cross.blockNotes.size()==2&&(!cross.blockNotes.get(0).contains("4826")||!FullChatModelScan.ids(cross.blockNotes.get(0)).contains(startId)||!cross.blockNotes.get(1).contains("7351")||!FullChatModelScan.ids(cross.blockNotes.get(1)).contains(endId)))defects.add("multi-block: individual block note lost expected fact");
+                    assertEquals("Native multi-block scan must not modify archive",3,multi.totalMessages());
+                }finally{multi.close();context.deleteDatabase(DeepChatContext.dbName(multiKey));}
+            }
             android.util.Log.i("ModelSmoke","Quality defects: "+defects);
             assertTrue("Model quality gate: "+defects,defects.isEmpty());
         } finally {
