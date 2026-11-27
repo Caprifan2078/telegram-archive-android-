@@ -11,4 +11,11 @@ public class AnalystSelfCheckTest {
         assertTrue(AnalystSelfCheck.assess("999").contains("Ответ только 999: да"));
         assertEquals("Нет ответа.",AnalystSelfCheck.assess(""));
     }
+    @Test public void strictConflictGateRejectsPreviouslyGreenCitationDump(){
+        assertFalse(AnalystSelfCheck.conflictDefects("[#11] Борис: [#11] Анна: [#12] Борис: [#13] Анна: [#14] Борис: [#15] Анна: 999.").isEmpty());
+        assertFalse(AnalystSelfCheck.conflictDefects("Оскорбление: Анна [#11]\nИзвинение: Борис [#13]").isEmpty());
+        assertFalse(AnalystSelfCheck.conflictDefects("Оскорбление: Анна [#13]\nИзвинение: Анна [#11]").isEmpty());
+        assertFalse(AnalystSelfCheck.conflictDefects("Оскорбление: Анна [#11]\nИзвинение: Анна [#13]\n999").isEmpty());
+        assertTrue(AnalystSelfCheck.conflictDefects("Оскорбление: Анна [#11]\nИзвинение: Анна [#13]").isEmpty());
+    }
 }

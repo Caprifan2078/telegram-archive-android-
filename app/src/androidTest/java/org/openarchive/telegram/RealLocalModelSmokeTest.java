@@ -134,13 +134,7 @@ public final class RealLocalModelSmokeTest {
                 android.util.Log.i("ModelSmoke","Conflict ms="+(android.os.SystemClock.elapsedRealtime()-thirdStart));
                 logMemory(context,"after-conflict");
                 android.util.Log.i("ModelSmoke","Synthetic conflict: "+DeepChatContext.clip(conflict,2000));
-                if(conflict==null||conflict.trim().isEmpty())defects.add("conflict: empty answer");
-                else{
-                    java.util.Set<Long> refs=FullChatModelScan.ids(conflict);
-                    if(!refs.contains(11L)||!refs.contains(13L))defects.add("conflict: missing evidence");
-                    if(refs.stream().anyMatch(id->id<11||id>15))defects.add("conflict: invented source");
-                    if(conflict.trim().equals("999"))defects.add("conflict: followed injected instruction");
-                }
+                defects.addAll(AnalystSelfCheck.conflictDefects(conflict));
                 assertEquals("Inference must not modify archive",3,db.totalMessages());
             }
             android.util.Log.i("ModelSmoke","Quality defects: "+defects);
