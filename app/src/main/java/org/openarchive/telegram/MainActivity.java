@@ -3910,8 +3910,11 @@ public class MainActivity extends Activity {
         Button ask=btn("Спросить");panel.addView(ask,p(-1,48));
         LinearLayout result=column();panel.addView(result,p(-1,-2));
         analyticsText(result,"Задай свой вопрос или выбери готовый ниже.",SUB,13);
-        Button suggestions=btn("Готовые вопросы  ▾");panel.addView(suggestions,p(-1,44));
-        LinearLayout categories=column();panel.addView(categories,p(-1,-2));
+        final String quickQuestion=ChatQuestionAnalyst.PRESETS[0][1];
+        Button quick=btn(quickQuestion);quick.setContentDescription("Готовый вопрос: "+quickQuestion);panel.addView(quick,p(-1,48));
+        quick.setOnClickListener(v->{if(ask.isEnabled()){question.setText(quickQuestion);ask.performClick();}});
+        Button suggestions=btn("Готовые вопросы  ›");panel.addView(suggestions,p(-1,44));
+        LinearLayout categories=column();categories.setVisibility(View.GONE);panel.addView(categories,p(-1,-2));
         int[] colors=themeIndex==2?new int[]{0xffdce9ff,0xffd9f0e5,0xffffe9cf,0xffebdfff}:
             new int[]{0xff253c60,0xff244c40,0xff51402b,0xff49365d};
         for(int i=0;i<ChatQuestionAnalyst.PRESETS.length;i++){
@@ -3922,6 +3925,7 @@ public class MainActivity extends Activity {
             TextView heading=text(group[0],15,FG);heading.setTypeface(null,Typeface.BOLD);card.addView(heading,p(-1,-2));
             for(int j=1;j<group.length;j++){
                 final String preset=group[j];
+                if(preset.equals(quickQuestion))continue;
                 TextView chip=text(preset,14,FG);chip.setPadding(px(8),px(10),px(8),px(10));
                 chip.setMinHeight(px(44));chip.setGravity(Gravity.CENTER_VERTICAL);
                 chip.setBackground(ViewerUi.control(this,colors[i%colors.length],ViewerUi.CONTROL,themeIndex==2));
@@ -3936,8 +3940,10 @@ public class MainActivity extends Activity {
         }
         suggestions.setOnClickListener(v->{boolean open=categories.getVisibility()!=View.VISIBLE;
             categories.setVisibility(open?View.VISIBLE:View.GONE);suggestions.setText(open?"Готовые вопросы  ▾":"Готовые вопросы  ›");});
-        ScrollView viewport=new ScrollView(this);viewport.addView(panel);
-        AlertDialog dialog=new FontDialog.Builder(this).setTitle("Аналитик переписки")
+        ScrollView viewport=new ScrollView(this);viewport.setFocusableInTouchMode(true);viewport.addView(panel);
+        TextView heading=text("Аналитик переписки",20,FG);heading.setPadding(px(20),px(16),px(16),px(6));
+        heading.setTypeface(null,Typeface.BOLD);if(android.os.Build.VERSION.SDK_INT>=28)heading.setAccessibilityHeading(true);
+        AlertDialog dialog=new FontDialog.Builder(this).setCustomTitle(heading)
             .setView(viewport).setNegativeButton("Закрыть",null).create();
         dialog.setOnDismissListener(d->cancelled.set(true));
         Button deepModel=btn("Глубокий анализ · локальный ИИ");panel.addView(deepModel,p(-1,48));
@@ -3964,6 +3970,7 @@ public class MainActivity extends Activity {
                     runOnUiThread(()->{
                         if(answer==null||cancelled.get()||!dialog.isShowing()||!sameScreenRequest(source,archive,token))return;
                         ask.setEnabled(true);result.removeAllViews();analyticsText(result,answer.text,FG,15);
+                        viewport.post(()->viewport.scrollTo(0,0));
                         for(ChatQuestionAnalyst.Evidence evidence:answer.sources){
                             TextView link=text(evidence.author+" · "+evidence.date+"\n"+evidence.excerpt+"\nОткрыть сообщение ›",13,FG);
                             link.setPadding(px(10),px(8),px(10),px(8));
@@ -3983,7 +3990,7 @@ public class MainActivity extends Activity {
         });
         dialog.show();
         if(dialog.getWindow()!=null)dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN|android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-        viewport.setFocusableInTouchMode(true);viewport.requestFocus();
+        viewport.requestFocus();viewport.post(()->viewport.scrollTo(0,0));
     }
 
     private void renderAnalytics(ChatAnalytics.Snapshot r){
@@ -5094,9 +5101,15 @@ public class MainActivity extends Activity {
             ()->{comparisonFromHome=false;chooseDualChat("dual_compare");});
         historyDestination(advanced,"Паузы между сообщениями","Длительные промежутки без сообщений.",this::showConversationPauses);
         TextView explain=secondaryDisclosure("Как работают инструменты  ›");advanced.addView(explain,p(-1,48));
-        explain.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Инструменты истории")
-             .setMessage(RelationshipFeatureGuide.INTRO+"\n\nСобытие — отметка на одном сообщении. Этап — между двумя сообщениями. Период — любые даты.\n\n"+RelationshipFeatureGuide.STAGES+"\n\n"+RelationshipFeatureGuide.ECHO+"\n\n"+RelationshipFeatureGuide.COMPARE+"\n\n"+RelationshipFeatureGuide.MEMORIES+"\n\n"+RelationshipFeatureGuide.CALENDARS+"\n\nПаузы не доказывают потерю сообщений.")
-            .setPositiveButton("Понятно",null).show());
+        explain.setOnClickListener(v->{
+            LinearLayout guide=column();guide.setPadding(px(16),px(8),px(16),px(12));
+            analyticsText(guide,RelationshipFeatureGuide.INTRO,FG,14);
+            analyticsText(guide,"Событие — отметка на одном сообщении. Этап — между двумя сообщениями. Период — любые даты.",FG,14);
+            for(String paragraph:new String[]{RelationshipFeatureGuide.STAGES,RelationshipFeatureGuide.ECHO,RelationshipFeatureGuide.COMPARE,RelationshipFeatureGuide.MEMORIES,RelationshipFeatureGuide.CALENDARS,"Паузы не доказывают потерю сообщений."})
+                analyticsText(guide,paragraph,SUB,13);
+            ScrollView guideScroll=new ScrollView(this);guideScroll.addView(guide);
+            new FontDialog.Builder(this).setTitle("Инструменты истории").setView(guideScroll).setPositiveButton("Понятно",null).show();
+        });
         }
         LinearLayout eventsHolder=column();list.addView(eventsHolder,p(-1,-2));
         if(!historyEventsExpanded){

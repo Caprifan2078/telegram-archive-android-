@@ -44,6 +44,7 @@ public final class DeepAnalystActivity extends Activity {
     @Override public void onCreate(Bundle state){
         ViewerUi.applyActivityTheme(this);super.onCreate(state);palette=ViewerUi.palette(this);ViewerUi.systemBars(this,palette);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN|WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         archive=getIntent().getStringExtra("archive");
         try{if(!getDatabasePath(DeepChatContext.dbName(archive)).isFile()){finish();return;}}catch(IllegalArgumentException bad){finish();return;}
         compareArchive=getIntent().getStringExtra("compare_archive");
@@ -57,9 +58,9 @@ public final class DeepAnalystActivity extends Activity {
             prefs.getInt("selected",-1),AnalystModelCatalog.file(getNoBackupFilesDir(),AnalystModelCatalog.CUSTOM).isFile());
         prefs.edit().putString("selected_key",AnalystModelCatalog.key(selectedModel)).apply();
         model=AnalystModelCatalog.file(getNoBackupFilesDir(),selectedModel);
-        pageScroll=new ScrollView(this);pageScroll.setFillViewport(true);panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);
+        pageScroll=new ScrollView(this);pageScroll.setFillViewport(true);pageScroll.setFocusableInTouchMode(true);panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(16),dp(16),dp(16),dp(24));panel.setBackgroundColor(palette.background);pageScroll.addView(panel);setContentView(pageScroll);
-        TextView title=text(relationships?"Взаимоотношения":compareArchive==null?"Глубокий анализ":"Сравнение двух переписок",22);title.setTypeface(null,android.graphics.Typeface.BOLD);panel.addView(title);
+        TextView title=text(relationships?"Взаимоотношения":compareArchive==null?"Глубокий анализ":"Сравнение двух переписок",22);title.setTypeface(null,android.graphics.Typeface.BOLD);if(android.os.Build.VERSION.SDK_INT>=28)title.setAccessibilityHeading(true);panel.addView(title);
         panel.addView(text(relationships?"Поступки, взаимность, забота и конфликты. Выводы только по сообщениям, не оценка личности.":compareArchive==null?"Локальный ИИ · быстрый вопрос или полный проход. Ответы могут ошибаться.":"Локальный ИИ · отдельные выборки А и Б. Сравнение по цитатам, не полный проход.",14));
         status=text("",13);panel.addView(status);
         modelCard=new LinearLayout(this);modelCard.setOrientation(LinearLayout.VERTICAL);
@@ -128,6 +129,7 @@ public final class DeepAnalystActivity extends Activity {
                 .setNegativeButton("Отмена",null).setPositiveButton("Скачать",(d,n)->downloadModel(spec)).show();
         });
         refresh();
+        pageScroll.requestFocus();pageScroll.post(()->pageScroll.scrollTo(0,0));
     }
     private void showQuestionLibrary(){
         if(busy)return;
@@ -236,7 +238,7 @@ public final class DeepAnalystActivity extends Activity {
                 runOnUiThread(()->{
                     if(stopped.get())return;busy=false;refresh();
                     if(answer==null||taskCancel.get()){status.setText("Операция отменена.");return;}
-                    results.addView(text(parsed.kind==ChatQuestionAnalyst.Kind.INSULT_PHRASES||parsed.kind==ChatQuestionAnalyst.Kind.APOLOGY_PHRASES?"Совпадения формулировок · без нейросети":"Точный расчёт по архиву · без нейросети",18));revealResults();
+                    results.addView(text(parsed.kind==ChatQuestionAnalyst.Kind.INSULT_PHRASES||parsed.kind==ChatQuestionAnalyst.Kind.APOLOGY_PHRASES||parsed.kind==ChatQuestionAnalyst.Kind.CONFLICT_PHRASES?"Совпадения формулировок · без нейросети":"Точный расчёт по архиву · без нейросети",18));revealResults();
                     results.addView(text(answer.text,15));
                     for(ChatQuestionAnalyst.Evidence src:answer.sources){
                         Button link=button(src.author+" · "+src.date+"\n"+src.excerpt);

@@ -83,7 +83,7 @@ public class RelationshipAnalyticsExplanationUiTest {
             inst.runOnMainSync(()->{View guide=findText(list,"Как работают инструменты");assertNotNull(guide);assertTrue(guide.performClick());});
             inst.waitForIdleSync();
             androidx.test.uiautomator.UiDevice device=androidx.test.uiautomator.UiDevice.getInstance(inst);
-            assertNotNull("Detailed explanation must remain accessible",device.wait(androidx.test.uiautomator.Until.findObject(androidx.test.uiautomator.By.textContains(RelationshipFeatureGuide.INTRO)),8000));
+            AnalyticsUiProbe.require(device,androidx.test.uiautomator.By.textContains(RelationshipFeatureGuide.INTRO),"Detailed explanation must remain accessible");
             device.pressBack();inst.waitForIdleSync();
             TextView header=(TextView)get(a,"title");
             TextView subheader=(TextView)get(a,"subtitle");
