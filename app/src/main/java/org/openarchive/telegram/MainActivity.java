@@ -123,6 +123,7 @@ public class MainActivity extends Activity {
     private String pendingMessageText;
     private static final int SAVE_CONVERSATION_PDF_REQUEST=118;
     private String pendingPdfKey,pendingPdfName;
+    private boolean pendingPdfMedia=true;
     private final LinkedHashMap<Long,MessageDb.Attachment> mediaSelection=new LinkedHashMap<>();
     private boolean multiSelectMedia=false;
     private String selectedMediaArchive="";
@@ -220,7 +221,7 @@ public class MainActivity extends Activity {
         }
         loadAppearance();
         if(state!=null){
-            pendingPdfKey=state.getString("ta_pending_pdf_key");pendingPdfName=state.getString("ta_pending_pdf_name");
+            pendingPdfKey=state.getString("ta_pending_pdf_key");pendingPdfName=state.getString("ta_pending_pdf_name");pendingPdfMedia=state.getBoolean("ta_pending_pdf_media",true);
             home=state.getBoolean("ta_home",true);screen=state.getString("ta_screen","chat");
             savedFavoritesOnly=state.getBoolean("ta_saved_favorites",false);noteDraft=state.getString("ta_note_draft","");
             if("help".equals(screen)){
@@ -286,7 +287,7 @@ public class MainActivity extends Activity {
         showPage();
     }
     @Override protected void onSaveInstanceState(Bundle state){
-        state.putString("ta_pending_pdf_key",pendingPdfKey);state.putString("ta_pending_pdf_name",pendingPdfName);
+        state.putString("ta_pending_pdf_key",pendingPdfKey);state.putString("ta_pending_pdf_name",pendingPdfName);state.putBoolean("ta_pending_pdf_media",pendingPdfMedia);
         if("help".equals(screen)){
             state.putBoolean("ta_help_return_home",helpReturnHome);state.putString("ta_help_return_screen",helpReturnScreen);
             state.putInt("ta_help_category",helpCategory);state.putInt("ta_help_shelf",helpShelf);state.putInt("ta_help_chapter",helpChapter);
@@ -2562,7 +2563,8 @@ public class MainActivity extends Activity {
         if(archives.length()>0){JSONObject o=archives.optJSONObject(0);activeKey=o.optString("key","default");activeName=o.optString("name","Архив");}
     }
     private void saveRegistry(){getPreferences(MODE_PRIVATE).edit().putString("archive_registry",archives.toString()).putString("active_archive",activeKey).apply();}
-    private String activeTree(){for(int i=0;i<archives.length();i++){JSONObject o=archives.optJSONObject(i);if(o!=null&&activeKey.equals(o.optString("key")))return o.optString("tree",null);}return null;}
+    private String activeTree(){return treeForArchive(activeKey);}
+    private String treeForArchive(String key){for(int i=0;i<archives.length();i++){JSONObject o=archives.optJSONObject(i);if(o!=null&&key.equals(o.optString("key")))return o.optString("tree",null);}return null;}
     private void registerArchive(String name,String tree){
         try{JSONObject o=new JSONObject();String key=UUID.randomUUID().toString().replace("-","");o.put("key",key);o.put("name",name);o.put("tree",tree);archives.put(o);activateArchive(key);}catch(Exception e){toast("Ошибка добавления чата");}
     }
@@ -2692,16 +2694,15 @@ public class MainActivity extends Activity {
         }
         dialog.show();
     }
-        private void chooseConversationPdf(){
+    private void chooseConversationPdf(){
         new FontDialog.Builder(this).setTitle("Сохранить переписку в PDF")
-            .setMessage("В PDF войдут текст, авторы и даты всех сообщений. Вложения будут обозначены текстом, без самих файлов. Для одного файла — до "+ConversationPdfExporter.MAX_PAGES+" страниц; доступная память телефона может ограничить экспорт.")
-            .setNegativeButton("Отмена",null).setPositiveButton("Выбрать файл",(dialog,which)->{
-                pendingPdfKey=activeKey;pendingPdfName=activeName;
+            .setItems(new String[]{"С фото и кадрами видео","Только текст · меньший файл"},(dialog,which)->{
+                pendingPdfKey=activeKey;pendingPdfName=activeName;pendingPdfMedia=which==0;
                 Intent picker=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/pdf");
                 picker.putExtra(Intent.EXTRA_TITLE,"Telegram Archive.pdf");
                 try{startActivityForResult(picker,SAVE_CONVERSATION_PDF_REQUEST);}
                 catch(Exception error){pendingPdfKey=null;pendingPdfName=null;toast("Не удалось открыть выбор файла");}
-            }).show();
+            }).setNegativeButton("Отмена",null).show();
     }
     /** Compact Telegram-like pinned preview: tap the message to jump, arrow to switch, cross to unpin. */
     private void renderPinnedBar(){
@@ -3275,16 +3276,18 @@ public class MainActivity extends Activity {
         if(request==SAVE_CONVERSATION_PDF_REQUEST){
             final String key=pendingPdfKey,name=pendingPdfName;pendingPdfKey=null;pendingPdfName=null;
             if(result==RESULT_OK&&data!=null&&data.getData()!=null&&key!=null){
-                final Uri destination=data.getData();
+                final Uri destination=data.getData();final boolean includeMedia=pendingPdfMedia;final String tree=treeForArchive(key);
                 showPdfStatus(key,"Создаю PDF переписки…");
                 worker.execute(()->{
                     MessageDb source=new MessageDb(getApplicationContext(),key);
                     java.io.File temporary=null;
                     try{
                         temporary=java.io.File.createTempFile("conversation_pdf_",".tmp",getCacheDir());
-                        int pages;
+                        DocumentFolder pdfFolder=null;
+                        if(tree!=null&&!tree.isEmpty())try{pdfFolder=tree.startsWith("local:")?new DocumentFolder(getContentResolver(),new java.io.File(tree.substring(6))):new DocumentFolder(getContentResolver(),Uri.parse(tree));}catch(Exception ignored){}
+                        ConversationPdfExporter.Result report;
                         try(OutputStream out=new java.io.FileOutputStream(temporary)){
-                            pages=ConversationPdfExporter.write(source,name,out);
+                            report=ConversationPdfExporter.write(source,name,out,getApplicationContext(),pdfFolder,includeMedia);
                         }
                         try(InputStream in=new java.io.FileInputStream(temporary);
                             OutputStream out=getContentResolver().openOutputStream(destination,"w")){
@@ -3293,7 +3296,7 @@ public class MainActivity extends Activity {
                             while((n=in.read(buffer))!=-1)out.write(buffer,0,n);
                             out.flush();
                         }
-                        runOnUiThread(()->{if(!isDestroyed()&&!isFinishing()){showPdfStatus(key,"PDF сохранён · страниц: "+pages);toast("PDF сохранён");}});
+                        runOnUiThread(()->{if(!isDestroyed()&&!isFinishing()){showPdfStatus(key,"PDF сохранён · страниц: "+report.pages+" · превью: "+report.previews+(report.missing>0?" · недоступно: "+report.missing:""));toast("PDF сохранён"+(report.missing>0?" · не все превью доступны":""));}});
                     }catch(Exception error){
                         // A document provider may return an existing document: never delete it on failure.
                         runOnUiThread(()->{if(!isDestroyed()&&!isFinishing()){showPdfStatus(key,"Не удалось сохранить PDF; проверь выбранный файл");toast("Ошибка PDF: "+error.getMessage());}});

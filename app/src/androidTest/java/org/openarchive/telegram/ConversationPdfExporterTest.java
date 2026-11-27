@@ -60,6 +60,41 @@ public class ConversationPdfExporterTest {
             }
         } finally {db.close();context.deleteDatabase("telegram_"+key+".db");}
     }
+    @Test public void exportsAllPhotoAttachmentsAndMissingMediaWithoutChangingSources()throws Exception{
+        Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key="pdf_media_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb db=new MessageDb(context,key);
+        File folder=new File(context.getCacheDir(),key);assertTrue(folder.mkdirs());
+        File image=new File(folder,"red.png"),image2=new File(folder,"green.png"),pdf=new File(folder,"visual.pdf");
+        try{
+            for(int i=0;i<2;i++){
+                Bitmap b=Bitmap.createBitmap(320,220,Bitmap.Config.ARGB_8888);b.eraseColor(i==0?android.graphics.Color.RED:android.graphics.Color.GREEN);
+                try(FileOutputStream out=new FileOutputStream(i==0?image:image2)){assertTrue(b.compress(Bitmap.CompressFormat.PNG,100,out));}finally{b.recycle();}
+            }
+            long id=db.stage(db.getWritableDatabase(),"Анна","2026-01-01 12:34","Два фото",null,"");
+            db.stageAttachment(db.getWritableDatabase(),id,"red.png","image");
+            db.stageAttachment(db.getWritableDatabase(),id,"green.png","image");
+            db.stageAttachment(db.getWritableDatabase(),id,"missing.jpg","image");
+            db.publishStaged(db.getWritableDatabase());
+            ConversationPdfExporter.Result result;
+            try(FileOutputStream out=new FileOutputStream(pdf)){result=ConversationPdfExporter.write(db,"QA фото",out,context,new DocumentFolder(context.getContentResolver(),folder),true);}
+            assertEquals(2,result.previews);assertEquals(1,result.missing);assertEquals(1,db.totalMessages());
+            int red=0,green=0;
+            try(ParcelFileDescriptor fd=ParcelFileDescriptor.open(pdf,ParcelFileDescriptor.MODE_READ_ONLY);PdfRenderer renderer=new PdfRenderer(fd)){
+                for(int i=0;i<renderer.getPageCount();i++)try(PdfRenderer.Page page=renderer.openPage(i)){
+                    Bitmap b=Bitmap.createBitmap(page.getWidth(),page.getHeight(),Bitmap.Config.ARGB_8888);
+                    try{page.render(b,null,null,PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+                        for(int y=0;y<b.getHeight();y+=4)for(int x=0;x<b.getWidth();x+=4){
+                            int px=b.getPixel(x,y);int r=android.graphics.Color.red(px),g=android.graphics.Color.green(px),bl=android.graphics.Color.blue(px);
+                            if(r>220&&g<40&&bl<40)red++;if(g>220&&r<40&&bl<40)green++;
+                        }
+                    }finally{b.recycle();}
+                }
+            }
+            assertTrue("Red photo must really render",red>100);assertTrue("Green photo must really render",green>100);
+            assertTrue(image.length()>0&&image2.length()>0);
+        }finally{db.close();context.deleteDatabase("telegram_"+key+".db");image.delete();image2.delete();pdf.delete();folder.delete();}
+    }
     @Test public void emptyConversationStillCreatesPdf() throws Exception {
         Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
         String key="pdf_"+UUID.randomUUID().toString().replace("-","");
