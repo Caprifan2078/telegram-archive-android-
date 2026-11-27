@@ -24,6 +24,8 @@ public final class AnalystBackgroundService extends Service {
         volatile boolean done,success;
         volatile java.util.List<DeepChatContext.Source> sources=Collections.emptyList();
         volatile Map<Long,DualAnalystContext.Link> links=Collections.emptyMap();
+        volatile java.util.List<String> blockNotes=Collections.emptyList();
+        volatile long completedBlocks;
         Job(String k,String a,String b,String q,int model){kind=k;archive=a;compare=b;question=q;this.model=model;}
         boolean matches(String a,String b){return java.util.Objects.equals(a,archive)&&java.util.Objects.equals(b,compare);}
     }
@@ -92,6 +94,9 @@ public final class AnalystBackgroundService extends Service {
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)return;
         try{getSystemService(NotificationManager.class).notify(NOTIFICATION,notification(j));}catch(RuntimeException ignored){}
     }
+    private void updateProgress(Job j,long chars,long total,long blocks){
+        update(j,"Прочитано "+AnalystTextScope.number(chars)+" из "+AnalystTextScope.number(total)+" знаков · блоков "+blocks,total==0?-1:(int)Math.min(99,100d*chars/total));
+    }
     private void check(Job j)throws InterruptedException{
         if(j.cancel.get())throw new InterruptedException();
         if(Build.VERSION.SDK_INT>=29&&!DOWNLOAD.equals(j.kind)){
@@ -124,14 +129,19 @@ public final class AnalystBackgroundService extends Service {
                     }
                 }
                 if(FULL.equals(j.kind)){
-                    if(AnalystModelCatalog.shortContext(j.model))throw new IOException("Short context");
                     Class<?> runtime=Class.forName("org.openarchive.telegram.LocalLlmRuntime");
                     FullChatModelScan.Report report=(FullChatModelScan.Report)runtime.getMethod("generateFull",String.class,String.class,String.class,AtomicBoolean.class,FullChatModelScan.Progress.class)
-                        .invoke(null,model.getAbsolutePath(),db.getAbsolutePath(),j.question,j.cancel,(FullChatModelScan.Progress)(rows,total,blocks)->{
-                            if(Build.VERSION.SDK_INT>=29){PowerManager p=getSystemService(PowerManager.class);if(p!=null&&p.getCurrentThermalStatus()>=PowerManager.THERMAL_STATUS_SEVERE)j.cancel.set(true);}
-                            update(j,"Анализ текста: "+rows+" из "+total,total==0?-1:(int)(100d*rows/total));
+                        .invoke(null,model.getAbsolutePath(),db.getAbsolutePath(),j.question,j.cancel,new FullChatModelScan.Progress(){
+                            public void update(long rows,long total,long blocks){
+                                if(Build.VERSION.SDK_INT>=29){PowerManager p=getSystemService(PowerManager.class);if(p!=null&&p.getCurrentThermalStatus()>=PowerManager.THERMAL_STATUS_SEVERE)j.cancel.set(true);}
+                            }
+                            public void detail(long chars,long total,long blocks,long passes){
+                                updateProgress(j,chars,total,blocks);
+                            }
                         });
-                    j.answer=(report.complete?"Полный проход":"Неполный проход")+" · "+report.rows+" из "+report.total+" сообщений.\nСжатый конспект, возможны пропуски.\n"+report.notes;
+                    j.answer=(report.complete?"Вся переписка прочитана":"Неполный проход")+" · "+AnalystTextScope.number(report.chars)+" из "+AnalystTextScope.number(report.totalChars)+" знаков · "+report.rows+" из "+report.total+" сообщений.\nБлоков: "+report.blocks+" · запросов модели: "+report.passes+"\n\nИтоговый ответ (сжатие может пропускать детали):\n"+report.notes;
+                    j.blockNotes=new java.util.ArrayList<>(report.blockNotes);j.completedBlocks=report.blocks;
+                    if(!report.complete&&!j.cancel.get())throw new IOException("Incomplete full scan");
                     if(report.unverified)j.answer+="\nЧасть выводов требует проверки цитат.";
                     j.sources=report.sources;
                 }else{

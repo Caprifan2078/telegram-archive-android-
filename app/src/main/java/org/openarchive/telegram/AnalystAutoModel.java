@@ -20,6 +20,17 @@ final class AnalystAutoModel {
         if(preferred!=LARGE&&fit.fits(LARGE,AnalystModelCatalog.file(dir,LARGE)))return LARGE;
         return NONE;
     }
+    /** Full passes may use an explicitly permitted weak model regardless of total
+     * archive length: the scanner subdivides the input to its real context budget. */
+    static int chooseForFull(long chars,boolean experimental,AnalystDeviceFit fit,File dir){
+        int candidate=choose(chars,experimental,false,fit,dir);
+        if(candidate!=NONE||!experimental)return candidate;
+        for(boolean installed:new boolean[]{true,false})for(int i:new int[]{MEDIUM,SMALL}){
+            File model=AnalystModelCatalog.file(dir,i);
+            if(fit.fits(i,model)&&(!installed||AnalystModelCatalog.installed(model,i)))return i;
+        }
+        return NONE;
+    }
     static String range(int i){
         if(i==SMALL)return "Небольшие чаты · до 10 000 знаков";
         if(i==MEDIUM)return "Средние чаты · до 100 000 знаков";

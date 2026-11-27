@@ -12,7 +12,7 @@ import java.util.regex.*;
 final class FullChatModelScan {
     static final int BLOCK=1800, PART=800, NOTES=1700;
     interface Generator { String generate(String prompt)throws Exception; }
-    interface Progress {void update(long rows,long total,long blocks);}
+    interface Progress {void update(long rows,long total,long blocks);default void detail(long chars,long totalChars,long blocks,long passes){}}
     interface Sink {void accept(String text)throws Exception;}
     static final class Chunks {
         private final StringBuilder block=new StringBuilder();
@@ -126,7 +126,7 @@ final class FullChatModelScan {
             if(micro.length()==0)return;
             String note=call("Кратко ответь по этим сообщениям.",micro.toString());
             current.add(note);report.chars+=pendingChars;pendingChars=0;micro.setLength(0);
-            progress.update(report.rows,report.total,report.blocks);
+            progress.update(report.rows,report.total,report.blocks);progress.detail(report.chars,report.totalChars,report.blocks,report.passes);
         }
         private void finishBlock()throws Exception{
             if(logicalRows==0)return;
@@ -136,7 +136,7 @@ final class FullChatModelScan {
             report.blocks++;
             if(report.blockNotes.size()<MAX_VISIBLE_NOTES)report.blockNotes.add("Блок "+report.blocks+" · "+logicalChars+" знаков\n"+note);
             current=new Reducer(this);logicalChars=0;logicalRows=0;
-            progress.update(report.rows,report.total,report.blocks);
+            progress.update(report.rows,report.total,report.blocks);progress.detail(report.chars,report.totalChars,report.blocks,report.passes);
         }
         void finish()throws Exception{
             finishBlock();
@@ -159,7 +159,7 @@ final class FullChatModelScan {
                 }
                 if(!cancel.get()){
                     session.finish();r.complete=r.rows==r.total&&r.chars==r.totalChars;
-                    progress.update(r.rows,r.total,r.blocks);
+                    progress.update(r.rows,r.total,r.blocks);progress.detail(r.chars,r.totalChars,r.blocks,r.passes);
                 }
             }catch(InterruptedException cancelled){if(!cancel.get())throw cancelled;}
             if(!r.complete&&r.notes.isEmpty())r.notes="Итог не сформирован. Завершённые блоки доступны отдельно.";

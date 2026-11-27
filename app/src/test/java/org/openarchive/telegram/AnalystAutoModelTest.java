@@ -24,4 +24,10 @@ public class AnalystAutoModelTest {
         assertEquals(-1,AnalystAutoModel.choose(10_000,true,true,small,dir));
         assertEquals(-1,AnalystAutoModel.choose(10_000,true,false,new AnalystDeviceFit(12_000_000_000L,16_000_000_000L,true),dir));
     }
+    @Test public void wholeArchiveCanUseWeakModelWhenExplicitlyAllowed(){
+        AnalystDeviceFit small=new AnalystDeviceFit(2_000_000_000L,4_000_000_000L,false);
+        assertEquals(8,AnalystAutoModel.chooseForFull(2_000_000,true,small,dir));
+        assertEquals(-1,AnalystAutoModel.chooseForFull(2_000_000,false,small,dir));
+        assertEquals(10,AnalystAutoModel.chooseForFull(2_000_000,true,plenty,dir));
+    }
 }

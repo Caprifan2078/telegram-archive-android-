@@ -132,7 +132,9 @@ public final class DeepAnalystActivity extends Activity {
         advancedPanel=new LinearLayout(this);advancedPanel.setOrientation(LinearLayout.VERTICAL);panel.addView(advancedPanel);
         advancedPanel.setVisibility(android.view.View.GONE);
         scan=button("Полный разбор поведения · без ИИ");advancedPanel.addView(scan);
-        full=button("Весь чат нейросетью · медленно");advancedPanel.addView(full);
+        full=button("Весь чат нейросетью · по блокам");
+        panel.addView(full, panel.indexOfChild(backgroundAction));
+        full.setVisibility(compareArchive==null?android.view.View.VISIBLE:android.view.View.GONE);
         if(visionUri==null)advancedPanel.addView(visionAction);
         advanced.setOnClickListener(v->{advancedOpen=!advancedOpen;
             advancedPanel.setVisibility(advancedOpen?android.view.View.VISIBLE:android.view.View.GONE);
@@ -145,7 +147,7 @@ public final class DeepAnalystActivity extends Activity {
         ask.setOnClickListener(v->analyze());
         scan.setOnClickListener(v->scanBehavior());
         full.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Полный проход нейросети?")
-            .setMessage("Модель прочитает текст по блокам. Большой архив может занять часы, нагреть телефон и разрядить аккумулятор. Конспект сжимается, поэтому отдельные детали могут потеряться. Можно запросить отмену генерации; загрузка модели может завершаться не сразу. Для новых и пользовательских моделей каждый блок запускается в чистом движке: медленнее, но без переноса скрытого состояния.")
+            .setMessage("Весь текст будет прочитан блоками по 10 000 знаков. Каждый блок получит свой конспект, затем модель объединит выводы. На слабой модели блок делится на мелкие порции. Это может занять часы. Можно уйти с экрана или отменить задачу. Проверяй выводы по цитатам.")
             .setNegativeButton("Отмена",null).setPositiveButton("Начать",(d,n)->scanWithModel()).show());
         stop.setOnClickListener(v->{taskCancel.set(true);stop.setEnabled(false);status.setText("Отмена запрошена…");});
         download.setOnClickListener(v->{
@@ -206,6 +208,11 @@ public final class DeepAnalystActivity extends Activity {
         automaticChoice=AnalystAutoModel.choose(archiveChars,autoExperimental,deep||relationships||compareArchive!=null||visionUri!=null,deviceFit(),getNoBackupFilesDir());
         if(automaticChoice!=AnalystAutoModel.NONE)setSelectedModel(automaticChoice);
     }
+    private void applyWholeArchiveModel(){
+        if(!autoModel||busy||AnalystBackgroundService.running()||archiveChars<0)return;
+        automaticChoice=AnalystAutoModel.chooseForFull(archiveChars,autoExperimental,deviceFit(),getNoBackupFilesDir());
+        if(automaticChoice!=AnalystAutoModel.NONE)setSelectedModel(automaticChoice);
+    }
     private boolean autoUnavailable(){return autoModel&&archiveChars>=0&&automaticChoice==AnalystAutoModel.NONE;}
     private void showModelPicker(){showModelPicker(3);}
     private void showModelPicker(int mode){
@@ -262,7 +269,7 @@ public final class DeepAnalystActivity extends Activity {
                 long chars=archiveCharacters(archive);
                 if(compareArchive!=null)chars+=archiveCharacters(compareArchive);
                 final long count=chars;
-                runOnUiThread(()->{if(!stopped.get()){archiveChars=count;archiveScope.setText("Текст переписки: "+AnalystTextScope.number(count)+" знаков · медиа отдельно");if(!busy){applyAutomatic(false);refresh();}}});
+                runOnUiThread(()->{if(!stopped.get()){archiveChars=count;archiveScope.setText("Текст переписки: "+AnalystTextScope.number(count)+" знаков · "+AnalystTextScope.number(count==0?0:1+(count-1)/FullChatModelScan.LOGICAL_BLOCK)+" блоков по 10 000 · медиа отдельно");if(!busy){applyAutomatic(false);refresh();}}});
             }catch(Exception ignored){runOnUiThread(()->{if(!stopped.get())archiveScope.setText("Объём текста не определён");});}
         });
     }
@@ -287,7 +294,7 @@ public final class DeepAnalystActivity extends Activity {
         stop.setVisibility(busy?android.view.View.VISIBLE:android.view.View.GONE);
         progress.setVisibility(downloading?android.view.View.VISIBLE:android.view.View.GONE);
         download.setEnabled(runtime&&!busy&&selectedModel<AnalystModelCatalog.CUSTOM&&checkSelfPermission(android.Manifest.permission.INTERNET)==android.content.pm.PackageManager.PERMISSION_GRANTED);
-        scan.setEnabled(!busy);full.setEnabled(runtime&&!busy&&(autoModel||present&&!AnalystModelCatalog.shortContext(selectedModel)));stop.setEnabled(busy);
+        scan.setEnabled(!busy);full.setEnabled(runtime&&!busy&&compareArchive==null&&(autoModel||present));stop.setEnabled(busy);
         if(visionAction!=null){visionAction.setVisibility(runtime?android.view.View.VISIBLE:android.view.View.GONE);visionAction.setEnabled(runtime&&!busy&&!AnalystBackgroundService.running());}
         modelCheck.setVisibility(runtime&&present?android.view.View.VISIBLE:android.view.View.GONE);modelCheck.setEnabled(runtime&&present&&!busy);
         modelOptions.setVisibility(model.exists()?android.view.View.VISIBLE:android.view.View.GONE);
@@ -334,7 +341,7 @@ public final class DeepAnalystActivity extends Activity {
     private void startBackground(String kind,String q){
         if(busy||AnalystBackgroundService.running()){status.setText("Сначала завершите текущую задачу");return;}
         if(AnalystBackgroundService.ANSWER.equals(kind)||AnalystBackgroundService.FULL.equals(kind)){
-            applyAutomatic(AnalystBackgroundService.FULL.equals(kind));refresh();
+            if(AnalystBackgroundService.FULL.equals(kind))applyWholeArchiveModel();else applyAutomatic(false);refresh();
             if(!canStartModel()){status.setText("Нужна подходящая установленная модель");return;}
         }
         if(!AnalystBackgroundService.start(this,kind,archive,compareArchive,q,selectedModel)){
@@ -357,7 +364,7 @@ public final class DeepAnalystActivity extends Activity {
         labels.add("Найти сообщения");kinds.add(AnalystBackgroundService.SEARCH);
         if(runtimeAvailable()&&AnalystModelCatalog.installed(model,selectedModel)){
             labels.add("Ответить нейросетью");kinds.add(AnalystBackgroundService.ANSWER);
-            if(compareArchive==null&&!AnalystModelCatalog.shortContext(selectedModel)){labels.add("Прочитать весь чат по частям");kinds.add(AnalystBackgroundService.FULL);}
+            if(compareArchive==null){labels.add("Прочитать весь чат по частям");kinds.add(AnalystBackgroundService.FULL);}
         }
         new FontDialog.Builder(this).setTitle("Работать в фоне").setItems(labels.toArray(new String[0]),(d,i)->startBackground(kinds.get(i),q)).setNegativeButton("Отмена",null).show();
     }
@@ -378,11 +385,25 @@ public final class DeepAnalystActivity extends Activity {
         if(!j.matches(archive,compareArchive))return;
         results.removeAllViews();results.addView(text("Фоновая задача · "+j.status,18));
         results.addView(text(j.answer,15));
+        if(!j.blockNotes.isEmpty()){
+            Button blocks=button("Выводы по блокам · "+j.blockNotes.size());results.addView(blocks);
+            blocks.setOnClickListener(v->showBlockNotes(j,0));
+        }
         for(DeepChatContext.Source src:j.sources){
             Button source=button(src.author+" · "+src.date+"\n"+src.body);source.setAllCaps(false);results.addView(source);
             source.setOnClickListener(v->{DualAnalystContext.Link link=j.links.get(src.id);setResult(RESULT_OK,new Intent().putExtra("archive",link==null?archive:link.archive).putExtra("message",link==null?src.id:link.messageId));finish();});
         }
         revealResults();
+    }
+    private void showBlockNotes(AnalystBackgroundService.Job j,int start){
+        ScrollView scroll=new ScrollView(this);LinearLayout body=new LinearLayout(this);body.setOrientation(LinearLayout.VERTICAL);body.setPadding(dp(12),dp(8),dp(12),dp(8));scroll.addView(body);
+        int end=Math.min(start+20,j.blockNotes.size());
+        for(int i=start;i<end;i++){TextView note=text(j.blockNotes.get(i),14);note.setTextIsSelectable(true);body.addView(note);}
+        if(j.completedBlocks>j.blockNotes.size())body.addView(text("Показаны первые "+j.blockNotes.size()+" конспектов; остальные учтены в итоговом объединении.",12));
+        FontDialog.Builder dialog=new FontDialog.Builder(this);dialog.setTitle("Конспекты "+(start+1)+"–"+end+" из "+j.completedBlocks).setView(scroll).setPositiveButton("Закрыть",null);
+        if(end<j.blockNotes.size())dialog.setNeutralButton("Далее",(d,n)->showBlockNotes(j,end));
+        if(start>0)dialog.setNegativeButton("Назад",(d,n)->showBlockNotes(j,Math.max(0,start-20)));
+        dialog.show();
     }
     private void scanBehavior(){
         if(busy||AnalystBackgroundService.running())return;busy("Сканирую всю переписку…");results.removeAllViews();
@@ -525,44 +546,10 @@ public final class DeepAnalystActivity extends Activity {
         });
     }
     private void scanWithModel(){
-        applyAutomatic(true);refresh();
-        if(!canStartModel()){status.setText("Для полного анализа нужна подходящая установленная модель. Можно выбрать её в каталоге.");return;}
-        if(!MODEL_BUSY.compareAndSet(false,true)){status.setText("Предыдущий запрос ещё завершается.");return;}
-        String input=question.getText().toString().trim();
-        final String q=input.isEmpty()?"Разбери поведение обоих участников, конфликты, поддержку и изменения общения.":input;
-        busy("Запускаю полный проход модели…");results.removeAllViews();
-        worker.execute(()->{
-            try{
-                verifyModelForRun();
-                FullChatModelScan.Progress progress=(rows,total,blocks)->runOnUiThread(()->{
-                    if(!stopped.get()&&!taskCancel.get()){
-                        if(android.os.Build.VERSION.SDK_INT>=29){
-                            android.os.PowerManager power=(android.os.PowerManager)getSystemService(POWER_SERVICE);
-                            if(power!=null&&power.getCurrentThermalStatus()>=android.os.PowerManager.THERMAL_STATUS_SEVERE){
-                                taskCancel.set(true);status.setText("Проход остановлен из-за перегрева.");return;
-                            }
-                        }
-                        status.setText("Прочитано строк "+rows+" из "+total+" · обработано блоков "+blocks);
-                    }
-                });
-                FullChatModelScan.Report report=(FullChatModelScan.Report)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
-                    .getMethod("generateFull",String.class,String.class,String.class,AtomicBoolean.class,FullChatModelScan.Progress.class)
-                    .invoke(null,model.getAbsolutePath(),getDatabasePath(DeepChatContext.dbName(archive)).getAbsolutePath(),q,taskCancel,progress);
-                runOnUiThread(()->{
-                    if(stopped.get())return;busy=false;refresh();
-                    results.addView(text(report.complete?"Полный проход по текстовым строкам":"Незавершённый проход",18));
-                    results.addView(text("Строк прочитано: "+report.rows+" из "+report.total+" · завершено блоков: "+report.blocks,13));
-                    results.addView(text("Сжатый конспект модели. Может пропускать детали; не является доказательством всех выводов.",13));
-                    results.addView(text(report.notes.isEmpty()?"Конспект не сформирован.":report.notes,15));
-                    if(report.unverified)results.addView(text("Часть выводов не имеет надёжной ссылки. Проверь цитаты.",14));
-                    for(DeepChatContext.Source src:report.sources){
-                        Button source=button("[#"+src.id+"] "+src.author+" · "+src.date+"\n"+src.body);results.addView(source);
-                        source.setOnClickListener(v->{setResult(RESULT_OK,new Intent().putExtra("archive",archive).putExtra("message",src.id));finish();});
-                    }
-                });
-            }catch(Exception|LinkageError error){runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();status.setText(modelFailure(error,"Модель не завершила проход. Проверь память и совместимость."));});}
-            finally{MODEL_BUSY.set(false);}
-        });
+        if(compareArchive!=null)return;
+        String q=question.getText().toString().trim();
+        if(q.isEmpty())q="Кратко разбери события, взаимную поддержку, конфликты и изменения общения.";
+        startBackground(AnalystBackgroundService.FULL,q);
     }
     /** Useful evidence retrieval even on lightweight builds or phones without downloaded weights. */
     private String replyTiming(long count,long seconds,long[] buckets){
