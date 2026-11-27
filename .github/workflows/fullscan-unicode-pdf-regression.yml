@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   regression:
-    if: ${{ github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || (github.head_ref == 'qa/fullscan-unicode-regression-20261127' || github.head_ref == 'qa/fullscan-evidence-retention-20261127')) }}
+    if: ${{ github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || (github.head_ref == 'qa/fullscan-unicode-regression-20261127' || github.head_ref == 'qa/fullscan-evidence-retention-20261127' || github.head_ref == 'qa/pdf-photo-orientation-20261127')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -42,7 +42,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-boot-timeout: 420
-          script: gradle --no-daemon --max-workers=2 connectedProtectedArchiveQaAndroidTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true -Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.FullChatModelScanIntegrationTest,org.openarchive.telegram.ConversationPdfExporterTest
+          script: gradle --no-daemon --max-workers=2 connectedProtectedArchiveQaAndroidTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true -Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.FullChatModelScanIntegrationTest,org.openarchive.telegram.ConversationPdfExporterTest,org.openarchive.telegram.MediaVisionInputTest
       - name: Preserve test reports only
         if: always()
         uses: actions/upload-artifact@v4
