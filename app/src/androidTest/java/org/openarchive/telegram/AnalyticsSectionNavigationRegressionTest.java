@@ -125,7 +125,7 @@ public final class AnalyticsSectionNavigationRegressionTest {
                 assertNotNull("Analyst entry missing",entry);entry.performClick();
             });
             try{
-                assertNotNull(device.wait(androidx.test.uiautomator.Until.findObject(androidx.test.uiautomator.By.text("Аналитик переписки")),10000));
+                AnalyticsUiProbe.require(device,androidx.test.uiautomator.By.text("Аналитик переписки"),"Analyst dialog title must be visible");
                 androidx.test.uiautomator.UiObject2 preset=device.wait(androidx.test.uiautomator.Until.findObject(
                     androidx.test.uiautomator.By.desc("Готовый вопрос: Кто первый написал?")),10000);
                 assertNotNull("Ready-made question missing",preset);preset.click();

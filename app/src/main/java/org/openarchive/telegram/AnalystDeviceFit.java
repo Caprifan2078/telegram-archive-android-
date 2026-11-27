@@ -28,6 +28,6 @@ final class AnalystDeviceFit {
     String label(int index,File file){
         long need=required(index,file);
         if(need==Long.MAX_VALUE)return "Нужен файл для оценки";
-        return String.format(Locale.ROOT,"%s · оценка от %.1f ГБ",fits(index,file)?"По памяти подходит":"Сейчас не рекомендуется",need/1e9);
+        return String.format(Locale.forLanguageTag("ru-RU"),"%s · нужно около %.1f ГБ свободной ОЗУ",fits(index,file)?"По памяти подходит":"Не хватает памяти",need/1e9);
     }
 }

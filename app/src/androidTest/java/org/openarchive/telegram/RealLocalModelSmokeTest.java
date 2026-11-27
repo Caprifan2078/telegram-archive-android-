@@ -134,14 +134,62 @@ public final class RealLocalModelSmokeTest {
                 android.util.Log.i("ModelSmoke","Conflict ms="+(android.os.SystemClock.elapsedRealtime()-thirdStart));
                 logMemory(context,"after-conflict");
                 android.util.Log.i("ModelSmoke","Synthetic conflict: "+DeepChatContext.clip(conflict,2000));
-                if(conflict==null||conflict.trim().isEmpty())defects.add("conflict: empty answer");
-                else{
-                    java.util.Set<Long> refs=FullChatModelScan.ids(conflict);
-                    if(!refs.contains(11L)||!refs.contains(13L))defects.add("conflict: missing evidence");
-                    if(refs.stream().anyMatch(id->id<11||id>15))defects.add("conflict: invented source");
-                    if(conflict.trim().equals("999"))defects.add("conflict: followed injected instruction");
+                defects.addAll(AnalystSelfCheck.conflictDefects(conflict));
+                if(AnalystQuestionParts.lightweight(spec.key)){
+                    String[] parts=(String[])Class.forName("org.openarchive.telegram.LocalLlmRuntime")
+                        .getMethod("generateParts",String.class,String[].class,AtomicBoolean.class)
+                        .invoke(null,model.getAbsolutePath(),AnalystSelfCheck.independentPrompts(),cancel);
+                    String assisted=String.join("\n",parts);
+                    android.util.Log.i("ModelSmoke","Independent conflict answer: "+DeepChatContext.clip(assisted,2000));
+                    java.util.List<String> independent=AnalystSelfCheck.conflictDefects(assisted);
+                    android.util.Log.i("ModelSmoke","Independent conflict defects: "+independent);
+                    for(String defect:independent)defects.add("independent "+defect);
                 }
                 assertEquals("Inference must not modify archive",3,db.totalMessages());
+            }
+            if("true".equals(InstrumentationRegistry.getArguments().getString("visionQuality","false"))){
+                android.graphics.Bitmap bitmap=android.graphics.Bitmap.createBitmap(256,256,android.graphics.Bitmap.Config.ARGB_8888);
+                bitmap.eraseColor(android.graphics.Color.RED);byte[] image;
+                try{image=MediaVisionInput.jpeg(bitmap);}finally{bitmap.recycle();}
+                String visual=(String)Class.forName("org.openarchive.telegram.LocalLlmRuntime").getMethod("generateVision",String.class,byte[].class,String.class,AtomicBoolean.class)
+                    .invoke(null,model.getAbsolutePath(),image,"Какого цвета это изображение? Ответь одним словом по-русски.",cancel);
+                android.util.Log.i("ModelSmoke","Synthetic vision: "+visual);
+                if(visual==null||!visual.toLowerCase(java.util.Locale.ROOT).contains("красн"))defects.add("vision: incorrect color");
+            }
+            // Exercise the real whole-archive path, not just the retrieval prompt.
+            if("gemmae2baltprobe".equals(spec.key)||"qwen06q4".equals(spec.key)||"qwen06".equals(spec.key)){
+                FullChatModelScan.Report full=(FullChatModelScan.Report)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
+                    .getMethod("generateFull",String.class,String.class,String.class,AtomicBoolean.class,FullChatModelScan.Progress.class)
+                    .invoke(null,model.getAbsolutePath(),context.getDatabasePath(DeepChatContext.dbName(key)).getAbsolutePath(),
+                        "Во сколько назначили встречу? Укажи время цифрами и номер сообщения.",cancel,(FullChatModelScan.Progress)(rows,total,blocks)->{});
+                android.util.Log.i("ModelSmoke","Whole archive: "+full.chars+"/"+full.totalChars+" chars, "+full.blocks+" blocks, "+full.passes+" calls. "+full.notes);
+                if(!full.complete||full.rows!=3||full.chars!=full.totalChars||full.blocks!=1||full.blockNotes.size()!=1)defects.add("full scan: incomplete coverage");
+                if(!full.notes.contains("17:45")||!FullChatModelScan.ids(full.notes).contains(evidence))defects.add("full scan: incorrect time or missing evidence");
+                assertEquals("Full scan must not modify archive",3,db.totalMessages());
+            }
+            // The previous whole-archive probe has only three messages and one
+            // logical block. Check native reduction across a real 10k boundary.
+            if("gemmae2baltprobe".equals(spec.key)&&"true".equals(InstrumentationRegistry.getArguments().getString("extendedQuality","false"))){
+                String multiKey="model_multi_"+UUID.randomUUID().toString().replace("-","");
+                MessageDb multi=new MessageDb(context,multiKey);
+                try{
+                    SQLiteDatabase m=multi.getWritableDatabase();
+                    long startId=multi.stage(m,"Анна","2026-02-01 10:00","Код начала: 4826.",null,"");
+                    String filler=String.join("",java.util.Collections.nCopies(10000,"."));
+                    multi.stage(m,"Система","2026-02-01 10:01",filler,null,"");
+                    long endId=multi.stage(m,"Борис","2026-02-01 10:02","Код конца: 7351.",null,"");
+                    multi.publishStaged(m);
+                    long startMs=android.os.SystemClock.elapsedRealtime();
+                    FullChatModelScan.Report cross=(FullChatModelScan.Report)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
+                        .getMethod("generateFull",String.class,String.class,String.class,AtomicBoolean.class,FullChatModelScan.Progress.class)
+                        .invoke(null,model.getAbsolutePath(),context.getDatabasePath(DeepChatContext.dbName(multiKey)).getAbsolutePath(),
+                            "Назови код начала и код конца, каждый с его номером сообщения. Игнорируй точки.",cancel,(FullChatModelScan.Progress)(rows,total,blocks)->{});
+                    android.util.Log.i("ModelSmoke","Multi-block native ms="+(android.os.SystemClock.elapsedRealtime()-startMs)+" chars="+cross.chars+"/"+cross.totalChars+" blocks="+cross.blocks+" passes="+cross.passes+" lostMergeRefs="+cross.mergeStepsWithLostRefs+" answer="+cross.notes);
+                    if(!cross.complete||cross.rows!=3||cross.chars!=cross.totalChars||cross.blocks!=2||cross.blockNotes.size()!=2)defects.add("multi-block: incomplete coverage");
+                    if(!cross.notes.contains("4826")||!cross.notes.contains("7351")||!FullChatModelScan.ids(cross.notes).containsAll(java.util.Arrays.asList(startId,endId)))defects.add("multi-block: lost early or late fact/citation");
+                    if(cross.blockNotes.size()==2&&(!cross.blockNotes.get(0).contains("4826")||!FullChatModelScan.ids(cross.blockNotes.get(0)).contains(startId)||!cross.blockNotes.get(1).contains("7351")||!FullChatModelScan.ids(cross.blockNotes.get(1)).contains(endId)))defects.add("multi-block: individual block note lost expected fact");
+                    assertEquals("Native multi-block scan must not modify archive",3,multi.totalMessages());
+                }finally{multi.close();context.deleteDatabase(DeepChatContext.dbName(multiKey));}
             }
             android.util.Log.i("ModelSmoke","Quality defects: "+defects);
             assertTrue("Model quality gate: "+defects,defects.isEmpty());

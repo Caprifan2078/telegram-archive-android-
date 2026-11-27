@@ -123,6 +123,7 @@ public class MainActivity extends Activity {
     private String pendingMessageText;
     private static final int SAVE_CONVERSATION_PDF_REQUEST=118;
     private String pendingPdfKey,pendingPdfName;
+    private boolean pendingPdfMedia=true;
     private final LinkedHashMap<Long,MessageDb.Attachment> mediaSelection=new LinkedHashMap<>();
     private boolean multiSelectMedia=false;
     private String selectedMediaArchive="";
@@ -220,7 +221,7 @@ public class MainActivity extends Activity {
         }
         loadAppearance();
         if(state!=null){
-            pendingPdfKey=state.getString("ta_pending_pdf_key");pendingPdfName=state.getString("ta_pending_pdf_name");
+            pendingPdfKey=state.getString("ta_pending_pdf_key");pendingPdfName=state.getString("ta_pending_pdf_name");pendingPdfMedia=state.getBoolean("ta_pending_pdf_media",true);
             home=state.getBoolean("ta_home",true);screen=state.getString("ta_screen","chat");
             savedFavoritesOnly=state.getBoolean("ta_saved_favorites",false);noteDraft=state.getString("ta_note_draft","");
             if("help".equals(screen)){
@@ -286,7 +287,7 @@ public class MainActivity extends Activity {
         showPage();
     }
     @Override protected void onSaveInstanceState(Bundle state){
-        state.putString("ta_pending_pdf_key",pendingPdfKey);state.putString("ta_pending_pdf_name",pendingPdfName);
+        state.putString("ta_pending_pdf_key",pendingPdfKey);state.putString("ta_pending_pdf_name",pendingPdfName);state.putBoolean("ta_pending_pdf_media",pendingPdfMedia);
         if("help".equals(screen)){
             state.putBoolean("ta_help_return_home",helpReturnHome);state.putString("ta_help_return_screen",helpReturnScreen);
             state.putInt("ta_help_category",helpCategory);state.putInt("ta_help_shelf",helpShelf);state.putInt("ta_help_chapter",helpChapter);
@@ -947,7 +948,7 @@ public class MainActivity extends Activity {
         pane.setPadding(px(14),px(13),px(14),px(12));
         // This panel touches the display edge: rounded top corners exposed the
         // dark dialog scrim behind Android's status bar as a black notch.
-        pane.setBackgroundColor(themeIndex==2?0xfff5f7fb:PANEL);pane.setElevation(px(12));
+        pane.setBackgroundColor(BG);pane.setElevation(px(8));
         int width=Math.min(px(348),getResources().getDisplayMetrics().widthPixels-px(38));
         FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(width,-1,Gravity.START);
         overlay.addView(pane,lp);
@@ -1054,7 +1055,7 @@ public class MainActivity extends Activity {
         LinearLayout group=column();parent.addView(group,p(-1,-2));
         TextView title=text((opened?"⌄  ":"›  ")+name,13,ACCENT);
         title.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
-        title.setPadding(px(12),px(15),px(8),px(15));title.setMinHeight(px(48));
+        title.setPadding(px(12),px(10),px(8),px(10));title.setMinHeight(px(44));
         title.setContentDescription((opened?"Свернуть ":"Развернуть ")+name);
         title.setBackground(shape(Color.TRANSPARENT,9));
         group.addView(title,p(-1,-2));
@@ -1084,7 +1085,7 @@ public class MainActivity extends Activity {
                               String heading,String detail,Runnable action){
         int split=heading.indexOf("  ");
         String label=split>=0?heading.substring(split+2).trim():heading;
-        LinearLayout item=row();item.setPadding(px(11),px(10),px(9),px(10));item.setMinimumHeight(px(56));
+        LinearLayout item=row();item.setPadding(px(10),px(7),px(9),px(7));item.setMinimumHeight(px(48));
         item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x265aaad8),
             shape(Color.TRANSPARENT,10),null));
         LinearLayout.LayoutParams params=p(-1,-2);params.bottomMargin=px(2);parent.addView(item,params);
@@ -2562,7 +2563,8 @@ public class MainActivity extends Activity {
         if(archives.length()>0){JSONObject o=archives.optJSONObject(0);activeKey=o.optString("key","default");activeName=o.optString("name","Архив");}
     }
     private void saveRegistry(){getPreferences(MODE_PRIVATE).edit().putString("archive_registry",archives.toString()).putString("active_archive",activeKey).apply();}
-    private String activeTree(){for(int i=0;i<archives.length();i++){JSONObject o=archives.optJSONObject(i);if(o!=null&&activeKey.equals(o.optString("key")))return o.optString("tree",null);}return null;}
+    private String activeTree(){return treeForArchive(activeKey);}
+    private String treeForArchive(String key){for(int i=0;i<archives.length();i++){JSONObject o=archives.optJSONObject(i);if(o!=null&&key.equals(o.optString("key")))return o.optString("tree",null);}return null;}
     private void registerArchive(String name,String tree){
         try{JSONObject o=new JSONObject();String key=UUID.randomUUID().toString().replace("-","");o.put("key",key);o.put("name",name);o.put("tree",tree);archives.put(o);activateArchive(key);}catch(Exception e){toast("Ошибка добавления чата");}
     }
@@ -2692,16 +2694,15 @@ public class MainActivity extends Activity {
         }
         dialog.show();
     }
-        private void chooseConversationPdf(){
+    private void chooseConversationPdf(){
         new FontDialog.Builder(this).setTitle("Сохранить переписку в PDF")
-            .setMessage("В PDF войдут текст, авторы и даты всех сообщений. Вложения будут обозначены текстом, без самих файлов. Для одного файла — до "+ConversationPdfExporter.MAX_PAGES+" страниц; доступная память телефона может ограничить экспорт.")
-            .setNegativeButton("Отмена",null).setPositiveButton("Выбрать файл",(dialog,which)->{
-                pendingPdfKey=activeKey;pendingPdfName=activeName;
+            .setItems(new String[]{"С фото и кадрами видео","Только текст · меньший файл"},(dialog,which)->{
+                pendingPdfKey=activeKey;pendingPdfName=activeName;pendingPdfMedia=which==0;
                 Intent picker=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/pdf");
                 picker.putExtra(Intent.EXTRA_TITLE,"Telegram Archive.pdf");
                 try{startActivityForResult(picker,SAVE_CONVERSATION_PDF_REQUEST);}
                 catch(Exception error){pendingPdfKey=null;pendingPdfName=null;toast("Не удалось открыть выбор файла");}
-            }).show();
+            }).setNegativeButton("Отмена",null).show();
     }
     /** Compact Telegram-like pinned preview: tap the message to jump, arrow to switch, cross to unpin. */
     private void renderPinnedBar(){
@@ -3275,16 +3276,18 @@ public class MainActivity extends Activity {
         if(request==SAVE_CONVERSATION_PDF_REQUEST){
             final String key=pendingPdfKey,name=pendingPdfName;pendingPdfKey=null;pendingPdfName=null;
             if(result==RESULT_OK&&data!=null&&data.getData()!=null&&key!=null){
-                final Uri destination=data.getData();
+                final Uri destination=data.getData();final boolean includeMedia=pendingPdfMedia;final String tree=treeForArchive(key);
                 showPdfStatus(key,"Создаю PDF переписки…");
                 worker.execute(()->{
                     MessageDb source=new MessageDb(getApplicationContext(),key);
                     java.io.File temporary=null;
                     try{
                         temporary=java.io.File.createTempFile("conversation_pdf_",".tmp",getCacheDir());
-                        int pages;
+                        DocumentFolder pdfFolder=null;
+                        if(tree!=null&&!tree.isEmpty())try{pdfFolder=tree.startsWith("local:")?new DocumentFolder(getContentResolver(),new java.io.File(tree.substring(6))):new DocumentFolder(getContentResolver(),Uri.parse(tree));}catch(Exception ignored){}
+                        ConversationPdfExporter.Result report;
                         try(OutputStream out=new java.io.FileOutputStream(temporary)){
-                            pages=ConversationPdfExporter.write(source,name,out);
+                            report=ConversationPdfExporter.write(source,name,out,getApplicationContext(),pdfFolder,includeMedia);
                         }
                         try(InputStream in=new java.io.FileInputStream(temporary);
                             OutputStream out=getContentResolver().openOutputStream(destination,"w")){
@@ -3293,7 +3296,7 @@ public class MainActivity extends Activity {
                             while((n=in.read(buffer))!=-1)out.write(buffer,0,n);
                             out.flush();
                         }
-                        runOnUiThread(()->{if(!isDestroyed()&&!isFinishing()){showPdfStatus(key,"PDF сохранён · страниц: "+pages);toast("PDF сохранён");}});
+                        runOnUiThread(()->{if(!isDestroyed()&&!isFinishing()){showPdfStatus(key,"PDF сохранён · страниц: "+report.pages+" · превью: "+report.previews+(report.missing>0?" · недоступно: "+report.missing:""));toast("PDF сохранён"+(report.missing>0?" · не все превью доступны":""));}});
                     }catch(Exception error){
                         // A document provider may return an existing document: never delete it on failure.
                         runOnUiThread(()->{if(!isDestroyed()&&!isFinishing()){showPdfStatus(key,"Не удалось сохранить PDF; проверь выбранный файл");toast("Ошибка PDF: "+error.getMessage());}});
@@ -3883,7 +3886,7 @@ public class MainActivity extends Activity {
             shape(0xffffffff,11)));
         chip.setContentDescription("Раздел анализа: "+label);
         chip.setSelected(selected);
-        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,px(48),1f);
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,px(40),1f);
         params.setMargins(px(2),px(2),px(2),px(2));
         row.addView(chip,params);
         chip.setOnClickListener(v->selectAnalyticsSection(section));
@@ -3910,8 +3913,11 @@ public class MainActivity extends Activity {
         Button ask=btn("Спросить");panel.addView(ask,p(-1,48));
         LinearLayout result=column();panel.addView(result,p(-1,-2));
         analyticsText(result,"Задай свой вопрос или выбери готовый ниже.",SUB,13);
-        Button suggestions=btn("Готовые вопросы  ▾");panel.addView(suggestions,p(-1,44));
-        LinearLayout categories=column();panel.addView(categories,p(-1,-2));
+        final String quickQuestion=ChatQuestionAnalyst.PRESETS[0][1];
+        Button quick=btn(quickQuestion);quick.setContentDescription("Готовый вопрос: "+quickQuestion);panel.addView(quick,p(-1,48));
+        quick.setOnClickListener(v->{if(ask.isEnabled()){question.setText(quickQuestion);ask.performClick();}});
+        Button suggestions=btn("Готовые вопросы  ›");panel.addView(suggestions,p(-1,44));
+        LinearLayout categories=column();categories.setVisibility(View.GONE);panel.addView(categories,p(-1,-2));
         int[] colors=themeIndex==2?new int[]{0xffdce9ff,0xffd9f0e5,0xffffe9cf,0xffebdfff}:
             new int[]{0xff253c60,0xff244c40,0xff51402b,0xff49365d};
         for(int i=0;i<ChatQuestionAnalyst.PRESETS.length;i++){
@@ -3922,6 +3928,7 @@ public class MainActivity extends Activity {
             TextView heading=text(group[0],15,FG);heading.setTypeface(null,Typeface.BOLD);card.addView(heading,p(-1,-2));
             for(int j=1;j<group.length;j++){
                 final String preset=group[j];
+                if(preset.equals(quickQuestion))continue;
                 TextView chip=text(preset,14,FG);chip.setPadding(px(8),px(10),px(8),px(10));
                 chip.setMinHeight(px(44));chip.setGravity(Gravity.CENTER_VERTICAL);
                 chip.setBackground(ViewerUi.control(this,colors[i%colors.length],ViewerUi.CONTROL,themeIndex==2));
@@ -3936,8 +3943,10 @@ public class MainActivity extends Activity {
         }
         suggestions.setOnClickListener(v->{boolean open=categories.getVisibility()!=View.VISIBLE;
             categories.setVisibility(open?View.VISIBLE:View.GONE);suggestions.setText(open?"Готовые вопросы  ▾":"Готовые вопросы  ›");});
-        ScrollView viewport=new ScrollView(this);viewport.addView(panel);
-        AlertDialog dialog=new FontDialog.Builder(this).setTitle("Аналитик переписки")
+        ScrollView viewport=new ScrollView(this);viewport.setFocusableInTouchMode(true);viewport.addView(panel);
+        TextView heading=text("Аналитик переписки",20,FG);heading.setPadding(px(20),px(16),px(16),px(6));
+        heading.setTypeface(null,Typeface.BOLD);if(android.os.Build.VERSION.SDK_INT>=28)heading.setAccessibilityHeading(true);
+        AlertDialog dialog=new FontDialog.Builder(this).setCustomTitle(heading)
             .setView(viewport).setNegativeButton("Закрыть",null).create();
         dialog.setOnDismissListener(d->cancelled.set(true));
         Button deepModel=btn("Глубокий анализ · локальный ИИ");panel.addView(deepModel,p(-1,48));
@@ -3964,6 +3973,7 @@ public class MainActivity extends Activity {
                     runOnUiThread(()->{
                         if(answer==null||cancelled.get()||!dialog.isShowing()||!sameScreenRequest(source,archive,token))return;
                         ask.setEnabled(true);result.removeAllViews();analyticsText(result,answer.text,FG,15);
+                        viewport.post(()->viewport.scrollTo(0,0));
                         for(ChatQuestionAnalyst.Evidence evidence:answer.sources){
                             TextView link=text(evidence.author+" · "+evidence.date+"\n"+evidence.excerpt+"\nОткрыть сообщение ›",13,FG);
                             link.setPadding(px(10),px(8),px(10),px(8));
@@ -3983,7 +3993,7 @@ public class MainActivity extends Activity {
         });
         dialog.show();
         if(dialog.getWindow()!=null)dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN|android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-        viewport.setFocusableInTouchMode(true);viewport.requestFocus();
+        viewport.requestFocus();viewport.post(()->viewport.scrollTo(0,0));
     }
 
     private void renderAnalytics(ChatAnalytics.Snapshot r){
@@ -3992,7 +4002,7 @@ public class MainActivity extends Activity {
         LinearLayout navigation=row();
         navigation.setGravity(Gravity.CENTER_VERTICAL);
         navigation.setPadding(px(4),px(2),px(4),px(2));
-        list.addView(navigation,p(-1,56));
+        list.addView(navigation,p(-1,48));
         analyticsNavChip(navigation,"Обзор","overview");
         analyticsNavChip(navigation,"Графики","trends");
         analyticsNavChip(navigation,"Ритм","rhythm");
@@ -4354,6 +4364,7 @@ public class MainActivity extends Activity {
     private void analyticsBarChart(LinearLayout parent,List<String> labels,List<String> details,long[] values,int widthDp,int heightDp){
         if(values.length==0){analyticsText(parent,"Нет данных за этот период",SUB,14);return;}
         long max=0;for(long value:values)max=Math.max(max,value);
+        if(values.length>=2&&values.length<=31){renderActivityColumns(parent,labels,details,values,max);return;}
         analyticsText(parent,"Сообщения · шкала 0–"+max,SUB,12);
         for(int i=0;i<values.length;i++){
             final long count=values[i];final String detail=details.get(i);
@@ -4365,6 +4376,26 @@ public class MainActivity extends Activity {
             View bar=new View(this);bar.setBackground(shape(ACCENT,4));
             track.addView(bar,new FrameLayout.LayoutParams(-1,-1));bar.setPivotX(0f);
             bar.setScaleX(max==0?0f:count/(float)max);
+        }
+    }
+    private void renderActivityColumns(LinearLayout parent,List<String> labels,List<String> details,long[] values,long max){
+        analyticsText(parent,"Сообщения · максимум "+max,SUB,12);
+        HorizontalScrollView viewport=new HorizontalScrollView(this);viewport.setHorizontalScrollBarEnabled(values.length>6);
+        LinearLayout columns=row();columns.setGravity(Gravity.BOTTOM);viewport.setFillViewport(true);viewport.addView(columns,new FrameLayout.LayoutParams(-2,-2));
+        parent.addView(viewport,p(-1,-2));
+        int cellWidth=values.length<=4?Math.max(56,Math.min(136,(Math.round(getResources().getDisplayMetrics().widthPixels/getResources().getDisplayMetrics().density)-68)/values.length)):62;
+        for(int i=0;i<values.length;i++){
+            final long count=values[i];final String detail=details.get(i);
+            LinearLayout cell=column();cell.setGravity(Gravity.CENTER_HORIZONTAL);cell.setPadding(px(3),px(3),px(3),px(3));
+            columns.addView(cell,p(cellWidth,-2));
+            TextView countText=text(analyticsShortCount(count),11,FG);countText.setGravity(Gravity.CENTER);cell.addView(countText,p(-1,22));
+            FrameLayout track=new FrameLayout(this);track.setBackground(shape(ViewerUi.mix(PANEL,CHIP,60),6));cell.addView(track,p(24,104));
+            View fill=new View(this);fill.setBackground(shape(ACCENT,6));
+            int height=count==0?0:Math.max(2,(int)Math.round(104d*count/Math.max(1,max)));
+            track.addView(fill,new FrameLayout.LayoutParams(-1,px(height),Gravity.BOTTOM));
+            TextView label=text(labels.get(i),11,SUB);label.setGravity(Gravity.CENTER);label.setMaxLines(2);cell.addView(label,p(-1,34));
+            cell.setContentDescription(detail+": "+count+" сообщений");cell.setFocusable(true);
+            cell.setOnClickListener(v->toast(detail+" · "+count+" сообщений"));
         }
     }
     /** Render large amounts compactly; tapping still reveals the exact amount. */
@@ -4574,9 +4605,9 @@ public class MainActivity extends Activity {
     }
     private LinearLayout analyticsCard(String caption){return analyticsCard(caption,list);}
     private LinearLayout analyticsCard(String caption,LinearLayout destination){
-        LinearLayout card=column();card.setPadding(px(14),px(13),px(14),px(15));
-        card.setBackground(ViewerUi.surface(this,PANEL,ViewerUi.CARD,themeIndex==2,false));
-        LinearLayout.LayoutParams lp=p(-1,-2);lp.setMargins(px(5),px(5),px(5),px(11));
+        LinearLayout card=column();card.setPadding(px(10),px(9),px(10),px(10));
+        card.setBackground(shape(PANEL,12));
+        LinearLayout.LayoutParams lp=p(-1,-2);lp.setMargins(px(3),px(4),px(3),px(7));
         destination.addView(card,lp);
         TextView title=text(caption,16,FG);
         title.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
@@ -5094,9 +5125,15 @@ public class MainActivity extends Activity {
             ()->{comparisonFromHome=false;chooseDualChat("dual_compare");});
         historyDestination(advanced,"Паузы между сообщениями","Длительные промежутки без сообщений.",this::showConversationPauses);
         TextView explain=secondaryDisclosure("Как работают инструменты  ›");advanced.addView(explain,p(-1,48));
-        explain.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Инструменты истории")
-             .setMessage(RelationshipFeatureGuide.INTRO+"\n\nСобытие — отметка на одном сообщении. Этап — между двумя сообщениями. Период — любые даты.\n\n"+RelationshipFeatureGuide.STAGES+"\n\n"+RelationshipFeatureGuide.ECHO+"\n\n"+RelationshipFeatureGuide.COMPARE+"\n\n"+RelationshipFeatureGuide.MEMORIES+"\n\n"+RelationshipFeatureGuide.CALENDARS+"\n\nПаузы не доказывают потерю сообщений.")
-            .setPositiveButton("Понятно",null).show());
+        explain.setOnClickListener(v->{
+            LinearLayout guide=column();guide.setPadding(px(16),px(8),px(16),px(12));
+            analyticsText(guide,RelationshipFeatureGuide.INTRO,FG,14);
+            analyticsText(guide,"Событие — отметка на одном сообщении. Этап — между двумя сообщениями. Период — любые даты.",FG,14);
+            for(String paragraph:new String[]{RelationshipFeatureGuide.STAGES,RelationshipFeatureGuide.ECHO,RelationshipFeatureGuide.COMPARE,RelationshipFeatureGuide.MEMORIES,RelationshipFeatureGuide.CALENDARS,"Паузы не доказывают потерю сообщений."})
+                analyticsText(guide,paragraph,SUB,13);
+            ScrollView guideScroll=new ScrollView(this);guideScroll.addView(guide);
+            new FontDialog.Builder(this).setTitle("Инструменты истории").setView(guideScroll).setPositiveButton("Понятно",null).show();
+        });
         }
         LinearLayout eventsHolder=column();list.addView(eventsHolder,p(-1,-2));
         if(!historyEventsExpanded){
@@ -6451,7 +6488,10 @@ public class MainActivity extends Activity {
             }else loadThumbnail(a.path,isVideoStickerPath(a.path)?"video":a.kind,image);
             if(a.kind.equals("video")||isVideoStickerPath(a.path)||a.kind.equals("gif")&&a.path.toLowerCase(Locale.ROOT).matches(".*\\.(mp4|webm|m4v)(\\?.*)?$")){TextView play=text("▶",24,Color.WHITE);play.setGravity(Gravity.CENTER);play.setBackground(shape(0xbb0b111b,100));FrameLayout.LayoutParams playSize=new FrameLayout.LayoutParams(px(52),px(52),Gravity.CENTER);box.addView(play,playSize);}
             box.setOnClickListener(v->openMedia(a));box.setOnLongClickListener(v->{mediaActions(a);return true;});
-            FrameLayout outer=new FrameLayout(this);outer.addView(box,new FrameLayout.LayoutParams(px(size),px(gallery?84:Math.min(280,size))));return outer;
+            FrameLayout outer=new FrameLayout(this);outer.addView(box,new FrameLayout.LayoutParams(px(size),px(gallery?84:Math.min(240,size))));
+            if(!gallery&&"image".equals(a.kind))image.setTag(R.id.ta_inline_photo_size,new int[]{px(size),px(240)});
+            if(!gallery&&"image".equals(a.kind)&&image.getDrawable()!=null)fitInlinePhoto(image);
+            return outer;
         }
         TextView file=text("📎 "+clip(filename(a.path),gallery?18:33),13,ACCENT);file.setPadding(px(8),px(10),px(8),px(10));
         file.setBackground(shape(CHIP,12));file.setOnClickListener(v->openMedia(a));
@@ -6816,6 +6856,14 @@ public class MainActivity extends Activity {
             names.add("Открыть вложение");actions.add(()->openMedia(a));
         }
         names.add("Перейти к сообщению");actions.add(()->jump(a.messageId,"media".equals(screen)?"media":""));
+        if("image".equals(a.kind)||"round".equals(a.kind)||"video".equals(a.kind)){
+            final String archive=activeKey;
+            names.add("Разобрать медиа локальным ИИ");actions.add(()->resolveMedia(a.path,uri->{if(!archive.equals(activeKey))return;
+                Intent analyst=new Intent(this,DeepAnalystActivity.class).putExtra("archive",archive).putExtra("vision_uri",uri.toString())
+                    .putExtra("vision_video",!"image".equals(a.kind)).putExtra("vision_message",a.messageId);
+                startActivityForResult(analyst,119);
+            }));
+        }
         names.add("Изменить отметку «Избранное»");actions.add(()->toggleStar(a.messageId));
         String saveLabel=spec.destination==MediaSavePolicy.Destination.PICTURES||spec.destination==MediaSavePolicy.Destination.MOVIES
             ?"Сохранить в галерею":spec.destination==MediaSavePolicy.Destination.MUSIC?"Сохранить в музыку":"Сохранить в Загрузки";
@@ -7514,7 +7562,7 @@ public class MainActivity extends Activity {
         String cacheKey=activeKey+"|"+path;
         image.setTag(cacheKey);
         Bitmap cached=thumbs.get(cacheKey);
-        if(cached!=null&&!cached.isRecycled()){image.setImageBitmap(cached);return;}
+        if(cached!=null&&!cached.isRecycled()){image.setImageBitmap(cached);fitInlinePhoto(image);return;}
         if(folder==null)return;
         DocumentFolder source=folder;int token=loadToken;
         mediaWorker.execute(()->{
@@ -7527,12 +7575,21 @@ public class MainActivity extends Activity {
                     Bitmap result=existing!=null&&!existing.isRecycled()?existing:loaded;
                     if(result==loaded)thumbs.put(cacheKey,loaded);
                     else loaded.recycle();
-                    if(cacheKey.equals(image.getTag()))image.setImageBitmap(result);
+                    if(cacheKey.equals(image.getTag())){image.setImageBitmap(result);fitInlinePhoto(image);}
                 }else loaded.recycle();
             });
         });
     }
 
+    private void fitInlinePhoto(ImageView image){
+        Object tag=image.getTag(R.id.ta_inline_photo_size);
+        if(!(tag instanceof int[])||image.getDrawable()==null||!(image.getParent() instanceof FrameLayout))return;
+        int[] limit=(int[])tag;int iw=image.getDrawable().getIntrinsicWidth(),ih=image.getDrawable().getIntrinsicHeight();
+        if(iw<=0||ih<=0)return;
+        float scale=Math.min((float)limit[0]/iw,(float)limit[1]/ih);
+        FrameLayout box=(FrameLayout)image.getParent();ViewGroup.LayoutParams lp=box.getLayoutParams();
+        if(lp==null)return;lp.width=Math.max(1,Math.round(iw*scale));lp.height=Math.max(1,Math.round(ih*scale));box.setLayoutParams(lp);
+    }
     private int darken(int color){return Color.rgb(Math.round(Color.red(color)*.8f),Math.round(Color.green(color)*.8f),Math.round(Color.blue(color)*.8f));}
     private String colorKey(String name){return "sender_"+activeKey+"_"+MessageDb.normalizedAuthor(name);}
     private int authorColor(String name){

@@ -1,0 +1,55 @@
+name: Full scan and visual PDF independent QA
+on:
+  pull_request:
+    branches: [qa/unified-strict-ai-20261127, qa/fullscan-unicode-regression-20261127]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: unicode-pdf-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  regression:
+    if: ${{ github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || (github.head_ref == 'qa/fullscan-unicode-regression-20261127' || github.head_ref == 'qa/fullscan-evidence-retention-20261127' || github.head_ref == 'qa/pdf-photo-orientation-20261127')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: SDK
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: JVM tests and instrumented APK
+        run: gradle --no-daemon --max-workers=2 testProtectedArchiveQaUnitTest assembleProtectedArchiveQa assembleProtectedArchiveQaAndroidTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Exact Unicode scan and visual PDF on Android 15
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: gradle --no-daemon --max-workers=2 connectedProtectedArchiveQaAndroidTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true -Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.FullChatModelScanIntegrationTest,org.openarchive.telegram.ConversationPdfExporterTest,org.openarchive.telegram.MediaVisionInputTest
+      - name: Preserve test reports only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fullscan-pdf-regression
+          retention-days: 7
+          path: |
+            app/build/outputs/androidTest-results/
+            app/build/reports/androidTests/
+            app/build/test-results/

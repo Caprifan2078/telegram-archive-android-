@@ -24,15 +24,17 @@ public class DeepAnalystOfflineUiTest {
             ctx.startActivity(new Intent(ctx,DeepAnalystActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 .putExtra("archive",key).putExtra("relationships",true)
                 .putExtra("question","Какие признания в любви встречались?"));
-            assertNotNull(device.wait(Until.findObject(By.text("Взаимоотношения")),10000));
-            assertNotNull(device.wait(Until.findObject(By.text("80 вопросов об отношениях  ›")),5000));
+            AnalyticsUiProbe.require(device,By.text("Взаимоотношения"),"Relationship screen title must be visible");
+            AnalyticsUiProbe.require(device,By.text("80 вопросов об отношениях  ›"),"Question library must be visible");
             UiObject2 ask=device.wait(Until.findObject(By.text("Найти источники")),5000);
             assertNotNull("Offline evidence action must be usable",ask);ask.click();
             UiObject2 answer=device.wait(Until.findObject(By.text("Подборка источников · без нейросети")),10000);
             assertNotNull("Results must be revealed without scrolling through model settings",answer);
             assertTrue(answer.getVisibleBounds().height()>0);
         }finally{
-            device.pressBack();db.close();ctx.deleteDatabase(DeepChatContext.dbName(key));
+            device.pressBack();
+            device.wait(Until.gone(By.text("Взаимоотношения")),5000);
+            db.close();ctx.deleteDatabase(DeepChatContext.dbName(key));
         }
     }
 }

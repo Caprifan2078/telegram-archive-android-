@@ -83,7 +83,7 @@ public class RelationshipAnalyticsExplanationUiTest {
             inst.runOnMainSync(()->{View guide=findText(list,"Как работают инструменты");assertNotNull(guide);assertTrue(guide.performClick());});
             inst.waitForIdleSync();
             androidx.test.uiautomator.UiDevice device=androidx.test.uiautomator.UiDevice.getInstance(inst);
-            assertNotNull("Detailed explanation must remain accessible",device.wait(androidx.test.uiautomator.Until.findObject(androidx.test.uiautomator.By.textContains(RelationshipFeatureGuide.INTRO)),8000));
+            AnalyticsUiProbe.require(device,androidx.test.uiautomator.By.textContains(RelationshipFeatureGuide.INTRO),"Detailed explanation must remain accessible");
             device.pressBack();inst.waitForIdleSync();
             TextView header=(TextView)get(a,"title");
             TextView subheader=(TextView)get(a,"subtitle");
@@ -113,6 +113,21 @@ public class RelationshipAnalyticsExplanationUiTest {
             });
             synthetic.close();ctx.deleteDatabase("telegram_"+key+".db");
         }
+    }
+    @Test public void activityColumnsKeepExactCountsAndProportions()throws Exception{
+        MainActivity a=activity.getActivity();Instrumentation inst=InstrumentationRegistry.getInstrumentation();
+        inst.runOnMainSync(()->{try{
+            LinearLayout parent=new LinearLayout(a);parent.setOrientation(LinearLayout.VERTICAL);
+            Method chart=MainActivity.class.getDeclaredMethod("analyticsBarChart",LinearLayout.class,java.util.List.class,java.util.List.class,long[].class,int.class,int.class);chart.setAccessible(true);
+            chart.invoke(a,parent,java.util.Arrays.asList("2025","2026"),java.util.Arrays.asList("Год 2025","Год 2026"),new long[]{25,100},42,95);
+            android.widget.HorizontalScrollView viewport=(android.widget.HorizontalScrollView)parent.getChildAt(1);
+            LinearLayout columns=(LinearLayout)viewport.getChildAt(0);assertEquals(2,columns.getChildCount());
+            LinearLayout first=(LinearLayout)columns.getChildAt(0),second=(LinearLayout)columns.getChildAt(1);
+            assertEquals("Год 2025: 25 сообщений",first.getContentDescription().toString());assertEquals("Год 2026: 100 сообщений",second.getContentDescription().toString());
+            int low=((android.widget.FrameLayout)first.getChildAt(1)).getChildAt(0).getLayoutParams().height;
+            int high=((android.widget.FrameLayout)second.getChildAt(1)).getChildAt(0).getLayoutParams().height;
+            assertTrue(low>0&&high>low);assertEquals(4.0,(double)high/low,0.2);
+        }catch(Exception e){throw new AssertionError(e);}});
     }
     @Test public void heatmapDisplaysRealSyntheticCountsAndHourRanges()throws Exception {
         MainActivity a=activity.getActivity();

@@ -92,4 +92,18 @@ public class ChatQuestionAnalystTest {
         assertTrue(a.finish().text.contains("Б: 1"));
         assertFalse(ChatQuestionAnalyst.supports("Почему он извинился?"));
     }
+    @Test public void compoundConflictQuestionUsesBothOriginalSendersNotReactions(){
+        ChatQuestionAnalyst.Accumulator a=query("Кто оскорбил собеседника и кто извинился?");
+        assertEquals(ChatQuestionAnalyst.Kind.CONFLICT_PHRASES,a.query.kind);
+        a.add(91,"Ирина","","Ты идиот.");
+        a.add(92,"Павел","","Я не хочу ссориться.");
+        a.add(93,"Ирина","","Прости за грубость.");
+        a.add(94,"Павел","","Спасибо.");
+        ChatQuestionAnalyst.Answer answer=a.finish();
+        assertEquals(2,answer.sources.size());
+        assertEquals(91,answer.sources.get(0).id);
+        assertEquals(93,answer.sources.get(1).id);
+        assertTrue(answer.sources.stream().allMatch(e->e.author.equals("Ирина")));
+        assertFalse(ChatQuestionAnalyst.supports("Кто виноват в конфликте и почему?"));
+    }
 }
