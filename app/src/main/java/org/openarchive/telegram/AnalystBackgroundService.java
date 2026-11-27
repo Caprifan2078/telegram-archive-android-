@@ -84,7 +84,11 @@ public final class AnalystBackgroundService extends Service {
     private void update(Job j,String text,int percent){
         j.status=text;j.percent=percent;
         long now=SystemClock.elapsedRealtime();if(now-lastUpdate<800)return;lastUpdate=now;
-        ui.post(()->{if(!j.done&&job==j)try{getSystemService(NotificationManager.class).notify(NOTIFICATION,notification(j));}catch(RuntimeException ignored){}});
+        ui.post(()->{if(!j.done&&job==j)notifyIfAllowed(j);});
+    }
+    private void notifyIfAllowed(Job j){
+        if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)return;
+        try{getSystemService(NotificationManager.class).notify(NOTIFICATION,notification(j));}catch(RuntimeException ignored){}
     }
     private void check(Job j)throws InterruptedException{
         if(j.cancel.get())throw new InterruptedException();
@@ -165,7 +169,7 @@ public final class AnalystBackgroundService extends Service {
             ui.post(()->{
                 if(destroyed)return;
                 stopForeground(STOP_FOREGROUND_REMOVE);
-                try{getSystemService(NotificationManager.class).notify(NOTIFICATION,notification(j));}catch(RuntimeException ignored){}
+                notifyIfAllowed(j);
                 stopSelf();
             });
         }
