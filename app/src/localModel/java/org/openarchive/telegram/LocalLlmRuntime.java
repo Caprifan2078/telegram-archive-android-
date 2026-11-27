@@ -100,6 +100,11 @@ public final class LocalLlmRuntime {
         // Hybrid recurrent state can leak across fresh Conversation objects on one Engine
         // in upstream 0.18.x (#3165). Recreate the engine for unknown/hybrid weights.
         // This trades full-scan speed for independent prompts; do not hold two engines.
+        if(new java.io.File(path).getName().equals("analyst-qwen06q4.litertlm")){
+            try(Engine engine=open(path,1280)){
+                return FullChatModelScan.read(db,question,true,cancel,prompt->infer(engine,prompt,384,cancel,true),progress);
+            }
+        }
         if(!AnalystModelCatalog.canReuseEngine(path))
             return FullChatModelScan.read(db,question,cancel,prompt->single(path,prompt,512,cancel),progress);
         try(Engine engine=open(path,4096)){
