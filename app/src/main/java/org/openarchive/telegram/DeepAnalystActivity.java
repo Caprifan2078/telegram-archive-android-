@@ -15,7 +15,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class DeepAnalystActivity extends Activity {
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private final AtomicBoolean stopped=new AtomicBoolean();
-    private static final AtomicBoolean MODEL_BUSY=new AtomicBoolean();
+    private static final AtomicBoolean MODEL_BUSY=AnalystBackgroundService.MODEL_BUSY;
+    private final android.os.Handler backgroundUi=new android.os.Handler(android.os.Looper.getMainLooper());
+    private AnalystBackgroundService.Job displayedJob;
+    private TextView backgroundStatus;
+    private Button backgroundAction;
+    private final Runnable backgroundPoll=new Runnable(){public void run(){if(!stopped.get()){renderBackground();backgroundUi.postDelayed(this,800);}}};
     private String archive,compareArchive;
     private boolean relationships;
     private File model;
@@ -101,6 +106,9 @@ public final class DeepAnalystActivity extends Activity {
             public void onTextChanged(CharSequence s,int start,int before,int count){updateAsk();}
             public void afterTextChanged(android.text.Editable s){}
         });
+        backgroundAction=button("Работать в фоне  ›");panel.addView(backgroundAction);
+        backgroundStatus=text("",12);backgroundStatus.setVisibility(android.view.View.GONE);panel.addView(backgroundStatus);
+        backgroundAction.setOnClickListener(v->backgroundMenu());
         stop=button("Отменить операцию");panel.addView(stop);
         results=new LinearLayout(this);results.setOrientation(LinearLayout.VERTICAL);results.setPadding(dp(10),dp(8),dp(10),dp(8));panel.addView(results);
         panel.addView(modelCard);
@@ -132,6 +140,7 @@ public final class DeepAnalystActivity extends Activity {
         });
         refresh();
         readArchiveScope();
+        backgroundUi.post(backgroundPoll);
         pageScroll.requestFocus();pageScroll.post(()->pageScroll.scrollTo(0,0));
     }
     private void showQuestionLibrary(){
@@ -162,7 +171,7 @@ public final class DeepAnalystActivity extends Activity {
         return new AnalystDeviceFit(memory.availMem,memory.totalMem,memory.lowMemory);
     }
     private void selectModel(int index){
-        if(busy)return;selectedModel=index;model=AnalystModelCatalog.file(getNoBackupFilesDir(),index);
+        if(busy||AnalystBackgroundService.running())return;selectedModel=index;model=AnalystModelCatalog.file(getNoBackupFilesDir(),index);
         getSharedPreferences(MODEL_PREFS,MODE_PRIVATE).edit().putString("selected_key",AnalystModelCatalog.key(index)).apply();refresh();
     }
     private void showModelPicker(){showModelPicker(3);}
@@ -278,17 +287,60 @@ public final class DeepAnalystActivity extends Activity {
     private void busy(String message){taskCancel.set(false);busy=true;question.setEnabled(false);modelSelector.setEnabled(false);install.setEnabled(false);remove.setEnabled(false);ask.setEnabled(false);if(evidenceOnly!=null)evidenceOnly.setEnabled(false);download.setEnabled(false);scan.setEnabled(false);full.setEnabled(false);modelCheck.setEnabled(false);stop.setEnabled(true);stop.setVisibility(android.view.View.VISIBLE);status.setText(message);}
     private void downloadModel(AnalystModelCatalog.Model spec){
         if(busy||selectedModel>=AnalystModelCatalog.CUSTOM||spec!=AnalystModelCatalog.MODELS[selectedModel])return;
-        final File destination=spec.file(getNoBackupFilesDir());busy("Скачиваю модель…");downloading=true;progress.setProgress(0);progress.setVisibility(android.view.View.VISIBLE);
-        worker.execute(()->{
-            String error=null;
-            try{AnalystModelDownload.fetch(spec,destination,taskCancel,n->runOnUiThread(()->{if(!stopped.get()&&!taskCancel.get()){int percent=(int)(n*100/spec.size);progress.setProgress(percent);status.setText("Загружено "+percent+"%");}}));}
-            catch(Exception e){error=taskCancel.get()?"Загрузка отменена.":"Загрузка не завершена: проверь сеть, свободное место и целостность файла.";}
-            final String failure=error;
-            runOnUiThread(()->{if(stopped.get())return;downloading=false;busy=false;refresh();if(failure!=null)status.setText(failure);});
-        });
+        startBackground(AnalystBackgroundService.DOWNLOAD,"");
+    }
+    private void startBackground(String kind,String q){
+        if(busy||AnalystBackgroundService.running()){status.setText("Сначала завершите текущую задачу");return;}
+        if((AnalystBackgroundService.ANSWER.equals(kind)||AnalystBackgroundService.FULL.equals(kind))&&!canStartModel())return;
+        if(!AnalystBackgroundService.start(this,kind,archive,compareArchive,q,selectedModel)){
+            status.setText("Не удалось начать фоновую задачу");return;
+        }
+        if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},74);
+        renderBackground();
+    }
+    private void backgroundMenu(){
+        if(AnalystBackgroundService.running()){
+            new FontDialog.Builder(this).setTitle("Фоновая задача").setMessage("Можно закрыть этот экран. Операция продолжится, пока Android разрешает работу.")
+                .setNegativeButton("Закрыть",null).setPositiveButton("Отменить задачу",(d,n)->AnalystBackgroundService.cancel()).show();
+            return;
+        }
+        if(busy)return;
+        String q=question.getText().toString().trim();
+        if(q.isEmpty()){question.setError("Введи вопрос");return;}
+        java.util.ArrayList<String> labels=new java.util.ArrayList<>(),kinds=new java.util.ArrayList<>();
+        labels.add("Найти сообщения");kinds.add(AnalystBackgroundService.SEARCH);
+        if(runtimeAvailable()&&AnalystModelCatalog.installed(model,selectedModel)){
+            labels.add("Ответить нейросетью");kinds.add(AnalystBackgroundService.ANSWER);
+            if(compareArchive==null&&!AnalystModelCatalog.shortContext(selectedModel)){labels.add("Прочитать весь чат по частям");kinds.add(AnalystBackgroundService.FULL);}
+        }
+        new FontDialog.Builder(this).setTitle("Работать в фоне").setItems(labels.toArray(new String[0]),(d,i)->startBackground(kinds.get(i),q)).setNegativeButton("Отмена",null).show();
+    }
+    private void renderBackground(){
+        AnalystBackgroundService.Job j=AnalystBackgroundService.current();
+        if(j==null)return;
+        boolean running=!j.done;
+        backgroundStatus.setVisibility(android.view.View.VISIBLE);
+        backgroundStatus.setText(j.status+(j.percent>=0&&!j.done?" · "+j.percent+"%":""));
+        backgroundAction.setText(running?"Фоновая задача  ›":"Работать в фоне  ›");
+        if(running){
+            if(!busy){modelSelector.setEnabled(false);download.setEnabled(false);install.setEnabled(false);remove.setEnabled(false);ask.setEnabled(false);evidenceOnly.setEnabled(false);scan.setEnabled(false);full.setEnabled(false);modelCheck.setEnabled(false);}
+            return;
+        }
+        if(displayedJob==j||busy)return;
+        displayedJob=j;refresh();
+        if(AnalystBackgroundService.DOWNLOAD.equals(j.kind))return;
+        if(!j.matches(archive,compareArchive))return;
+        results.removeAllViews();results.addView(text("Фоновая задача · "+j.status,18));
+        results.addView(text(j.answer,15));
+        for(DeepChatContext.Source src:j.sources){
+            Button source=button(src.author+" · "+src.date+"\n"+src.body);source.setAllCaps(false);results.addView(source);
+            source.setOnClickListener(v->{DualAnalystContext.Link link=j.links.get(src.id);setResult(RESULT_OK,new Intent().putExtra("archive",link==null?archive:link.archive).putExtra("message",link==null?src.id:link.messageId));finish();});
+        }
+        revealResults();
     }
     private void scanBehavior(){
-        if(busy)return;busy("Сканирую всю переписку…");results.removeAllViews();
+        if(busy||AnalystBackgroundService.running())return;busy("Сканирую всю переписку…");results.removeAllViews();
         worker.execute(()->{
             try{
                 BehaviorScan.Report report=BehaviorScan.read(getDatabasePath(DeepChatContext.dbName(archive)),taskCancel,
@@ -326,7 +378,7 @@ public final class DeepAnalystActivity extends Activity {
         });
     }
     private boolean canStartModel(){
-        if(busy||!AnalystModelCatalog.installed(model,selectedModel))return false;
+        if(busy||AnalystBackgroundService.running()||!AnalystModelCatalog.installed(model,selectedModel))return false;
         AnalystDeviceFit fit=deviceFit();
         if(!fit.fits(selectedModel,model)){
             status.setText(fit.summary()+". "+fit.label(selectedModel,model)+". Выбери лёгкую модель или найди источники.");return false;
@@ -452,6 +504,7 @@ public final class DeepAnalystActivity extends Activity {
         }});
     }
     private void scanRelationships(){
+        if(busy||AnalystBackgroundService.running())return;
         busy("Сканирую весь архив…");results.removeAllViews();
         worker.execute(()->{
             try{
@@ -533,7 +586,7 @@ public final class DeepAnalystActivity extends Activity {
         });
     }
     private void analyze(){
-        String q=question.getText().toString().trim();if(q.isEmpty()||busy)return;
+        String q=question.getText().toString().trim();if(q.isEmpty()||busy||AnalystBackgroundService.running())return;
         if(factualQuestion()){analyzeFacts(q);return;}
         if(!runtimeAvailable()||!AnalystModelCatalog.installed(model,selectedModel)){findEvidence(q);return;}
         if(!canStartModel()){
@@ -640,5 +693,5 @@ public final class DeepAnalystActivity extends Activity {
             finally{MODEL_BUSY.set(false);}
         });
     }
-    @Override protected void onDestroy(){stopped.set(true);taskCancel.set(true);worker.shutdownNow();super.onDestroy();}
+    @Override protected void onDestroy(){stopped.set(true);backgroundUi.removeCallbacks(backgroundPoll);taskCancel.set(true);worker.shutdownNow();super.onDestroy();}
 }
