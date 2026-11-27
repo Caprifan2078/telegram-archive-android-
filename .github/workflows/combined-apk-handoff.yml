@@ -1,0 +1,99 @@
+name: Combined viewer test APK handoff
+on:
+  pull_request:
+    branches: [qa/unified-strict-ai-20261127]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: combined-apk-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    if: github.event.repository.private == false && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'qa/combined-apk-handoff-20261127'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: SDK
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: Build combined app and JVM tests
+        run: gradle --no-daemon --max-workers=2 assembleProtectedArchiveQa assembleProtectedArchiveQaAndroidTest testProtectedArchiveQaUnitTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true -PqaVerifiedHandoff=true -PqaVersionCode=82
+      - name: Verify exact signed test APK
+        run: |
+          set -euo pipefail
+          mkdir -p handoff
+          cp app/build/outputs/apk/protectedArchiveQa/app-protectedArchiveQa.apk handoff/Telegram-Archive-Viewer-combined-QA.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose handoff/*.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging handoff/*.apk | tee handoff/apk-info.txt
+          grep -F "package: name='org.openarchive.telegram.qa.polish20261127'" handoff/apk-info.txt
+          grep -F "native-code:" handoff/apk-info.txt | grep -F "arm64-v8a"
+          (cd handoff && sha256sum *.apk > SHA256SUMS.txt)
+          git rev-parse HEAD > handoff/commit.txt
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Combined Android regression and exact APK launch
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: |
+            gradle --no-daemon --max-workers=2 connectedProtectedArchiveQaAndroidTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true -PqaVerifiedHandoff=true -PqaVersionCode=82 -Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.FullChatModelScanIntegrationTest,org.openarchive.telegram.ConversationPdfExporterTest,org.openarchive.telegram.MediaVisionInputTest
+            cmp handoff/Telegram-Archive-Viewer-combined-QA.apk app/build/outputs/apk/protectedArchiveQa/app-protectedArchiveQa.apk
+            adb install -r handoff/Telegram-Archive-Viewer-combined-QA.apk
+            adb shell am start -W -n org.openarchive.telegram.qa.polish20261127/org.openarchive.telegram.MainActivity | tee handoff/launch.txt
+            grep -q 'Status: ok' handoff/launch.txt
+            adb shell pidof org.openarchive.telegram.qa.polish20261127
+            adb exec-out screencap -p > handoff/launch.png
+      - run: cd handoff && sha256sum -c SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: combined-test-apk
+          path: handoff/
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: combined-android-test-results
+          path: app/build/outputs/androidTest-results/
+  publish:
+    needs: build
+    if: github.event.repository.private == false && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'qa/combined-apk-handoff-20261127'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: combined-test-apk
+          path: handoff
+      - name: Publish standalone experimental APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          cd handoff
+          sha256sum -c SHA256SUMS.txt
+          test "$(cat commit.txt)" = "$HEAD_SHA"
+          test "$(gh api "repos/$GH_REPO/git/ref/heads/qa/combined-apk-handoff-20261127" --jq .object.sha)" = "$HEAD_SHA"
+          tag="combined-qa-20261127-${HEAD_SHA:0:8}"
+          gh release create "$tag" Telegram-Archive-Viewer-combined-QA.apk SHA256SUMS.txt --target "$HEAD_SHA" --prerelease --title "Combined Telegram Archive Viewer QA" --notes "Experimental standalone APK, not stable. Combined source from 9df936cd; JVM and selected full scan, photo orientation and PDF tests plus exact Android 15 launch must pass. Native AI quality and full viewer suite are separate gates and are not certified by this release. Debug signature, separate QA app ID; do not uninstall older apps containing archives. AI models are separate downloads."
