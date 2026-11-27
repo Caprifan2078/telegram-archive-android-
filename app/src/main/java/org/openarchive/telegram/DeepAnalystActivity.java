@@ -55,6 +55,8 @@ public final class DeepAnalystActivity extends Activity {
         android.content.SharedPreferences prefs=getSharedPreferences(MODEL_PREFS,MODE_PRIVATE);
         selectedModel=AnalystModelCatalog.initialSelection(prefs.getString("selected_key",null),
             prefs.getInt("selected",-1),AnalystModelCatalog.file(getNoBackupFilesDir(),AnalystModelCatalog.CUSTOM).isFile());
+        if(!prefs.contains("selected_key")&&!prefs.contains("selected")&&selectedModel==10&&
+            !deviceFit().fits(10,AnalystModelCatalog.file(getNoBackupFilesDir(),10)))selectedModel=8;
         prefs.edit().putString("selected_key",AnalystModelCatalog.key(selectedModel)).apply();
         model=AnalystModelCatalog.file(getNoBackupFilesDir(),selectedModel);
         pageScroll=new ScrollView(this);pageScroll.setFillViewport(true);panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);
@@ -551,7 +553,7 @@ public final class DeepAnalystActivity extends Activity {
                     if(unknown)results.addView(text("Ответ содержит неизвестные номера источников.",14));
                     if(!answer.isEmpty()&&cited.isEmpty())results.addView(text("Ответ не ссылается на конкретные сообщения.",14));
                     if(!unsupported)results.addView(text("Номера существуют в выборке; это не проверка смысла или истинности вывода.",13));
-                    if(AnalystModelCatalog.shortContext(selectedModel))results.addView(text("Быстрый режим: до 4 цитат; для подробного анализа выберите обычную Qwen.",13));
+                    if(AnalystModelCatalog.shortContext(selectedModel))results.addView(text("Быстрый режим: до 4 цитат; для подробного анализа выберите Gemma, если хватает памяти. Ответы Qwen могут ошибаться в определении автора.",13));
                     if(!answer.isEmpty())results.addView(text(DeepChatContext.clip(answer,16000),15));
                     long sent=context.sources.stream().filter(src->DeepChatContext.sentSource(prompt,src.id)).count();
                     results.addView(text(context.method+" · "+sent+" выдержек из "+context.total+" сообщений",13));

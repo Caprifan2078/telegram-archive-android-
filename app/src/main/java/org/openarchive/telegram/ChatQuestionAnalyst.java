@@ -8,7 +8,7 @@ import java.text.Normalizer;
 
 /** Deterministic question answering over a single imported chat. No network or model. */
 final class ChatQuestionAnalyst {
-    enum Kind { FIRST, LAST, TOTAL, MOST, TOPIC, FIRST_TOPIC, LAST_TOPIC, DAY, ACTIVE_DAYS, BUSIEST_DAY, LONGEST_GAP, QUESTIONS, AUTHOR_COUNT, PARTICIPANTS, LEAST, TEXT_COUNT, LONGEST_TEXT, AVG_LENGTH, AVG_DAY, PEAK_HOUR, WEEKEND, INSULT_PHRASES, APOLOGY_PHRASES, UNKNOWN }
+    enum Kind { FIRST, LAST, TOTAL, MOST, TOPIC, FIRST_TOPIC, LAST_TOPIC, DAY, ACTIVE_DAYS, BUSIEST_DAY, LONGEST_GAP, QUESTIONS, AUTHOR_COUNT, PARTICIPANTS, LEAST, TEXT_COUNT, LONGEST_TEXT, AVG_LENGTH, AVG_DAY, PEAK_HOUR, WEEKEND, INSULT_PHRASES, APOLOGY_PHRASES, CONFLICT_PHRASES, UNKNOWN }
     static final String HELP="Примеры: Кто первый написал? · Кто написал последним? · Сколько сообщений? · Кто больше всего писал? · Найди «встреча» · Когда впервые упоминали «встреча»? · Что писали 01.02.2026?";
     static final class Query {
         final Kind kind; final String phrase; final LocalDate day;
@@ -27,6 +27,9 @@ final class ChatQuestionAnalyst {
     }
     static Query parse(String raw){
         String q=fold(raw).trim().replaceAll("[?!.]+$","").replaceAll("\\s+"," ");
+        if(q.matches("кто (оскорбил|оскорблял|оскорбила|оскорбляла)( собеседника)?[,;]? (а )?и? ?кто (извинился|извинялся|извинилась|извинялась|просил прощения|просила прощения)")||
+            q.matches("кто (извинился|извинялся|извинилась|извинялась)[,;]? (а )?и? ?кто (оскорбил|оскорблял|оскорбила|оскорбляла)( собеседника)?"))
+            return new Query(Kind.CONFLICT_PHRASES,"",null);
         if(q.matches("кто (извинялся|извинился|извинилась|просил прощения|просила прощения)|кто писал извинения"))return new Query(Kind.APOLOGY_PHRASES,"",null);
         if(q.matches("кто (оскорблял|оскорбляла|оскорбил|оскорбила)( собеседника)?|кто писал оскорбления"))return new Query(Kind.INSULT_PHRASES,"",null);
         if(q.matches("кто (первым|первый) написал( сообщение| в чате| в переписке| кому)?|кто кому первый написал|кто начал переписку|первое сообщение|когда началась переписка"))return new Query(Kind.FIRST,"",null);
@@ -129,10 +132,13 @@ final class ChatQuestionAnalyst {
         final long[] hours=new long[24];
         final Map<String,Evidence> authorExamples=new LinkedHashMap<>();
         final Matcher phraseMatcher;
+        final Accumulator insults, apologies;
         long textChars,longestChars;Evidence longest;
         boolean capped,firstTie,lastTie,firstIncomplete,lastIncomplete;
         Evidence first,last;
-        Accumulator(Query q){query=q;phraseMatcher=q.kind==Kind.APOLOGY_PHRASES?BehaviorScan.RULES[3].matcher(""):q.kind==Kind.INSULT_PHRASES?BehaviorScan.RULES[0].matcher(""):null;}
+        Accumulator(Query q){query=q;phraseMatcher=q.kind==Kind.APOLOGY_PHRASES?BehaviorScan.RULES[3].matcher(""):q.kind==Kind.INSULT_PHRASES?BehaviorScan.RULES[0].matcher(""):null;
+            insults=q.kind==Kind.CONFLICT_PHRASES?new Accumulator(new Query(Kind.INSULT_PHRASES,"",null)):null;
+            apologies=q.kind==Kind.CONFLICT_PHRASES?new Accumulator(new Query(Kind.APOLOGY_PHRASES,"",null)):null;}
         private static int compare(Evidence a,Evidence b){
             int d=a.day.compareTo(b.day);
             if(d!=0)return d;
@@ -141,6 +147,7 @@ final class ChatQuestionAnalyst {
         }
         void add(long id,String author,String date,String body){
             total++;
+            if(insults!=null){insults.add(id,author,date,body);apologies.add(id,author,date,body);return;}
             if(query.kind==Kind.TOTAL||query.kind==Kind.UNKNOWN)return;
             if(phraseMatcher!=null){
                 if(body==null||body.isEmpty())return;
@@ -236,6 +243,13 @@ final class ChatQuestionAnalyst {
             }
         }
         Answer finish(){
+            if(insults!=null){
+                Answer left=insults.finish(),right=apologies.finish();
+                Map<Long,Evidence> unique=new LinkedHashMap<>();
+                for(Evidence e:left.sources)unique.put(e.id,e);
+                for(Evidence e:right.sources)unique.putIfAbsent(e.id,e);
+                return new Answer(left.text+"\n\n"+right.text,new ArrayList<>(unique.values()));
+            }
             String scope="\nТолько импортированная переписка; отсутствующие или удалённые сообщения не учитываются.";
             if(phraseMatcher!=null){
                 String label=query.kind==Kind.APOLOGY_PHRASES?"Формулировки извинений":"Формулировки возможных оскорблений";

@@ -19,7 +19,7 @@ final class AnalystModelCatalog {
         String display(){return label+" · "+String.format(Locale.ROOT,"%.2f ГБ",size/1e9)+" · "+description;}
     }
     static final Model[] MODELS={
-        new Model("qwen06","Qwen3-0.6B","Стандартная · расширенная проверка выявила ошибку автора",
+        new Model("qwen06","Qwen3-0.6B","Лёгкая · экспериментальная для сложных вопросов; ошибка автора",
             AnalystModelDownload.URL,AnalystModelDownload.SIZE,AnalystModelDownload.SHA),
         new Model("qwen17","Qwen3-1.7B","Экспериментальная · сбой памяти на эмуляторе",
             "https://huggingface.co/litert-community/Qwen3-1.7B/resolve/4b46d76eccd6033af5032ebe2f186e3377dd1d10/Qwen3_1.7B.litertlm",
@@ -42,11 +42,11 @@ final class AnalystModelCatalog {
         new Model("gemma4skillsafe","Gemma 4 E2B Community","Сторонняя модификация Skillsafe · экспериментальная",
             "https://huggingface.co/skillsafe-ai/Gemma-4-E2B-Uncensored/resolve/97fb035680f1af0c39789bb48b45e0fe380912ce/model.litertlm",
             2008432640L,"a6132d4e449c56de2b33bc0a12d8508b87f5c62f870ab8ec574e6767f92f7c7b"),
-        new Model("qwen06q4","Qwen3 0.6B INT4","Быстрая · 3 сценария пройдены · короткий контекст",
+        new Model("qwen06q4","Qwen3 0.6B INT4","Быстрая · короткий контекст; ошибка автора в строгом тесте",
             "https://huggingface.co/litert-community/Qwen3-0.6B-int4/resolve/6aa2daf8aba4aa456797fb8040b36a3948bcfda7/qwen3_0.6b_nothink_q4_block32_ekv1280.litertlm",347251840L,"2df6821ec12702dafd33915e7a1a1adc7c4b053f3672fd9555dfaf3a114c4139"),
         new Model("qwen2515","Qwen2.5 1.5B Instruct","Резерв · сбой памяти на эмуляторе",
             "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/19edb84c69a0212f29a6ef17ba0d6f278b6a1614/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm",1597931520L,"faa60663b333290c1496c499828b21d3e3254a788cacd8cce917ce0f761a2dc9"),
-        new Model("gemmae2baltprobe","Gemma 4 E2B Abliterated (csabag76)","Ослабленные ограничения · 3 синтетических сценария пройдены · 17/17/14 с",
+        new Model("gemmae2baltprobe","Gemma 4 E2B Abliterated (csabag76)","Для глубокого анализа · 3 строгих сценария пройдены; требует больше памяти",
             "https://huggingface.co/csabag76/gemma-4-E2B-it-abliterated-litert-lm/resolve/6e6d6e68ab2ff9873e01d69d6c3421658fb4c840/gemma-4-E2B-it-abliterated.litertlm",2588147712L,"0ebc29dcd1533a46a84b0078656ffa7010eaa07282fd2b0b6586556373409fd9")
     };
     static final int CUSTOM=MODELS.length;
@@ -54,12 +54,12 @@ final class AnalystModelCatalog {
     static int safeIndex(int index){return index>=0&&index<=CUSTOM?index:0;}
     static final String CUSTOM_KEY="custom";
     // Stable indices are storage identities, not presentation order.
-    static int[] pickerOrder(){return new int[]{8,0,10,9,3,1,4,5,2,6,7,CUSTOM};}
+    static int[] pickerOrder(){return new int[]{10,8,0,9,3,1,4,5,2,6,7,CUSTOM};}
     // Keep the old stable catalog IDs for upgrades, but do not advertise eight downloads.
-    static boolean recommended(int index){return index==0||index==8;}
+    static boolean recommended(int index){return index==10||index==8;}
     static int[] focusedPickerOrder(File directory,int selected){
         java.util.ArrayList<Integer> items=new java.util.ArrayList<>();
-        for(int i:new int[]{8,0})items.add(i);
+        for(int i:new int[]{10,8})items.add(i);
         for(int i:pickerOrder()){
             if(i==CUSTOM||recommended(i))continue;
             if(i==selected||file(directory,i).exists())items.add(i);
@@ -80,7 +80,8 @@ final class AnalystModelCatalog {
     }
     static String focusedGroup(int index){
         if(index==CUSTOM)return "Дополнительно";
-        if(index==8)return "Быстрый режим · расширенный тест пройден";
+        if(index==10)return "Глубокий анализ · строгие синтетические тесты пройдены";
+        if(index==8)return "Быстрый режим · экспериментальный";
         if(index==0)return "Стандартный контекст · ограниченная точность";
         return "Ранее выбранные или скачанные";
     }
@@ -100,7 +101,7 @@ final class AnalystModelCatalog {
         }
         // The old catalog had exactly 3 entries. Its index 3 meant custom.
         if(legacyIndex==3||legacyIndex==-1&&customExists)return CUSTOM;
-        return legacyIndex>=0&&legacyIndex<3?legacyIndex:0;
+        return legacyIndex>=0&&legacyIndex<3?legacyIndex:10;
     }
     static boolean installed(File file,int index){
         return file.isFile()&&file.length()>0&&(index==CUSTOM||file.length()==MODELS[safeIndex(index)].size);

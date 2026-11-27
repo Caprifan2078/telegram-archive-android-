@@ -7,6 +7,7 @@ import static org.junit.Assert.*;
 
 public class AnalystModelCatalogTest {
     @Test public void oldSelectionAndCustomFileAreNotReassigned(){
+        assertEquals(10,AnalystModelCatalog.initialSelection(null,-1,false));
         assertEquals(0,AnalystModelCatalog.initialSelection(null,0,false));
         assertEquals(1,AnalystModelCatalog.initialSelection(null,1,false));
         assertEquals(2,AnalystModelCatalog.initialSelection(null,2,false));
@@ -57,11 +58,11 @@ public class AnalystModelCatalogTest {
         File dir=java.nio.file.Files.createTempDirectory("focused-catalog").toFile();
         File old=AnalystModelCatalog.file(dir,4);
         try{
-            assertArrayEquals(new int[]{8,0,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,0));
+            assertArrayEquals(new int[]{10,8,0,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,0));
             assertTrue(old.createNewFile());
-            assertArrayEquals(new int[]{8,0,4,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,0));
-            assertArrayEquals(new int[]{8,0,4,7,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,7));
-            assertArrayEquals(new int[]{8,0,1,4,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,1));
+            assertArrayEquals(new int[]{10,8,0,4,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,0));
+            assertArrayEquals(new int[]{10,8,4,7,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,7));
+            assertArrayEquals(new int[]{10,8,1,4,AnalystModelCatalog.CUSTOM},AnalystModelCatalog.focusedPickerOrder(dir,1));
             assertEquals(4,AnalystModelCatalog.initialSelection("qwen352",3,false));
         }finally{old.delete();dir.delete();}
     }

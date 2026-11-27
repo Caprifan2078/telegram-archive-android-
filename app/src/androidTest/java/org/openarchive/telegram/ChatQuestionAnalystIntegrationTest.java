@@ -81,4 +81,25 @@ public class ChatQuestionAnalystIntegrationTest {
             assertEquals(4,db.totalMessages());
         }finally{db.close();ctx.deleteDatabase("telegram_"+key+".db");}
     }
+    @Test public void compoundAttributionUsesActualDatabaseAndDoesNotModifyIt(){
+        Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key="compound_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb db=new MessageDb(ctx,key);
+        try{
+            SQLiteDatabase sql=db.getWritableDatabase();
+            long insult=db.stage(sql,"Ирина","2026-03-01 12:00","Ты идиот.",null,"");
+            db.stage(sql,"Павел","2026-03-01 12:01","Я не хочу ссориться.",null,"");
+            long apology=db.stage(sql,"Ирина","2026-03-01 12:02","Прости за грубость.",null,"");
+            db.stage(sql,"Павел","2026-03-01 12:03","Спасибо.",null,"");
+            db.publishStaged(sql);
+            AtomicBoolean cancel=new AtomicBoolean(false);
+            ChatQuestionAnalyst.Query q=ChatQuestionAnalyst.parse("Кто оскорбил и кто извинился?");
+            ChatQuestionAnalyst.Answer answer=ChatQuestionAnalyst.readOnly(ctx.getDatabasePath("telegram_"+key+".db"),q,cancel);
+            assertNotNull(answer);assertEquals(2,answer.sources.size());
+            assertEquals(insult,answer.sources.get(0).id);assertEquals(apology,answer.sources.get(1).id);
+            assertTrue(answer.sources.stream().allMatch(e->e.author.equals("Ирина")));
+            assertEquals(4,db.totalMessages());cancel.set(true);
+            assertNull(ChatQuestionAnalyst.readOnly(ctx.getDatabasePath("telegram_"+key+".db"),q,cancel));
+        }finally{db.close();ctx.deleteDatabase("telegram_"+key+".db");}
+    }
 }
