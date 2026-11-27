@@ -30,6 +30,8 @@ public final class AnalystBackgroundService extends Service {
     private static volatile Job job;
     private final Handler ui=new Handler(Looper.getMainLooper());
     private Thread worker;
+    private volatile Job activeJob;
+    private volatile boolean destroyed;
     private PowerManager.WakeLock wake;
     private long lastUpdate;
     static Job current(){return job;}
@@ -53,6 +55,7 @@ public final class AnalystBackgroundService extends Service {
         if(intent!=null&&CANCEL.equals(intent.getAction())){cancel();if(active==null||active.done)stopSelf();return START_NOT_STICKY;}
         if(active==null||active.done){stopSelf();return START_NOT_STICKY;}
         if(worker!=null)return START_NOT_STICKY;
+        activeJob=active;
         try{
             NotificationManager nm=getSystemService(NotificationManager.class);
             NotificationChannel channel=new NotificationChannel(CHANNEL,"Фоновый анализ",NotificationManager.IMPORTANCE_LOW);
@@ -61,13 +64,13 @@ public final class AnalystBackgroundService extends Service {
             else startForeground(NOTIFICATION,notification(active));
             PowerManager pm=getSystemService(PowerManager.class);
             if(pm!=null){wake=pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"telegramarchive:analyst");wake.acquire(6*60*60*1000L);}
-        }catch(RuntimeException e){active.status="Android не разрешил фоновую работу";active.done=true;MODEL_BUSY.set(false);stopSelf();return START_NOT_STICKY;}
+        }catch(RuntimeException e){active.status="Android не разрешил фоновую работу";active.done=true;stopSelf();return START_NOT_STICKY;}
         worker=new Thread(()->execute(active),"analyst-background");worker.start();
         return START_NOT_STICKY;
     }
     private Notification notification(Job j){
         Intent open=new Intent(this,DeepAnalystActivity.class).putExtra("archive",j.archive)
-            .putExtra("compare_archive",j.compare).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            .putExtra("compare_archive",j.compare).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         PendingIntent content=PendingIntent.getActivity(this,1,open,PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
         PendingIntent cancelIntent=PendingIntent.getService(this,2,new Intent(this,AnalystBackgroundService.class).setAction(CANCEL),
             PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
@@ -157,17 +160,21 @@ public final class AnalystBackgroundService extends Service {
             check(j);j.success=true;j.status="Готово";
         }catch(Exception|LinkageError error){j.status=j.cancel.get()?"Операция отменена или остановлена":"Не удалось завершить задачу. Проверь память, модель или архив.";}
         finally{
-            j.done=true;MODEL_BUSY.set(false);
+            j.done=true;
+            if(destroyed)MODEL_BUSY.set(false);
             ui.post(()->{
+                if(destroyed)return;
                 stopForeground(STOP_FOREGROUND_REMOVE);
                 try{getSystemService(NotificationManager.class).notify(NOTIFICATION,notification(j));}catch(RuntimeException ignored){}
                 stopSelf();
             });
         }
     }
-    @Override public void onTimeout(int startId,int fgsType){cancel();stopForeground(STOP_FOREGROUND_REMOVE);stopSelf(startId);}
+    @Override public void onTimeout(int startId,int fgsType){Job j=activeJob;if(j!=null)j.cancel.set(true);stopForeground(STOP_FOREGROUND_REMOVE);stopSelf(startId);}
     @Override public void onDestroy(){
-        Job j=job;if(j!=null&&!j.done)j.cancel.set(true);
+        destroyed=true;
+        Job j=activeJob;if(j!=null&&!j.done)j.cancel.set(true);
+        if(j!=null&&j.done)MODEL_BUSY.set(false);
         if(wake!=null&&wake.isHeld())wake.release();
         super.onDestroy();
     }

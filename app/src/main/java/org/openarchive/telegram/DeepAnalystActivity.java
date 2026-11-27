@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.ActivityManager;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Build;
 import android.net.Uri;
 import android.view.WindowManager;
 import android.widget.*;
@@ -124,7 +125,7 @@ public final class DeepAnalystActivity extends Activity {
         FontStyler.bind(this);
         modelSelector.setOnClickListener(v->showModelPicker());
         install.setOnClickListener(v->{Intent picker=new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*");startActivityForResult(picker,1);});
-        remove.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Удалить только файл модели?").setMessage("Переписки останутся без изменений.").setNegativeButton("Отмена",null).setPositiveButton("Удалить",(d,n)->{if(!busy){if(model.exists()&&!model.delete())status.setText("Не удалось удалить модель");else refresh();}}).show());
+        remove.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Удалить только файл модели?").setMessage("Переписки останутся без изменений.").setNegativeButton("Отмена",null).setPositiveButton("Удалить",(d,n)->{if(!busy&&!AnalystBackgroundService.running()){if(model.exists()&&!model.delete())status.setText("Не удалось удалить модель");else refresh();}}).show());
         ask.setOnClickListener(v->analyze());
         scan.setOnClickListener(v->scanBehavior());
         full.setOnClickListener(v->new FontDialog.Builder(this).setTitle("Полный проход нейросети?")
@@ -361,7 +362,7 @@ public final class DeepAnalystActivity extends Activity {
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
-        if(request!=1||result!=RESULT_OK||data==null||data.getData()==null||busy||selectedModel!=AnalystModelCatalog.CUSTOM)return;
+        if(request!=1||result!=RESULT_OK||data==null||data.getData()==null||busy||AnalystBackgroundService.running()||selectedModel!=AnalystModelCatalog.CUSTOM)return;
         Uri uri=data.getData();busy("Копирую модель в приватное хранилище…");
         worker.execute(()->{
             File tmp=new File(getNoBackupFilesDir(),"analyst-install-"+java.util.UUID.randomUUID()+".tmp");String error=null;

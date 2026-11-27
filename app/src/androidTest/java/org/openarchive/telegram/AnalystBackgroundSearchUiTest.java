@@ -24,7 +24,7 @@ public class AnalystBackgroundSearchUiTest {
             // Android 13+ may ask for notification permission. The job must not depend on granting it.
             UiObject2 allow=device.wait(Until.findObject(By.res("com.android.permissioncontroller:id/permission_allow_button")),2500);
             if(allow!=null)allow.click();
-            device.pressHome();Thread.sleep(1200);
+            device.pressBack();device.pressHome();Thread.sleep(1200);
             ctx.startActivity(intent);
             assertNotNull("Background result did not return",device.wait(Until.findObject(By.textContains("Найденные сообщения · без нейросети")),20000));
             assertNotNull("Source must be available",device.wait(Until.findObject(By.textContains("Встреча в 17:45")),10000));

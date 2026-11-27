@@ -4380,7 +4380,7 @@ public class MainActivity extends Activity {
         HorizontalScrollView viewport=new HorizontalScrollView(this);viewport.setHorizontalScrollBarEnabled(values.length>6);
         LinearLayout columns=row();columns.setGravity(Gravity.BOTTOM);viewport.setFillViewport(true);viewport.addView(columns,new FrameLayout.LayoutParams(-2,-2));
         parent.addView(viewport,p(-1,-2));
-        int cellWidth=values.length<=4?Math.max(56,Math.min(100,(Math.round(getResources().getDisplayMetrics().widthPixels/getResources().getDisplayMetrics().density)-68)/values.length)):62;
+        int cellWidth=values.length<=4?Math.max(56,Math.min(136,(Math.round(getResources().getDisplayMetrics().widthPixels/getResources().getDisplayMetrics().density)-68)/values.length)):62;
         for(int i=0;i<values.length;i++){
             final long count=values[i];final String detail=details.get(i);
             LinearLayout cell=column();cell.setGravity(Gravity.CENTER_HORIZONTAL);cell.setPadding(px(3),px(3),px(3),px(3));
