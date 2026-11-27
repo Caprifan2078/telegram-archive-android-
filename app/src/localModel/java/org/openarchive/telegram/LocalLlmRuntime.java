@@ -23,10 +23,11 @@ public final class LocalLlmRuntime {
             throw new IllegalStateException("LiteRT-LM JNI ABI mismatch: SamplerConfig.getTopK()I",bad);
         }
     }
-    private static Engine open(String path,int contextTokens){
+    private static Engine open(String path,int contextTokens){return open(path,contextTokens,false);}
+    private static Engine open(String path,int contextTokens,boolean vision){
         verifySamplerAbi();
         Engine.Companion.setNativeMinLogSeverity(LogSeverity.ERROR);
-        Engine engine=new Engine(new EngineConfig(path,new Backend.CPU(2,null),null,null,contextTokens,null,":nocache",null));
+        Engine engine=new Engine(new EngineConfig(path,new Backend.CPU(2,null),vision?new Backend.CPU(2,null):null,null,contextTokens,vision?1:null,":nocache",null));
         try{
             engine.initialize();
             return engine;
@@ -35,7 +36,8 @@ public final class LocalLlmRuntime {
             throw failure;
         }
     }
-    private static String infer(Engine engine,String prompt,int outputLimit,AtomicBoolean cancel,boolean preserveThinking)throws InterruptedException{
+    private static String infer(Engine engine,String prompt,int outputLimit,AtomicBoolean cancel,boolean preserveThinking)throws InterruptedException{return infer(engine,prompt,outputLimit,cancel,preserveThinking,null);}
+    private static String infer(Engine engine,String prompt,int outputLimit,AtomicBoolean cancel,boolean preserveThinking,byte[] image)throws InterruptedException{
         if(cancel.get())throw new InterruptedException();
         ConversationConfig config=new ConversationConfig(null,Collections.emptyList(),Collections.emptyList(),
             new SamplerConfig(20,0.85,0.2,0),false,null,Collections.emptyMap(),null,false,outputLimit,preserveThinking?null:new ThinkingConfig(false,-1),false,false,null);
@@ -54,7 +56,8 @@ public final class LocalLlmRuntime {
             watcher.setDaemon(true);watcher.start();
             try{
                 if(cancel.get())throw new InterruptedException();
-                String answer=conversation.sendMessage(prompt,Collections.emptyMap()).toString();
+                String answer=image==null?conversation.sendMessage(prompt,Collections.emptyMap()).toString():
+                    conversation.sendMessage(com.google.ai.edge.litertlm.Contents.Companion.of(new com.google.ai.edge.litertlm.Content.ImageBytes(image),new com.google.ai.edge.litertlm.Content.Text(prompt)),Collections.emptyMap()).toString();
                 if(cancel.get())throw new InterruptedException();
                 return AnalystFinalAnswer.clean(answer);
             }catch(RuntimeException error){
@@ -112,6 +115,11 @@ public final class LocalLlmRuntime {
             answers[i]=single(path,prompts[i],512,cancel);
         }
         return answers;
+    }
+    public static String generateVision(String path,byte[] image,String prompt,AtomicBoolean cancel)throws InterruptedException{
+        if(image==null||image.length==0||image.length>2*1024*1024)throw new IllegalArgumentException("Invalid image");
+        if(cancel.get())throw new InterruptedException();
+        try(Engine engine=open(path,4096,true)){return infer(engine,prompt,512,cancel,false,image);}
     }
     public static String generate(String path,String prompt)throws InterruptedException{
         return generate(path,prompt,new AtomicBoolean());

@@ -20,6 +20,10 @@ public final class DeepAnalystActivity extends Activity {
     private final android.os.Handler backgroundUi=new android.os.Handler(android.os.Looper.getMainLooper());
     private AnalystBackgroundService.Job displayedJob;
     private TextView backgroundStatus;
+    private Uri visionUri;
+    private boolean visionVideo;
+    private long visionMessage=-1;
+    private Button visionAction;
     private Button backgroundAction;
     private final Runnable backgroundPoll=new Runnable(){public void run(){if(!stopped.get()){renderBackground();backgroundUi.postDelayed(this,800);}}};
     private String archive,compareArchive;
@@ -55,6 +59,8 @@ public final class DeepAnalystActivity extends Activity {
         archive=getIntent().getStringExtra("archive");
         try{if(!getDatabasePath(DeepChatContext.dbName(archive)).isFile()){finish();return;}}catch(IllegalArgumentException bad){finish();return;}
         compareArchive=getIntent().getStringExtra("compare_archive");
+        String selectedMedia=getIntent().getStringExtra("vision_uri");
+        if(selectedMedia!=null){visionUri=Uri.parse(selectedMedia);visionVideo=getIntent().getBooleanExtra("vision_video",false);visionMessage=getIntent().getLongExtra("vision_message",-1);}
         relationships=getIntent().getBooleanExtra("relationships",false)&&compareArchive==null;
         if(compareArchive!=null){
             try{if(archive.equals(compareArchive)||!getDatabasePath(DeepChatContext.dbName(compareArchive)).isFile()){finish();return;}}
@@ -101,6 +107,9 @@ public final class DeepAnalystActivity extends Activity {
         presets.setOnClickListener(v->showQuestionLibrary());
         evidenceOnly=button("Найти источники без ИИ");panel.addView(evidenceOnly);
         evidenceOnly.setOnClickListener(v->{String q=question.getText().toString().trim();if(!busy&&!q.isEmpty())findEvidence(q);});
+        visionAction=button("Разобрать фото или видео · экспериментально");
+        visionAction.setOnClickListener(v->chooseVision());
+        if(visionUri!=null)panel.addView(visionAction);
         if(relationships){Button report=button("Сводка отношений · весь архив");panel.addView(report);report.setOnClickListener(v->{if(!busy)scanRelationships();});}
         question.addTextChangedListener(new android.text.TextWatcher(){
             public void beforeTextChanged(CharSequence s,int start,int count,int after){}
@@ -118,6 +127,7 @@ public final class DeepAnalystActivity extends Activity {
         advancedPanel.setVisibility(android.view.View.GONE);
         scan=button("Полный разбор поведения · без ИИ");advancedPanel.addView(scan);
         full=button("Весь чат нейросетью · медленно");advancedPanel.addView(full);
+        if(visionUri==null)advancedPanel.addView(visionAction);
         advanced.setOnClickListener(v->{advancedOpen=!advancedOpen;
             advancedPanel.setVisibility(advancedOpen?android.view.View.VISIBLE:android.view.View.GONE);
             advanced.setText(advancedOpen?"Дополнительный анализ  ▾":"Дополнительный анализ  ›");});
@@ -248,6 +258,7 @@ public final class DeepAnalystActivity extends Activity {
         progress.setVisibility(downloading?android.view.View.VISIBLE:android.view.View.GONE);
         download.setEnabled(runtime&&!busy&&selectedModel<AnalystModelCatalog.CUSTOM&&checkSelfPermission(android.Manifest.permission.INTERNET)==android.content.pm.PackageManager.PERMISSION_GRANTED);
         scan.setEnabled(!busy);full.setEnabled(runtime&&present&&!busy&&!AnalystModelCatalog.shortContext(selectedModel));stop.setEnabled(busy);
+        if(visionAction!=null){visionAction.setVisibility(runtime?android.view.View.VISIBLE:android.view.View.GONE);visionAction.setEnabled(runtime&&!busy&&!AnalystBackgroundService.running());}
         modelCheck.setVisibility(runtime&&present?android.view.View.VISIBLE:android.view.View.GONE);modelCheck.setEnabled(runtime&&present&&!busy);
         modelOptions.setVisibility(model.exists()?android.view.View.VISIBLE:android.view.View.GONE);
         modelMaintenance.setVisibility(model.exists()&&modelOptionsOpen?android.view.View.VISIBLE:android.view.View.GONE);
@@ -360,8 +371,41 @@ public final class DeepAnalystActivity extends Activity {
             }catch(Exception error){runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();status.setText("Не удалось прочитать архив.");});}
         });
     }
+    private void chooseVision(){
+        if(busy||AnalystBackgroundService.running())return;
+        if(selectedModel!=10||!AnalystModelCatalog.installed(model,selectedModel)){
+            new FontDialog.Builder(this).setTitle("Для медиа нужна Gemma").setMessage("Выбери и скачай Gemma 4 E2B. Анализ изображений экспериментальный, требует дополнительной памяти.")
+                .setNegativeButton("Отмена",null).setPositiveButton("Выбрать модель",(d,n)->selectModel(10)).show();return;
+        }
+        if(visionUri!=null){runVision();return;}
+        Intent picker=new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*");
+        picker.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"image/*","video/*"});startActivityForResult(picker,2);
+    }
+    private void runVision(){
+        if(visionUri==null||selectedModel!=10||!canStartModel()||!MODEL_BUSY.compareAndSet(false,true))return;
+        final Uri local=visionUri;final boolean video=visionVideo;final long message=visionMessage;
+        final String request=question.getText().toString().trim();
+        busy("Читаю выбранное медиа…");results.removeAllViews();
+        worker.execute(()->{
+            try{
+                verifyModelForRun();MediaVisionInput.Sample sample=MediaVisionInput.read(this,local,video,taskCancel);
+                String prompt=(video?"На изображении "+sample.frames+" отдельных кадров видео слева направо. Не делай выводов о том, что между кадрами или в звуке. ":"Это одно фото. ")+
+                    "Опиши только видимые детали по-русски. Если не видно, скажи об этом. Не угадывай личности. "+(request.isEmpty()?"Что видно?":request);
+                String answer=(String)Class.forName("org.openarchive.telegram.LocalLlmRuntime").getMethod("generateVision",String.class,byte[].class,String.class,AtomicBoolean.class)
+                    .invoke(null,model.getAbsolutePath(),sample.jpeg,prompt,taskCancel);
+                if(taskCancel.get())throw new IOException("Cancelled");
+                runOnUiThread(()->{if(stopped.get())return;busy=false;refresh();results.addView(text("Описание медиа · экспериментально",18));
+                    results.addView(text(video?"Проанализировано кадров: "+sample.frames+". Звук и остальная часть видео не анализировались.":"Проанализировано одно фото.",13));
+                    results.addView(text(answer==null||answer.trim().isEmpty()?"Модель не вернула описание":answer,15));
+                    if(message>0){Button link=button("Открыть исходное сообщение");results.addView(link);link.setOnClickListener(v->{setResult(RESULT_OK,new Intent().putExtra("archive",archive).putExtra("message",message));finish();});}revealResults();});
+            }catch(Exception|LinkageError error){runOnUiThread(()->{if(!stopped.get()){busy=false;refresh();status.setText(modelFailure(error,"Не удалось разобрать медиа. Возможно, модель или формат не поддерживается либо не хватило памяти."));}});}
+            finally{MODEL_BUSY.set(false);}
+        });
+    }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
+        if(request==2){if(result==RESULT_OK&&data!=null&&data.getData()!=null&&!busy&&!AnalystBackgroundService.running()){
+            visionUri=data.getData();String mime=getContentResolver().getType(visionUri);visionVideo=mime!=null&&mime.startsWith("video/");visionMessage=-1;runVision();}return;}
         if(request!=1||result!=RESULT_OK||data==null||data.getData()==null||busy||AnalystBackgroundService.running()||selectedModel!=AnalystModelCatalog.CUSTOM)return;
         Uri uri=data.getData();busy("Копирую модель в приватное хранилище…");
         worker.execute(()->{

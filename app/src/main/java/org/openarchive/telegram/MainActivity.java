@@ -6485,7 +6485,10 @@ public class MainActivity extends Activity {
             }else loadThumbnail(a.path,isVideoStickerPath(a.path)?"video":a.kind,image);
             if(a.kind.equals("video")||isVideoStickerPath(a.path)||a.kind.equals("gif")&&a.path.toLowerCase(Locale.ROOT).matches(".*\\.(mp4|webm|m4v)(\\?.*)?$")){TextView play=text("▶",24,Color.WHITE);play.setGravity(Gravity.CENTER);play.setBackground(shape(0xbb0b111b,100));FrameLayout.LayoutParams playSize=new FrameLayout.LayoutParams(px(52),px(52),Gravity.CENTER);box.addView(play,playSize);}
             box.setOnClickListener(v->openMedia(a));box.setOnLongClickListener(v->{mediaActions(a);return true;});
-            FrameLayout outer=new FrameLayout(this);outer.addView(box,new FrameLayout.LayoutParams(px(size),px(gallery?84:Math.min(280,size))));return outer;
+            FrameLayout outer=new FrameLayout(this);outer.addView(box,new FrameLayout.LayoutParams(px(size),px(gallery?84:Math.min(240,size))));
+            if(!gallery&&"image".equals(a.kind))image.setTag(R.id.ta_inline_photo_size,new int[]{px(size),px(240)});
+            if(!gallery&&"image".equals(a.kind)&&image.getDrawable()!=null)fitInlinePhoto(image);
+            return outer;
         }
         TextView file=text("📎 "+clip(filename(a.path),gallery?18:33),13,ACCENT);file.setPadding(px(8),px(10),px(8),px(10));
         file.setBackground(shape(CHIP,12));file.setOnClickListener(v->openMedia(a));
@@ -6850,6 +6853,14 @@ public class MainActivity extends Activity {
             names.add("Открыть вложение");actions.add(()->openMedia(a));
         }
         names.add("Перейти к сообщению");actions.add(()->jump(a.messageId,"media".equals(screen)?"media":""));
+        if("image".equals(a.kind)||"round".equals(a.kind)||"video".equals(a.kind)){
+            final String archive=activeKey;
+            names.add("Разобрать медиа локальным ИИ");actions.add(()->resolveMedia(a.path,uri->{if(!archive.equals(activeKey))return;
+                Intent analyst=new Intent(this,DeepAnalystActivity.class).putExtra("archive",archive).putExtra("vision_uri",uri.toString())
+                    .putExtra("vision_video",!"image".equals(a.kind)).putExtra("vision_message",a.messageId);
+                startActivityForResult(analyst,119);
+            }));
+        }
         names.add("Изменить отметку «Избранное»");actions.add(()->toggleStar(a.messageId));
         String saveLabel=spec.destination==MediaSavePolicy.Destination.PICTURES||spec.destination==MediaSavePolicy.Destination.MOVIES
             ?"Сохранить в галерею":spec.destination==MediaSavePolicy.Destination.MUSIC?"Сохранить в музыку":"Сохранить в Загрузки";
@@ -7548,7 +7559,7 @@ public class MainActivity extends Activity {
         String cacheKey=activeKey+"|"+path;
         image.setTag(cacheKey);
         Bitmap cached=thumbs.get(cacheKey);
-        if(cached!=null&&!cached.isRecycled()){image.setImageBitmap(cached);return;}
+        if(cached!=null&&!cached.isRecycled()){image.setImageBitmap(cached);fitInlinePhoto(image);return;}
         if(folder==null)return;
         DocumentFolder source=folder;int token=loadToken;
         mediaWorker.execute(()->{
@@ -7561,12 +7572,21 @@ public class MainActivity extends Activity {
                     Bitmap result=existing!=null&&!existing.isRecycled()?existing:loaded;
                     if(result==loaded)thumbs.put(cacheKey,loaded);
                     else loaded.recycle();
-                    if(cacheKey.equals(image.getTag()))image.setImageBitmap(result);
+                    if(cacheKey.equals(image.getTag())){image.setImageBitmap(result);fitInlinePhoto(image);}
                 }else loaded.recycle();
             });
         });
     }
 
+    private void fitInlinePhoto(ImageView image){
+        Object tag=image.getTag(R.id.ta_inline_photo_size);
+        if(!(tag instanceof int[])||image.getDrawable()==null||!(image.getParent() instanceof FrameLayout))return;
+        int[] limit=(int[])tag;int iw=image.getDrawable().getIntrinsicWidth(),ih=image.getDrawable().getIntrinsicHeight();
+        if(iw<=0||ih<=0)return;
+        float scale=Math.min((float)limit[0]/iw,(float)limit[1]/ih);
+        FrameLayout box=(FrameLayout)image.getParent();ViewGroup.LayoutParams lp=box.getLayoutParams();
+        if(lp==null)return;lp.width=Math.max(1,Math.round(iw*scale));lp.height=Math.max(1,Math.round(ih*scale));box.setLayoutParams(lp);
+    }
     private int darken(int color){return Color.rgb(Math.round(Color.red(color)*.8f),Math.round(Color.green(color)*.8f),Math.round(Color.blue(color)*.8f));}
     private String colorKey(String name){return "sender_"+activeKey+"_"+MessageDb.normalizedAuthor(name);}
     private int authorColor(String name){

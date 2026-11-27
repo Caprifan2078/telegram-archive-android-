@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: viewer-release-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   real_model:
     if: github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || github.head_ref == 'qa/unified-strict-ai-20261127' || github.ref == 'refs/heads/qa/unified-strict-ai-20261127')
@@ -386,5 +389,6 @@ jobs:
           cd handoff
           sha256sum -c SHA256SUMS.txt
           test "$(cat commit.txt)" = "$HEAD_SHA"
+          test "$(gh api "repos/$GH_REPO/git/ref/heads/qa/unified-strict-ai-20261127" --jq .object.sha)" = "$HEAD_SHA"
           tag="polish-qa-20261127-${HEAD_SHA:0:8}"
           gh release create "$tag" *.apk SHA256SUMS.txt --target "$HEAD_SHA" --prerelease --title "Verified Gemma Android QA ${HEAD_SHA:0:8}" --notes "QA prerelease: strict Gemma synthetic native inference, factual regression, JVM, lint, selected Android 15 viewer suites and exact APK launch passed on this commit. Qwen models remain experimental and did not pass prior strict quality tests; not a stable release or physical-device validation. Separate app ID and ephemeral debug signature; no automatic archive migration. Gemma downloads separately."
