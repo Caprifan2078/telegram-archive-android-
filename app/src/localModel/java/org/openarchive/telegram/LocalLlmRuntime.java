@@ -76,6 +76,11 @@ public final class LocalLlmRuntime {
     static int contextTokens(String prompt,int outputLimit){
         return prompt!=null&&prompt.length()+outputLimit<=1500?2048:4096;
     }
+    static boolean memorySensitive(String name){
+        return name.equals("analyst-qwen17.litertlm")||name.equals("analyst-qwen3508.litertlm")
+            ||name.equals("analyst-qwen352.litertlm")||name.equals("analyst-lfm2526.litertlm")
+            ||name.equals("analyst-huihui352.litertlm")||name.equals("analyst-qwen2515.litertlm");
+    }
     private static String single(String path,String prompt,int outputLimit,AtomicBoolean cancel)throws InterruptedException{
         if(cancel.get())throw new InterruptedException();
         String name=new java.io.File(path).getName();
@@ -88,7 +93,7 @@ public final class LocalLlmRuntime {
             try(Engine engine=open(path,1280)){return infer(engine,prompt,256,cancel,true);}
         }
         if(name.equals("analyst-qwen2515.litertlm")){
-            try(Engine engine=open(path,4096)){return infer(engine,prompt,512,cancel,true);}
+            try(Engine engine=open(path,contextTokens(prompt,256))){return infer(engine,prompt,256,cancel,true);}
         }
         boolean compactLegacy=name.equals("analyst-qwen06.litertlm");
         int budget=compactLegacy?Math.max(768,outputLimit):outputLimit;
@@ -100,10 +105,24 @@ public final class LocalLlmRuntime {
         // Hybrid recurrent state can leak across fresh Conversation objects on one Engine
         // in upstream 0.18.x (#3165). Recreate the engine for unknown/hybrid weights.
         // This trades full-scan speed for independent prompts; do not hold two engines.
-        if(new java.io.File(path).getName().equals("analyst-qwen06q4.litertlm")){
-            try(Engine engine=open(path,1280)){
-                return FullChatModelScan.read(db,question,true,cancel,prompt->infer(engine,prompt,384,cancel,true),progress);
-            }
+        String name=new java.io.File(path).getName();
+        if(name.equals("analyst-qwen06q4.litertlm")||name.equals("analyst-qwen06.litertlm")){
+            // Observed old source facts reappearing in later unrelated chunks.
+            // A separate engine per prompt prevents shared native conversation state.
+            int tokens=name.equals("analyst-qwen06q4.litertlm")?1280:2048;
+            return FullChatModelScan.read(db,question,true,cancel,prompt->{
+                try(Engine engine=open(path,tokens)){
+                    return infer(engine,AnalystShortPrompt.prepare(prompt),384,cancel,true);
+                }
+            },progress);
+        }
+        if(memorySensitive(name)){
+            // Smaller prompts AND KV allocation; do not claim this cures weight memory.
+            return FullChatModelScan.read(db,question,true,cancel,prompt->{
+                try(Engine engine=open(path,2048)){
+                    return infer(engine,prompt,256,cancel,name.equals("analyst-qwen2515.litertlm"));
+                }
+            },progress);
         }
         if(!AnalystModelCatalog.canReuseEngine(path))
             return FullChatModelScan.read(db,question,cancel,prompt->single(path,prompt,512,cancel),progress);

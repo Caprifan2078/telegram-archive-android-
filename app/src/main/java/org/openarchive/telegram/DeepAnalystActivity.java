@@ -345,8 +345,8 @@ public final class DeepAnalystActivity extends Activity {
         if(!AnalystBackgroundService.start(this,kind,archive,compareArchive,q,selectedModel)){
             status.setText("Не удалось начать фоновую задачу");return;
         }
-        if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)
-            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},74);
+        // A foreground service does not require notification permission on API 33+.
+        // Do not interrupt the user with a permission activity after launching a job.
         renderBackground();
     }
     private void backgroundMenu(){
@@ -379,6 +379,7 @@ public final class DeepAnalystActivity extends Activity {
         }
         if(displayedJob==j||busy)return;
         displayedJob=j;applyAutomatic(false);refresh();
+        android.util.Log.i("AnalystJob","render done kind="+j.kind+" match="+j.matches(archive,compareArchive)+" success="+j.success);
         if(AnalystBackgroundService.DOWNLOAD.equals(j.kind))return;
         if(!j.matches(archive,compareArchive))return;
         results.removeAllViews();results.addView(text("Фоновая задача · "+j.status,18));

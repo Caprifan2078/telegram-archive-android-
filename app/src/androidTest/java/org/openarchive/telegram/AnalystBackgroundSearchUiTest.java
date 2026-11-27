@@ -26,7 +26,15 @@ public class AnalystBackgroundSearchUiTest {
             if(allow!=null)allow.click();
             device.pressBack();device.pressHome();Thread.sleep(1200);
             ctx.startActivity(intent);
-            assertNotNull("Background result did not return",device.wait(Until.findObject(By.textContains("Найденные сообщения · без нейросети")),20000));
+            UiObject2 result=device.wait(Until.findObject(By.textContains("Найденные сообщения · без нейросети")),20000);
+            if(result==null){
+                // Synthetic fixture only: capture visible tree and activity state for diagnosis.
+                java.io.File dump=new java.io.File(ctx.getCacheDir(),"background-ui.xml");
+                device.dumpWindowHierarchy(dump);
+                android.util.Log.w("AnalystJob","failure package="+device.getCurrentPackageName()+" hierarchy="+new String(java.nio.file.Files.readAllBytes(dump.toPath()),java.nio.charset.StandardCharsets.UTF_8));
+                dump.delete();
+            }
+            assertNotNull("Background result did not return",result);
             assertNotNull("Source must be available",device.wait(Until.findObject(By.textContains("Встреча в 17:45")),10000));
         }finally{device.pressBack();db.close();ctx.deleteDatabase(DeepChatContext.dbName(key));}
     }

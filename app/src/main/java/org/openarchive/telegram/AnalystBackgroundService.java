@@ -45,10 +45,11 @@ public final class AnalystBackgroundService extends Service {
         if(DOWNLOAD.equals(kind)&&model==AnalystModelCatalog.CUSTOM)return false;
         if(!MODEL_BUSY.compareAndSet(false,true))return false;
         Job next=new Job(kind,archive,compare,question,model);job=next;
+        android.util.Log.i("AnalystJob","start kind="+kind);
         try{
             ctx.startForegroundService(new Intent(ctx,AnalystBackgroundService.class));
             return true;
-        }catch(RuntimeException error){next.status="Не удалось запустить фоновую задачу";next.done=true;MODEL_BUSY.set(false);return false;}
+        }catch(RuntimeException error){android.util.Log.w("AnalystJob","start failed: "+error.getClass().getSimpleName());next.status="Не удалось запустить фоновую задачу";next.done=true;MODEL_BUSY.set(false);return false;}
     }
     static void cancel(){Job j=job;if(j!=null&&!j.done)j.cancel.set(true);}
     @Override public IBinder onBind(Intent intent){return null;}
@@ -66,7 +67,7 @@ public final class AnalystBackgroundService extends Service {
             else startForeground(NOTIFICATION,notification(active));
             PowerManager pm=getSystemService(PowerManager.class);
             if(pm!=null){wake=pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"telegramarchive:analyst");wake.acquire(6*60*60*1000L);}
-        }catch(RuntimeException e){active.status="Android не разрешил фоновую работу";active.done=true;stopSelf();return START_NOT_STICKY;}
+        }catch(RuntimeException e){android.util.Log.w("AnalystJob","foreground failed: "+e.getClass().getSimpleName());active.status="Android не разрешил фоновую работу";active.done=true;stopSelf();return START_NOT_STICKY;}
         worker=new Thread(()->execute(active),"analyst-background");worker.start();
         return START_NOT_STICKY;
     }
@@ -99,7 +100,7 @@ public final class AnalystBackgroundService extends Service {
     }
     private void check(Job j)throws InterruptedException{
         if(j.cancel.get())throw new InterruptedException();
-        if(Build.VERSION.SDK_INT>=29&&!DOWNLOAD.equals(j.kind)){
+        if(Build.VERSION.SDK_INT>=29&&(ANSWER.equals(j.kind)||FULL.equals(j.kind))){
             PowerManager p=getSystemService(PowerManager.class);
             if(p!=null&&p.getCurrentThermalStatus()>=PowerManager.THERMAL_STATUS_SEVERE){j.cancel.set(true);throw new InterruptedException();}
         }
@@ -147,7 +148,7 @@ public final class AnalystBackgroundService extends Service {
                     j.blockNotes=new java.util.ArrayList<>(report.blockNotes);j.completedBlocks=report.blocks;
                     if(!report.complete&&!j.cancel.get())throw new IOException("Incomplete full scan");
                     if(report.unverified)j.answer+="\nЧасть выводов требует проверки цитат.";
-                    if(report.mergeStepsWithLostRefs>0)j.answer+="\nПри сжатии на "+report.mergeStepsWithLostRefs+" этапах исчезли ссылки на сообщения. Это не обязательно ошибка вывода; проверь отдельные конспекты и оригиналы.";
+                    if(report.mergeStepsWithLostRefs>0)j.answer+="\nСжатие теряло ссылки на "+report.mergeStepsWithLostRefs+" этапах; исходные конспекты восстановлены на "+report.mergeFallbacks+" из них. Проверь выводы по оригиналам.";
                     j.sources=report.sources;
                 }else{
                     update(j,"Поиск сообщений",-1);
@@ -179,7 +180,9 @@ public final class AnalystBackgroundService extends Service {
                 }
             }
             check(j);j.success=true;j.status="Готово";
+            android.util.Log.i("AnalystJob","success kind="+j.kind+" sources="+j.sources.size());
         }catch(Exception|LinkageError error){
+            android.util.Log.w("AnalystJob","task failed kind="+j.kind+" type="+error.getClass().getSimpleName());
             j.status=j.cancel.get()?"Операция отменена или остановлена":"Не удалось завершить задачу. Проверь память, модель или архив.";
             if(FULL.equals(j.kind)&&!j.blockNotes.isEmpty()&&j.answer.isEmpty()){
                 j.answer="Итог не сформирован. Завершено блоков: "+j.completedBlocks+". Доступные конспекты сохранены до закрытия процесса приложения.";
