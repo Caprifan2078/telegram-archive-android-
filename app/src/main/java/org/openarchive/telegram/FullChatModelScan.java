@@ -34,7 +34,7 @@ final class FullChatModelScan {
     }
     static final int LOGICAL_BLOCK=10000, MAX_VISIBLE_NOTES=1000;
     static final class Report {
-        long rows,total,blocks,passes,chars,totalChars;boolean complete,unverified;
+        long rows,total,blocks,passes,chars,totalChars,mergeStepsWithLostRefs;boolean complete,unverified;
         String notes="";
         final List<String> blockNotes=new ArrayList<>();
         final List<DeepChatContext.Source> sources=new ArrayList<>();
@@ -95,7 +95,15 @@ final class FullChatModelScan {
             return result;
         }
         String merge(String first,String second)throws Exception{
-            return call("Объедини два конспекта по порядку. Сохрани важные факты из обоих.",first+"\n---\n"+second);
+            String input=first+"\n---\n"+second;
+            String result=call("Объедини два конспекта по порядку. Сохрани важные факты из обоих.",input);
+            // Check the actual retained output, after sanitizing and clipping.
+            // This signals lossy evidence compression, not a semantic verdict.
+            if(!ids(result).containsAll(ids(input))){
+                report.mergeStepsWithLostRefs++;
+                report.unverified=true;
+            }
+            return result;
         }
         void add(long id,String author,String date,String body)throws Exception{
             check();

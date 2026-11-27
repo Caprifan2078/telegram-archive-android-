@@ -45,4 +45,45 @@ public class FullChatModelScanTest {
         assertTrue(report.unverified);
         assertFalse(FullChatModelScan.ids(report.notes).contains(999L));
     }
+    @Test public void missingReferenceInMergeIsReportedEvenWithValidRemainingCitation()throws Exception{
+        FullChatModelScan.Report report=new FullChatModelScan.Report();
+        FullChatModelScan.Session s=new FullChatModelScan.Session(report,"Что произошло?",true,new java.util.concurrent.atomic.AtomicBoolean(),p->"[#1] Анна", (a,b,c)->{});
+        String merged=s.merge("[#1] Анна","[#2] Борис");
+        assertEquals(Collections.singleton(1L),FullChatModelScan.ids(merged));
+        assertEquals(1,report.mergeStepsWithLostRefs);
+        assertTrue(report.unverified);
+    }
+    @Test public void retainingAllDistinctReferencesDoesNotFlagCompression()throws Exception{
+        FullChatModelScan.Report report=new FullChatModelScan.Report();
+        FullChatModelScan.Session s=new FullChatModelScan.Session(report,"Вопрос",true,new java.util.concurrent.atomic.AtomicBoolean(),p->"[#1] [#2]",(a,b,c)->{});
+        s.merge("[#1] начало [#1] продолжение","[#2] конец");
+        assertEquals(0,report.mergeStepsWithLostRefs);
+        assertFalse(report.unverified);
+    }
+    @Test public void clippingModelOutputCannotHideDroppedReference()throws Exception{
+        FullChatModelScan.Report report=new FullChatModelScan.Report();
+        FullChatModelScan.Session s=new FullChatModelScan.Session(report,"Вопрос",true,new java.util.concurrent.atomic.AtomicBoolean(),p->"[#1] "+String.join("",Collections.nCopies(350,"я"))+" [#2]",(a,b,c)->{});
+        s.merge("[#1] начало","[#2] конец");
+        assertEquals(1,report.mergeStepsWithLostRefs);
+        assertTrue(report.unverified);
+    }
+    @Test public void failedMergeDoesNotErasePublishedBlockNotes()throws Exception{
+        FullChatModelScan.Report report=new FullChatModelScan.Report();
+        List<String> published=new ArrayList<>();
+        FullChatModelScan.Session s=new FullChatModelScan.Session(report,"Вопрос",false,new java.util.concurrent.atomic.AtomicBoolean(),p->{
+            if(p.contains("УНИКАЛЬНО_ПЕРВЫЙ")&&p.contains("УНИКАЛЬНО_ВТОРОЙ"))throw new java.io.IOException("Synthetic reduction failure");
+            return FullChatModelScan.ids(p).contains(2L)?"[#2] УНИКАЛЬНО_ВТОРОЙ":"[#1] УНИКАЛЬНО_ПЕРВЫЙ";
+        },new FullChatModelScan.Progress(){
+            public void update(long a,long b,long c){}
+            public void block(long index,String note){published.add(note);}
+        });
+        s.add(1,"А","date",String.join("",Collections.nCopies(10000,"я")));
+        s.add(2,"Б","date","конец");
+        try{s.finish();fail("Expected reduction failure");}catch(java.io.IOException expected){}
+        assertEquals(2,report.blocks);
+        assertEquals(2,published.size());
+        assertTrue(published.get(0).contains("[#1]"));
+        assertTrue(published.get(1).contains("[#2]"));
+        assertFalse(report.complete);
+    }
 }

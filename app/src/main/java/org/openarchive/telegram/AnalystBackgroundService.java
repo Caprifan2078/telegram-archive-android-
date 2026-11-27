@@ -147,6 +147,7 @@ public final class AnalystBackgroundService extends Service {
                     j.blockNotes=new java.util.ArrayList<>(report.blockNotes);j.completedBlocks=report.blocks;
                     if(!report.complete&&!j.cancel.get())throw new IOException("Incomplete full scan");
                     if(report.unverified)j.answer+="\nЧасть выводов требует проверки цитат.";
+                    if(report.mergeStepsWithLostRefs>0)j.answer+="\nПри сжатии на "+report.mergeStepsWithLostRefs+" этапах исчезли ссылки на сообщения. Это не обязательно ошибка вывода; проверь отдельные конспекты и оригиналы.";
                     j.sources=report.sources;
                 }else{
                     update(j,"Поиск сообщений",-1);
@@ -178,7 +179,12 @@ public final class AnalystBackgroundService extends Service {
                 }
             }
             check(j);j.success=true;j.status="Готово";
-        }catch(Exception|LinkageError error){j.status=j.cancel.get()?"Операция отменена или остановлена":"Не удалось завершить задачу. Проверь память, модель или архив.";}
+        }catch(Exception|LinkageError error){
+            j.status=j.cancel.get()?"Операция отменена или остановлена":"Не удалось завершить задачу. Проверь память, модель или архив.";
+            if(FULL.equals(j.kind)&&!j.blockNotes.isEmpty()&&j.answer.isEmpty()){
+                j.answer="Итог не сформирован. Завершено блоков: "+j.completedBlocks+". Доступные конспекты сохранены до закрытия процесса приложения.";
+            }
+        }
         finally{
             j.done=true;
             if(destroyed)MODEL_BUSY.set(false);
