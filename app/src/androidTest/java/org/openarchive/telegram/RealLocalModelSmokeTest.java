@@ -45,7 +45,7 @@ public final class RealLocalModelSmokeTest {
                     "https://huggingface.co/Shaurya2020/Qwen2.5-1.5B-Instruct-uncensored-litert/resolve/"+revision+"/Qwen2.5-1.5B-Instruct-uncensored_dynamic_wi8_afp32_ekv1280.litertlm",1802859440L,sha);
                 android.util.Log.i("ModelSmoke","Candidate revision="+revision+" sha256="+sha);
             }
-            if("lfm350probe".equals(requested)||"gemmae2bprobe".equals(requested)||"gemmae2baltprobe".equals(requested)){
+            if("lfm350probe".equals(requested)||"gemmae2bprobe".equals(requested)||("gemmae2baltprobe".equals(requested)&&!InstrumentationRegistry.getArguments().getString("probeRevision","").isEmpty())){
                 android.os.Bundle args=InstrumentationRegistry.getArguments();
                 String revision=args.getString("probeRevision",""),sha=args.getString("probeSha","");
                 String filename=args.getString("probeFile","");
@@ -157,7 +157,7 @@ public final class RealLocalModelSmokeTest {
                 if(visual==null||!visual.toLowerCase(java.util.Locale.ROOT).contains("красн"))defects.add("vision: incorrect color");
             }
             // Exercise the real whole-archive path, not just the retrieval prompt.
-            if("gemmae2baltprobe".equals(spec.key)||"qwen06q4".equals(spec.key)||"qwen06".equals(spec.key)){
+            if("true".equals(InstrumentationRegistry.getArguments().getString("deepAllModels","false"))||"gemmae2baltprobe".equals(spec.key)||"qwen06q4".equals(spec.key)||"qwen06".equals(spec.key)){
                 FullChatModelScan.Report full=(FullChatModelScan.Report)Class.forName("org.openarchive.telegram.LocalLlmRuntime")
                     .getMethod("generateFull",String.class,String.class,String.class,AtomicBoolean.class,FullChatModelScan.Progress.class)
                     .invoke(null,model.getAbsolutePath(),context.getDatabasePath(DeepChatContext.dbName(key)).getAbsolutePath(),
@@ -169,7 +169,7 @@ public final class RealLocalModelSmokeTest {
             }
             // The previous whole-archive probe has only three messages and one
             // logical block. Check native reduction across a real 10k boundary.
-            if("gemmae2baltprobe".equals(spec.key)&&"true".equals(InstrumentationRegistry.getArguments().getString("extendedQuality","false"))){
+            if("true".equals(InstrumentationRegistry.getArguments().getString("deepAllModels","false"))||("gemmae2baltprobe".equals(spec.key)&&"true".equals(InstrumentationRegistry.getArguments().getString("extendedQuality","false")))){
                 String multiKey="model_multi_"+UUID.randomUUID().toString().replace("-","");
                 MessageDb multi=new MessageDb(context,multiKey);
                 try{
