@@ -37,4 +37,25 @@ public class FullChatModelScanIntegrationTest {
             assertEquals(3,report.sources.size());assertEquals(3,db.totalMessages());
         }finally{db.close();ctx.deleteDatabase(DeepChatContext.dbName(key));}
     }
+    @Test public void embeddedNulAndEmojiDoNotTruncateFullScanOrCharacterCount()throws Exception{
+        Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String key="qa_unicode_"+UUID.randomUUID().toString().replace("-","");
+        MessageDb db=new MessageDb(ctx,key);
+        try{
+            SQLiteDatabase sql=db.getWritableDatabase();
+            String body="до"+(char)0+"после😀";
+            long id=db.stage(sql,"А","2026-01-01",body,null,"");
+            db.publishStaged(sql);
+            List<String> prompts=new ArrayList<>();
+            FullChatModelScan.Report report=FullChatModelScan.read(ctx.getDatabasePath(DeepChatContext.dbName(key)),"Что после?",true,new AtomicBoolean(),p->{
+                prompts.add(p);return "[#"+id+"]";
+            },(a,b,c)->{});
+            assertEquals(body.codePointCount(0,body.length()),report.totalChars);
+            assertEquals(report.totalChars,report.chars);
+            assertTrue(report.complete);
+            assertTrue(prompts.stream().anyMatch(p->p.contains("после😀")));
+            assertFalse(prompts.stream().anyMatch(p->p.indexOf(0)>=0));
+            assertEquals(1,db.totalMessages());
+        }finally{db.close();ctx.deleteDatabase(DeepChatContext.dbName(key));}
+    }
 }

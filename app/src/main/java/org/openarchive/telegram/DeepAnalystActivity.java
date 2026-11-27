@@ -274,9 +274,8 @@ public final class DeepAnalystActivity extends Activity {
         });
     }
     private long archiveCharacters(String key){
-        try(android.database.sqlite.SQLiteDatabase db=android.database.sqlite.SQLiteDatabase.openDatabase(getDatabasePath(DeepChatContext.dbName(key)).getAbsolutePath(),null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY);
-            android.database.Cursor cur=db.rawQuery("SELECT COALESCE(SUM(LENGTH(body)),0) FROM messages",null)){
-            return cur.moveToFirst()?cur.getLong(0):0;
+        try(android.database.sqlite.SQLiteDatabase db=android.database.sqlite.SQLiteDatabase.openDatabase(getDatabasePath(DeepChatContext.dbName(key)).getAbsolutePath(),null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY)){
+            return FullChatModelScan.countScope(db)[1];
         }
     }
     private void refresh(){
@@ -399,7 +398,7 @@ public final class DeepAnalystActivity extends Activity {
         ScrollView scroll=new ScrollView(this);LinearLayout body=new LinearLayout(this);body.setOrientation(LinearLayout.VERTICAL);body.setPadding(dp(12),dp(8),dp(12),dp(8));scroll.addView(body);
         int end=Math.min(start+20,j.blockNotes.size());
         for(int i=start;i<end;i++){TextView note=text(j.blockNotes.get(i),14);note.setTextIsSelectable(true);body.addView(note);}
-        if(j.completedBlocks>j.blockNotes.size())body.addView(text("Показаны первые "+j.blockNotes.size()+" конспектов; остальные учтены в итоговом объединении.",12));
+        if(j.completedBlocks>j.blockNotes.size())body.addView(text("Показаны первые "+j.blockNotes.size()+" из "+j.completedBlocks+" конспектов. "+(j.success?"Остальные участвовали в сжатии итогового ответа.":"Итог может быть неполным."),12));
         FontDialog.Builder dialog=new FontDialog.Builder(this);dialog.setTitle("Конспекты "+(start+1)+"–"+end+" из "+j.completedBlocks).setView(scroll).setPositiveButton("Закрыть",null);
         if(end<j.blockNotes.size())dialog.setNeutralButton("Далее",(d,n)->showBlockNotes(j,end));
         if(start>0)dialog.setNegativeButton("Назад",(d,n)->showBlockNotes(j,Math.max(0,start-20)));
