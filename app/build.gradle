@@ -217,8 +217,8 @@ android {
     buildTypes {
         protectedArchiveQa {
             initWith compactQa
-            applicationIdSuffix (project.findProperty('qaVerifiedHandoff') == 'true' ? '.verified20261127' : (project.findProperty('qaUnifiedHandoff') == 'true' ? '.unified20261127' : (project.findProperty('qaLocalModel') == 'true' ? '.analyst20261126' : '.premium20261126')))
-            if (project.findProperty('qaVerifiedHandoff') == 'true') { versionNameSuffix '-verified-20261127' }
+            applicationIdSuffix (project.findProperty('qaVerifiedHandoff') == 'true' ? '.polish20261127' : (project.findProperty('qaUnifiedHandoff') == 'true' ? '.unified20261127' : (project.findProperty('qaLocalModel') == 'true' ? '.analyst20261126' : '.premium20261126')))
+            if (project.findProperty('qaVerifiedHandoff') == 'true') { versionNameSuffix '-polish-20261127' }
             else if (project.findProperty('qaUnifiedHandoff') == 'true') { versionNameSuffix '-unified-20261127' }
             signingConfig signingConfigs.debug
         }

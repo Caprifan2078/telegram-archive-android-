@@ -324,17 +324,17 @@ jobs:
         run: |
           set -o pipefail
           for attempt in 1 2 3; do
-            if gradle --no-daemon --max-workers=2 assembleProtectedArchiveQa testProtectedArchiveQaUnitTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true -PqaVerifiedHandoff=true -PqaVersionCode=80 2>&1 | tee build.log; then exit 0; fi
+            if gradle --no-daemon --max-workers=2 assembleProtectedArchiveQa testProtectedArchiveQaUnitTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true -PqaVerifiedHandoff=true -PqaVersionCode=81 2>&1 | tee build.log; then exit 0; fi
             if [[ "$attempt" == 3 ]] || ! grep -Eq '429|Too Many Requests|Could not (find|resolve) (io[.]grpc|com[.]google|org[.]jetbrains|org[.]ow2[.]asm|com[.]android[.]tools):' build.log; then exit 1; fi
             sleep $((attempt * 60))
           done
       - name: Verify APK and prepare handoff
         run: |
           mkdir -p handoff
-          cp app/build/outputs/apk/protectedArchiveQa/app-protectedArchiveQa.apk handoff/Telegram-Archive-Viewer-verified-20261127.apk
+          cp app/build/outputs/apk/protectedArchiveQa/app-protectedArchiveQa.apk handoff/Telegram-Archive-Viewer-polish-20261127.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose handoff/*.apk
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging handoff/*.apk | tee handoff/apk-info.txt
-          grep -F "package: name='org.openarchive.telegram.qa.verified20261127'" handoff/apk-info.txt
+          grep -F "package: name='org.openarchive.telegram.qa.polish20261127'" handoff/apk-info.txt
           grep -F "native-code:" handoff/apk-info.txt | grep -F "arm64-v8a"
           (cd handoff && sha256sum *.apk > SHA256SUMS.txt)
           git rev-parse HEAD > handoff/commit.txt
@@ -352,12 +352,12 @@ jobs:
           profile: pixel_2
           emulator-boot-timeout: 420
           script: |
-            adb install handoff/Telegram-Archive-Viewer-verified-20261127.apk
-            adb shell am start -W -n org.openarchive.telegram.qa.verified20261127/org.openarchive.telegram.MainActivity | tee handoff/launch.txt
+            adb install handoff/Telegram-Archive-Viewer-polish-20261127.apk
+            adb shell am start -W -n org.openarchive.telegram.qa.polish20261127/org.openarchive.telegram.MainActivity | tee handoff/launch.txt
             grep -q 'Status: ok' handoff/launch.txt
             sleep 3
-            adb shell pidof org.openarchive.telegram.qa.verified20261127
-            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | grep -F org.openarchive.telegram.qa.verified20261127
+            adb shell pidof org.openarchive.telegram.qa.polish20261127
+            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | grep -F org.openarchive.telegram.qa.polish20261127
             adb exec-out screencap -p > handoff/launch.png
       - name: Verify same APK
         run: cd handoff && sha256sum -c SHA256SUMS.txt
@@ -386,5 +386,5 @@ jobs:
           cd handoff
           sha256sum -c SHA256SUMS.txt
           test "$(cat commit.txt)" = "$HEAD_SHA"
-          tag="verified-qa-20261127-${HEAD_SHA:0:8}"
+          tag="polish-qa-20261127-${HEAD_SHA:0:8}"
           gh release create "$tag" *.apk SHA256SUMS.txt --target "$HEAD_SHA" --prerelease --title "Verified Gemma Android QA ${HEAD_SHA:0:8}" --notes "QA prerelease: strict Gemma synthetic native inference, factual regression, JVM, lint, selected Android 15 viewer suites and exact APK launch passed on this commit. Qwen models remain experimental and did not pass prior strict quality tests; not a stable release or physical-device validation. Separate app ID and ephemeral debug signature; no automatic archive migration. Gemma downloads separately."

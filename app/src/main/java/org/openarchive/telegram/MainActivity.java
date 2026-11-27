@@ -947,7 +947,7 @@ public class MainActivity extends Activity {
         pane.setPadding(px(14),px(13),px(14),px(12));
         // This panel touches the display edge: rounded top corners exposed the
         // dark dialog scrim behind Android's status bar as a black notch.
-        pane.setBackgroundColor(themeIndex==2?0xfff5f7fb:PANEL);pane.setElevation(px(12));
+        pane.setBackgroundColor(BG);pane.setElevation(px(8));
         int width=Math.min(px(348),getResources().getDisplayMetrics().widthPixels-px(38));
         FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(width,-1,Gravity.START);
         overlay.addView(pane,lp);
@@ -1054,7 +1054,7 @@ public class MainActivity extends Activity {
         LinearLayout group=column();parent.addView(group,p(-1,-2));
         TextView title=text((opened?"⌄  ":"›  ")+name,13,ACCENT);
         title.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
-        title.setPadding(px(12),px(15),px(8),px(15));title.setMinHeight(px(48));
+        title.setPadding(px(12),px(10),px(8),px(10));title.setMinHeight(px(44));
         title.setContentDescription((opened?"Свернуть ":"Развернуть ")+name);
         title.setBackground(shape(Color.TRANSPARENT,9));
         group.addView(title,p(-1,-2));
@@ -1084,7 +1084,7 @@ public class MainActivity extends Activity {
                               String heading,String detail,Runnable action){
         int split=heading.indexOf("  ");
         String label=split>=0?heading.substring(split+2).trim():heading;
-        LinearLayout item=row();item.setPadding(px(11),px(10),px(9),px(10));item.setMinimumHeight(px(56));
+        LinearLayout item=row();item.setPadding(px(10),px(7),px(9),px(7));item.setMinimumHeight(px(48));
         item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x265aaad8),
             shape(Color.TRANSPARENT,10),null));
         LinearLayout.LayoutParams params=p(-1,-2);params.bottomMargin=px(2);parent.addView(item,params);
@@ -3883,7 +3883,7 @@ public class MainActivity extends Activity {
             shape(0xffffffff,11)));
         chip.setContentDescription("Раздел анализа: "+label);
         chip.setSelected(selected);
-        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,px(48),1f);
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,px(40),1f);
         params.setMargins(px(2),px(2),px(2),px(2));
         row.addView(chip,params);
         chip.setOnClickListener(v->selectAnalyticsSection(section));
@@ -3999,7 +3999,7 @@ public class MainActivity extends Activity {
         LinearLayout navigation=row();
         navigation.setGravity(Gravity.CENTER_VERTICAL);
         navigation.setPadding(px(4),px(2),px(4),px(2));
-        list.addView(navigation,p(-1,56));
+        list.addView(navigation,p(-1,48));
         analyticsNavChip(navigation,"Обзор","overview");
         analyticsNavChip(navigation,"Графики","trends");
         analyticsNavChip(navigation,"Ритм","rhythm");
@@ -4361,6 +4361,7 @@ public class MainActivity extends Activity {
     private void analyticsBarChart(LinearLayout parent,List<String> labels,List<String> details,long[] values,int widthDp,int heightDp){
         if(values.length==0){analyticsText(parent,"Нет данных за этот период",SUB,14);return;}
         long max=0;for(long value:values)max=Math.max(max,value);
+        if(values.length>=2&&values.length<=31){renderActivityColumns(parent,labels,details,values,max);return;}
         analyticsText(parent,"Сообщения · шкала 0–"+max,SUB,12);
         for(int i=0;i<values.length;i++){
             final long count=values[i];final String detail=details.get(i);
@@ -4372,6 +4373,26 @@ public class MainActivity extends Activity {
             View bar=new View(this);bar.setBackground(shape(ACCENT,4));
             track.addView(bar,new FrameLayout.LayoutParams(-1,-1));bar.setPivotX(0f);
             bar.setScaleX(max==0?0f:count/(float)max);
+        }
+    }
+    private void renderActivityColumns(LinearLayout parent,List<String> labels,List<String> details,long[] values,long max){
+        analyticsText(parent,"Сообщения · максимум "+max,SUB,12);
+        HorizontalScrollView viewport=new HorizontalScrollView(this);viewport.setHorizontalScrollBarEnabled(values.length>6);
+        LinearLayout columns=row();columns.setGravity(Gravity.BOTTOM);viewport.setFillViewport(true);viewport.addView(columns,new FrameLayout.LayoutParams(-2,-2));
+        parent.addView(viewport,p(-1,-2));
+        int cellWidth=values.length<=4?Math.max(56,Math.min(100,(getResources().getDisplayMetrics().widthPixels/Math.round(getResources().getDisplayMetrics().density)-68)/values.length)):62;
+        for(int i=0;i<values.length;i++){
+            final long count=values[i];final String detail=details.get(i);
+            LinearLayout cell=column();cell.setGravity(Gravity.CENTER_HORIZONTAL);cell.setPadding(px(3),px(3),px(3),px(3));
+            columns.addView(cell,p(cellWidth,-2));
+            TextView countText=text(analyticsShortCount(count),11,FG);countText.setGravity(Gravity.CENTER);cell.addView(countText,p(-1,22));
+            FrameLayout track=new FrameLayout(this);track.setBackground(shape(ViewerUi.mix(PANEL,CHIP,60),6));cell.addView(track,p(24,104));
+            View fill=new View(this);fill.setBackground(shape(ACCENT,6));
+            int height=count==0?0:Math.max(2,(int)Math.round(104d*count/Math.max(1,max)));
+            track.addView(fill,new FrameLayout.LayoutParams(-1,px(height),Gravity.BOTTOM));
+            TextView label=text(labels.get(i),11,SUB);label.setGravity(Gravity.CENTER);label.setMaxLines(2);cell.addView(label,p(-1,34));
+            cell.setContentDescription(detail+": "+count+" сообщений");cell.setFocusable(true);
+            cell.setOnClickListener(v->toast(detail+" · "+count+" сообщений"));
         }
     }
     /** Render large amounts compactly; tapping still reveals the exact amount. */
@@ -4581,9 +4602,9 @@ public class MainActivity extends Activity {
     }
     private LinearLayout analyticsCard(String caption){return analyticsCard(caption,list);}
     private LinearLayout analyticsCard(String caption,LinearLayout destination){
-        LinearLayout card=column();card.setPadding(px(14),px(13),px(14),px(15));
-        card.setBackground(ViewerUi.surface(this,PANEL,ViewerUi.CARD,themeIndex==2,false));
-        LinearLayout.LayoutParams lp=p(-1,-2);lp.setMargins(px(5),px(5),px(5),px(11));
+        LinearLayout card=column();card.setPadding(px(10),px(9),px(10),px(10));
+        card.setBackground(shape(PANEL,12));
+        LinearLayout.LayoutParams lp=p(-1,-2);lp.setMargins(px(3),px(4),px(3),px(7));
         destination.addView(card,lp);
         TextView title=text(caption,16,FG);
         title.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
