@@ -1,11 +1,13 @@
-name: Experimental Qwen strict native audit
+name: Qwen whole-archive native audit
 on:
   workflow_dispatch:
+  push:
+    branches: [qa/full-scan-qwen-audit-20261127]
 permissions:
   contents: read
 jobs:
   real_model:
-    if: github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || github.head_ref == 'qa/unified-strict-ai-20261127' || github.ref == 'refs/heads/qa/unified-strict-ai-20261127')
+    if: github.event.repository.private == false && github.ref == 'refs/heads/qa/full-scan-qwen-audit-20261127'
     name: Native model / ${{ matrix.model }}
     strategy:
       fail-fast: false
@@ -37,7 +39,7 @@ jobs:
           for attempt in 1 2 3; do
             if gradle --no-daemon --max-workers=2 testProtectedArchiveQaUnitTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true 2>&1 | tee unit.log; then exit 0; fi
             if ! grep -Eq '429|Too Many Requests|Could not (find|resolve) (io[.]grpc|com[.]google|org[.]jetbrains|org[.]ow2[.]asm|com[.]android[.]tools):' unit.log || [[ "$attempt" == 3 ]]; then exit 1; fi
-            sleep $((attempt * 30))
+            sleep $((attempt * 60))
             # Refresh failed dependency lookups, not test assertions.
             # Retry without refreshing the entire cache
           done
