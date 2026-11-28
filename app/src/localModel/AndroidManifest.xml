@@ -1,7 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <application android:allowBackup="false" android:dataExtractionRules="@xml/ta_data_extraction_rules" android:fullBackupContent="false" android:label="Telegram Archive 0.51 QA" android:theme="@style/AppTheme" android:usesCleartextTraffic="false">
         <activity android:name=".ProtectedArchiveActivity" android:exported="false" />
+        <service android:name=".AnalystBackgroundService" android:exported="false" android:process=":analyst" android:foregroundServiceType="dataSync" android:stopWithTask="false" />
         <activity android:name=".DeepAnalystActivity" android:exported="false" android:process=":analyst" android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".AttachmentPreviewActivity" android:exported="false" android:enableOnBackInvokedCallback="true" />
         <activity android:name=".DemoChatActivity" android:exported="false" />
