@@ -43,11 +43,20 @@ public final class AnalystBackgroundService extends Service {
         if(FULL.equals(kind)&&compare!=null)return false;
         if(model<0||model>AnalystModelCatalog.CUSTOM)return false;
         if(DOWNLOAD.equals(kind)&&model==AnalystModelCatalog.CUSTOM)return false;
+        Intent service=new Intent(ctx,AnalystBackgroundService.class);
+        try{
+            android.content.pm.ServiceInfo info=ctx.getPackageManager().getServiceInfo(service.getComponent(),0);
+            if(!info.enabled||info.exported)return false;
+        }catch(android.content.pm.PackageManager.NameNotFoundException missing){
+            android.util.Log.w("AnalystJob","Analyst service absent from packaged manifest");
+            return false;
+        }
         if(!MODEL_BUSY.compareAndSet(false,true))return false;
         Job next=new Job(kind,archive,compare,question,model);job=next;
         android.util.Log.i("AnalystJob","start kind="+kind);
         try{
-            ctx.startForegroundService(new Intent(ctx,AnalystBackgroundService.class));
+            ComponentName started=ctx.startForegroundService(service);
+            if(started==null)throw new IllegalStateException("Foreground service unavailable");
             return true;
         }catch(RuntimeException error){android.util.Log.w("AnalystJob","start failed: "+error.getClass().getSimpleName());next.status="Не удалось запустить фоновую задачу";next.done=true;MODEL_BUSY.set(false);return false;}
     }

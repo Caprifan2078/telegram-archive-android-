@@ -6,6 +6,20 @@ import androidx.test.uiautomator.*;
 import org.junit.Test;
 import static org.junit.Assert.*;
 public class AnalystBackgroundSearchUiTest {
+    @Test public void packagedManifestDeclaresAnalystServiceAndPermissions()throws Exception{
+        Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        android.content.pm.PackageManager pm=ctx.getPackageManager();
+        android.content.pm.ServiceInfo svc=pm.getServiceInfo(new ComponentName(ctx,AnalystBackgroundService.class),0);
+        assertFalse("Private analyst service must not be exported",svc.exported);
+        assertTrue(svc.enabled);
+        assertEquals(ctx.getPackageName()+":analyst",svc.processName);
+        if(android.os.Build.VERSION.SDK_INT>=29)assertTrue((svc.getForegroundServiceType()&android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)!=0);
+        String[] permissions=pm.getPackageInfo(ctx.getPackageName(),android.content.pm.PackageManager.GET_PERMISSIONS).requestedPermissions;
+        assertNotNull(permissions);
+        java.util.List<String> declared=java.util.Arrays.asList(permissions);
+        for(String permission:new String[]{"android.permission.FOREGROUND_SERVICE","android.permission.FOREGROUND_SERVICE_DATA_SYNC","android.permission.WAKE_LOCK","android.permission.POST_NOTIFICATIONS"})
+            assertTrue("Missing manifest permission: "+permission,declared.contains(permission));
+    }
     @Test public void backgroundSearchSurvivesLeavingAnalyst()throws Exception{
         Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
         String key="qa_bg_"+java.util.UUID.randomUUID().toString().replace("-","");
