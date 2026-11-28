@@ -36,13 +36,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-boot-timeout: 420
-          script: |
-            result=0
-            gradle --no-daemon --max-workers=2 connectedProtectedArchiveQaAndroidTest -PqaProtectedArchiveInstrumentation=true -PqaLocalModel=true -Pandroid.testInstrumentationRunnerArguments.class=org.openarchive.telegram.AnalystBackgroundSearchUiTest,org.openarchive.telegram.FullChatModelScanIntegrationTest || result=$?
-            mkdir -p app/build/ui-audit
-            adb logcat -d -s AnalystJob:I ActivityTaskManager:W > app/build/ui-audit/background-diagnostic.txt
-            cat app/build/ui-audit/background-diagnostic.txt
-            exit "$result"
+          script: bash .github/scripts/background-recovery-regression.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
